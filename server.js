@@ -655,7 +655,7 @@ app.get("/api/turso/status", authRequired, async (req, res) => {
     const turso = require("./services/tursoClient");
     const conn = await turso.testConnection();
     const rowCount = await turso.getTursoRowCount();
-    const allRecords = getAllRecords();
+    const allRecords = await getAllRecordsAsync();
 
     return res.json({
       status: "success",
@@ -663,7 +663,7 @@ app.get("/api/turso/status", authRequired, async (req, res) => {
       version: conn.version,
       serverTime: conn.time,
       tursoRowCount: rowCount,
-      localTotalCount: allRecords.length,
+      localTotalCount: (allRecords || []).length,
       error: conn.message
     });
   } catch (err) {
@@ -677,7 +677,7 @@ app.get("/api/turso/status", authRequired, async (req, res) => {
 app.post("/api/turso/sync", authRequired, async (req, res) => {
   try {
     const turso = require("./services/tursoClient");
-    const allRecords = getAllRecords();
+    const allRecords = await getAllRecordsAsync();
     const result = await turso.syncOrdersToTurso(allRecords);
 
     return res.json({

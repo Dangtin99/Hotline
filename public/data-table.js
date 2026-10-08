@@ -37,8 +37,8 @@ const btnClearDateFilter = document.getElementById("btnClearDateFilter");
 const tableDateFilterGroup = document.getElementById("tableDateFilterGroup");
 const btnResetFilter = document.getElementById("btnResetFilter");
 const btnExportCsv = document.getElementById("btnExportCsv");
-const btnSyncSupabase = document.getElementById("btnSyncSupabase");
-const supabaseStatusBadge = document.getElementById("supabaseStatusBadge");
+const btnSyncTurso = document.getElementById("btnSyncTurso") || document.getElementById("btnSyncSupabase");
+const tursoStatusBadge = document.getElementById("tursoStatusBadge") || document.getElementById("supabaseStatusBadge");
 const alertBox = document.getElementById("alertBox");
 const selectFreezeCols = document.getElementById("selectFreezeCols");
 
@@ -1277,8 +1277,8 @@ document.addEventListener("DOMContentLoaded", () => {
   if (filterContactStatus) filterContactStatus.onchange = applyFilters;
   if (btnResetFilter) btnResetFilter.onclick = resetFilters;
   if (btnExportCsv) btnExportCsv.onclick = exportFilteredToCsv;
-  if (btnSyncSupabase) btnSyncSupabase.onclick = triggerSupabaseSync;
-  if (supabaseStatusBadge) supabaseStatusBadge.onclick = triggerSupabaseSync;
+  if (btnSyncTurso) btnSyncTurso.onclick = triggerTursoSync;
+  if (tursoStatusBadge) tursoStatusBadge.onclick = triggerTursoSync;
 
   // Khởi động bộ đếm ngược liên tục mỗi giây trên toàn bộ bảng
   setInterval(tickCountdowns, 1000);
@@ -1286,53 +1286,54 @@ document.addEventListener("DOMContentLoaded", () => {
   // Load dataset
   loadDataset();
 
-  // Kiểm tra liên kết Supabase Cloud
-  checkSupabaseStatus();
+  // Kiểm tra liên kết Turso Cloud SQLite
+  checkTursoStatus();
 });
 
-// Kiểm tra trạng thái liên kết Supabase
-async function checkSupabaseStatus() {
-  if (!supabaseStatusBadge) return;
+// Kiểm tra trạng thái liên kết Turso Cloud SQLite
+async function checkTursoStatus() {
+  if (!tursoStatusBadge) return;
   try {
-    const res = await fetch("/api/supabase/status");
+    const res = await fetch("/api/turso/status");
     const data = await res.json();
     if (data.status === "success" && data.connected) {
-      supabaseStatusBadge.style.background = "#ecfdf5";
-      supabaseStatusBadge.style.color = "#047857";
-      supabaseStatusBadge.style.borderColor = "#a7f3d0";
-      supabaseStatusBadge.innerHTML = `Supabase: Đã kết nối (${data.supabaseRowCount ?? 0} dòng)`;
-      supabaseStatusBadge.title = `Host: Supabase Cloud (AWS Singapore)\nCSDL: ${data.database}\nĐã đồng bộ: ${data.supabaseRowCount} dòng\nNhấp để đồng bộ lại ngay`;
+      tursoStatusBadge.style.background = "#ecfdf5";
+      tursoStatusBadge.style.color = "#047857";
+      tursoStatusBadge.style.borderColor = "#a7f3d0";
+      tursoStatusBadge.innerHTML = `CSDL Turso: Đã kết nối (${data.tursoRowCount ?? data.localTotalCount ?? 0} dòng)`;
+      tursoStatusBadge.title = `Host: Turso Cloud SQLite (libSQL)\nPhiên bản: ${data.version || "3.47"}\nĐã lưu: ${data.tursoRowCount || 0} dòng\nNhấp để đồng bộ lại`;
     } else {
-      supabaseStatusBadge.style.background = "#fffbeb";
-      supabaseStatusBadge.style.color = "#b45309";
-      supabaseStatusBadge.style.borderColor = "#fde68a";
-      supabaseStatusBadge.innerHTML = `Supabase: Chưa kết nối`;
-      supabaseStatusBadge.title = data.error || "Không thể kết nối đến Supabase";
+      tursoStatusBadge.style.background = "#fffbeb";
+      tursoStatusBadge.style.color = "#b45309";
+      tursoStatusBadge.style.borderColor = "#fde68a";
+      tursoStatusBadge.innerHTML = `CSDL Turso: Chưa kết nối`;
+      tursoStatusBadge.title = data.error || "Không thể kết nối đến Turso Cloud";
     }
   } catch (e) {
-    supabaseStatusBadge.textContent = "Supabase: Ngoại tuyến";
+    tursoStatusBadge.textContent = "CSDL Turso: Ngoại tuyến";
   }
 }
 
-// Đồng bộ thủ công lên Supabase
-async function triggerSupabaseSync() {
-  if (!btnSyncSupabase) return;
-  btnSyncSupabase.disabled = true;
-  btnSyncSupabase.textContent = "Đang đồng bộ Supabase...";
+// Đồng bộ thủ công lên Turso Cloud
+async function triggerTursoSync() {
+  if (!tursoStatusBadge && !btnSyncTurso) return;
+  const targetElem = btnSyncTurso || tursoStatusBadge;
+  const originalText = targetElem.textContent;
+  targetElem.textContent = "Đang đồng bộ Turso...";
   try {
-    const res = await fetch("/api/supabase/sync", { method: "POST" });
+    const res = await fetch("/api/turso/sync", { method: "POST" });
     const data = await res.json();
     if (res.ok && data.status === "success") {
       showAlert(data.message, false);
-      checkSupabaseStatus();
+      checkTursoStatus();
     } else {
       throw new Error(data.message || "Lỗi khi đồng bộ.");
     }
   } catch (err) {
-    showAlert(`Lỗi khi đồng bộ lên Supabase: ${err.message}`, true);
+    showAlert(`Lỗi khi đồng bộ lên Turso: ${err.message}`, true);
   } finally {
-    btnSyncSupabase.disabled = false;
-    btnSyncSupabase.textContent = "Đồng Bộ Supabase";
+    targetElem.textContent = originalText;
+    checkTursoStatus();
   }
 }
 
