@@ -448,6 +448,28 @@ async function deleteVerificationOrderRowInTurso(rowKey) {
 }
 
 /**
+ * Xóa danh sách các dòng kiểm tra đơn theo rowKeys (khi đã đối soát thành công)
+ */
+async function deleteVerificationOrderRowsInTurso(rowKeys) {
+  if (!Array.isArray(rowKeys) || rowKeys.length === 0) return;
+  const client = getTursoClient();
+  if (!client) return;
+  try {
+    const batchSize = 50;
+    for (let i = 0; i < rowKeys.length; i += batchSize) {
+      const chunk = rowKeys.slice(i, i + batchSize);
+      const placeholders = chunk.map(() => "?").join(",");
+      await client.execute({
+        sql: `DELETE FROM eir_cancellation_orders WHERE row_key IN (${placeholders});`,
+        args: chunk
+      });
+    }
+  } catch (e) {
+    console.error("[Turso] Lỗi deleteVerificationOrderRowsInTurso:", e.message);
+  }
+}
+
+/**
  * Xóa đợt kiểm tra đơn theo uploadId
  */
 async function deleteVerificationOrdersByUploadIdInTurso(uploadId) {
@@ -657,6 +679,7 @@ module.exports = {
   getAllVerificationOrdersFromTurso,
   syncVerificationOrdersToTurso,
   deleteVerificationOrderRowInTurso,
+  deleteVerificationOrderRowsInTurso,
   deleteVerificationOrdersByUploadIdInTurso,
   clearAllVerificationOrdersInTurso,
   getUploadHistoryFromTurso,
