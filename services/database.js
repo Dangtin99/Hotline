@@ -32,6 +32,13 @@ try {
   console.log("Supabase client chưa sẵn sàng:", e.message);
 }
 
+let tursoClient = null;
+try {
+  tursoClient = require("./tursoClient");
+} catch (e) {
+  console.log("Turso client chưa sẵn sàng:", e.message);
+}
+
 // Thử nạp module SQLite tích hợp của Node.js (v22.5+)
 let sqliteEngine = null;
 try {
@@ -124,6 +131,10 @@ function generateOrderKey(r) {
   if (cont || book) {
     return `${depot}#${cont}#${book}#${date}`;
   }
+  // Đơn thủ công không có cont/booking: dùng manualId nếu có để đảm bảo duy nhất
+  if (r._manualId) {
+    return `${depot}#${r._manualId}#${date}`;
+  }
   // Trường hợp không có cont/booking thì dùng stt + depot + ngày hủy
   return `${depot}#STT_${r.stt || "0"}#${date}`;
 }
@@ -156,6 +167,13 @@ function persistStore() {
 
   // Đồng bộ file SQL DUMP script
   generateSqlDumpFile();
+
+  // Đồng bộ ngầm lên Turso Cloud (fire-and-forget)
+  if (tursoClient) {
+    tursoClient.syncOrdersToTurso(memoryOrders).catch(err => {
+      console.warn("[Turso] Dong bo len Turso that bai:", err.message);
+    });
+  }
 }
 
 // Tự động sinh file script SQL hoàn chỉnh (.sql) để người dùng có thể import vào bất kỳ hệ quản trị CSDL nào (Postgres, MySQL, SQL Server, SQLite)
@@ -1385,6 +1403,10 @@ function insertManualOrder(orderData) {
     }
   }
 
+  // Tạo manualId duy nhất để đảm bảo rowKey không bị xung đột
+  // khi người dùng nhập nhiều đơn thiếu Container/Booking
+  const manualId = `MANUAL_${Date.now()}`;
+
   const record = {
     stt: orderData.stt ? String(orderData.stt).trim() : newStt,
     depot: (orderData.depot || "BSD").trim().toUpperCase(),
@@ -1406,7 +1428,9 @@ function insertManualOrder(orderData) {
     sdtNhaXe: (orderData.sdtNhaXe || "").trim(),
     lyDoTuChoi: (orderData.lyDoTuChoi || "").trim(),
     trangThaiXuLy: (orderData.trangThaiXuLy || "").trim(),
-    giaiTrinh: (orderData.giaiTrinh || "").trim()
+    giaiTrinh: (orderData.giaiTrinh || "").trim(),
+    // Khi không có Container/Booking, dùng manualId để rowKey không bị trùng
+    _manualId: (!soContainer && !orderData.soBooking) ? manualId : undefined
   };
 
   const metadata = {
