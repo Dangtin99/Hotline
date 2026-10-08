@@ -586,22 +586,21 @@ app.post("/api/orders/manual", authRequired, (req, res) => {
 });
 
 /**
- * API: Kiểm tra trạng thái liên kết Supabase Cloud
+ * API: Kiểm tra trạng thái liên kết Turso Cloud SQLite
  */
-app.get("/api/supabase/status", authRequired, async (req, res) => {
+app.get("/api/turso/status", authRequired, async (req, res) => {
   try {
-    const supabase = require("./services/supabaseClient");
-    const conn = await supabase.testConnection();
-    const rowCount = await supabase.getSupabaseRowCount();
+    const turso = require("./services/tursoClient");
+    const conn = await turso.testConnection();
+    const rowCount = await turso.getTursoRowCount();
     const allRecords = getAllRecords();
 
     return res.json({
       status: "success",
       connected: conn.success,
-      database: conn.database,
       version: conn.version,
       serverTime: conn.time,
-      supabaseRowCount: rowCount,
+      tursoRowCount: rowCount,
       localTotalCount: allRecords.length,
       error: conn.message
     });
@@ -611,22 +610,22 @@ app.get("/api/supabase/status", authRequired, async (req, res) => {
 });
 
 /**
- * API: Kích hoạt đồng bộ hóa toàn bộ dữ liệu SQL lên Supabase Cloud
+ * API: Kích hoạt đồng bộ hóa toàn bộ dữ liệu SQL lên Turso Cloud SQLite
  */
-app.post("/api/supabase/sync", authRequired, async (req, res) => {
+app.post("/api/turso/sync", authRequired, async (req, res) => {
   try {
-    const supabase = require("./services/supabaseClient");
+    const turso = require("./services/tursoClient");
     const allRecords = getAllRecords();
-    const result = await supabase.syncOrdersToSupabase(allRecords);
+    const result = await turso.syncOrdersToTurso(allRecords);
 
     return res.json({
       status: "success",
-      message: `Đã đồng bộ thành công ${result.synced}/${result.total} đơn hàng lên Cloud Supabase!`,
+      message: `Đã đồng bộ thành công ${result.synced}/${result.total} đơn hàng lên Turso Cloud SQLite!`,
       syncedCount: result.synced,
       totalCount: result.total
     });
   } catch (err) {
-    console.error("Lỗi đồng bộ Supabase:", err);
+    console.error("Lỗi đồng bộ Turso:", err);
     return res.status(500).json({ status: "error", message: err.message });
   }
 });
