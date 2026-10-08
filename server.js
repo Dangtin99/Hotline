@@ -935,12 +935,16 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", app: "Logistics Cancellation Analytics Engine", time: new Date() });
 });
 
-app.listen(PORT, () => {
-  console.log(`=====================================================`);
-  console.log(`Hệ thống Phân tích Đơn Hủy Logistics đang chạy tại:`);
-  console.log(`http://localhost:${PORT}`);
-  console.log(`=====================================================`);
-});
+if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`=====================================================`);
+    console.log(`Hệ thống Phân tích Đơn Hủy Logistics đang chạy tại:`);
+    console.log(`http://localhost:${PORT}`);
+    console.log(`=====================================================`);
+  });
+}
+
+module.exports = app;
 
 // Phòng chống crash máy chủ khi có lỗi mạng đột ngột (như ECONNRESET từ Supabase / Cloudflare)
 process.on("uncaughtException", (err) => {
