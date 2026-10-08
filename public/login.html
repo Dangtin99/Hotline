@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Đăng Nhập | Hệ Thống Phân Tích Đơn Hủy Logistics</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body {
+      background: #f1f5f9;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #0f172a;
+    }
+
+    .login-container {
+      width: 100%;
+      max-width: 400px;
+      background: #ffffff;
+      border-radius: 12px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+      overflow: hidden;
+    }
+
+    .login-header {
+      padding: 32px 28px 20px;
+      text-align: left;
+      border-bottom: 1px solid #f1f5f9;
+    }
+
+    .login-brand-tag {
+      font-size: 11px;
+      font-weight: 700;
+      color: #2563eb;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 6px;
+    }
+
+    .login-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: #0f172a;
+      margin: 0 0 6px 0;
+      letter-spacing: -0.3px;
+    }
+
+    .login-subtitle {
+      font-size: 13px;
+      color: #64748b;
+      margin: 0;
+      line-height: 1.4;
+    }
+
+    .login-body {
+      padding: 24px 28px 28px;
+    }
+
+    .login-form-group {
+      margin-bottom: 18px;
+    }
+
+    .login-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #334155;
+      margin-bottom: 6px;
+    }
+
+    .input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .login-input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 14px;
+      color: #0f172a;
+      outline: none;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+      box-sizing: border-box;
+      background: #ffffff;
+    }
+
+    .login-input:focus {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    }
+
+    .btn-toggle-pass {
+      position: absolute;
+      right: 8px;
+      background: #f1f5f9;
+      border: 1px solid #e2e8f0;
+      border-radius: 4px;
+      color: #475569;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      transition: background 0.15s ease;
+    }
+
+    .btn-toggle-pass:hover {
+      background: #e2e8f0;
+    }
+
+    .login-row-options {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      font-size: 13px;
+    }
+
+    .remember-me {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #64748b;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .btn-submit-login {
+      width: 100%;
+      padding: 11px;
+      background: #2563eb;
+      color: #ffffff;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .btn-submit-login:hover {
+      background: #1d4ed8;
+    }
+
+    .btn-submit-login:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .login-alert {
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .login-alert.danger {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #b91c1c;
+    }
+
+    .login-alert.success {
+      background: #ecfdf5;
+      border: 1px solid #a7f3d0;
+      color: #047857;
+    }
+
+    .login-footer {
+      padding: 12px 28px;
+      background: #f8fafc;
+      border-top: 1px solid #f1f5f9;
+      text-align: center;
+      font-size: 11.5px;
+      color: #94a3b8;
+    }
+  </style>
+  <script src="auth.js"></script>
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-header">
+      <div class="login-brand-tag">GPG Logistics</div>
+      <h1 class="login-title">Đăng Nhập</h1>
+      <p class="login-subtitle">Hệ thống Phân tích Đơn Hủy 24/7</p>
+    </div>
+
+    <div class="login-body">
+      <div id="loginAlert" class="login-alert danger"></div>
+
+      <form id="loginForm" autocomplete="on">
+        <div class="login-form-group">
+          <label for="username" class="login-label">Tên đăng nhập</label>
+          <div class="input-wrapper">
+            <input type="text" id="username" class="login-input" placeholder="Nhập tên đăng nhập" required autofocus>
+          </div>
+        </div>
+
+        <div class="login-form-group">
+          <label for="password" class="login-label">Mật khẩu</label>
+          <div class="input-wrapper">
+            <input type="password" id="password" class="login-input" placeholder="Nhập mật khẩu" required>
+            <button type="button" class="btn-toggle-pass" id="btnTogglePassword" title="Hiện hoặc ẩn mật khẩu">Hiện</button>
+          </div>
+        </div>
+
+        <div class="login-row-options">
+          <label class="remember-me">
+            <input type="checkbox" id="rememberMe" checked>
+            <span>Ghi nhớ đăng nhập</span>
+          </label>
+        </div>
+
+        <button type="submit" id="btnSubmit" class="btn-submit-login">
+          Đăng nhập
+        </button>
+      </form>
+    </div>
+
+    <div class="login-footer">
+      GPG Logistics & Maritime Analytics
+    </div>
+  </div>
+
+  <script src="login.js"></script>
+</body>
+</html>

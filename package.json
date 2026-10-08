@@ -1,0 +1,17 @@
+{
+  "name": "logistics-cancellation-analytics",
+  "version": "1.0.0",
+  "description": "Hệ thống Trợ lý AI Phân tích Báo cáo Đơn Hủy 24/7 (Logistics & Depot Analytics)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1",
+    "ttt-analytics-dashboard": "file:../NewProject",
+    "xlsx": "^0.18.5"
+  }
+}

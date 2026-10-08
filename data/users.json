@@ -1,0 +1,46 @@
+[
+  {
+    "id": "1",
+    "fullName": "ADMIN",
+    "username": "admin",
+    "passwordHash": "c4723e301be8f7a7480966ed5f95a1136f613eb67074a41b6779feda1c2ffee90c7f733d61ee54f436685ac13a92dfc6daf2ba8cd62a63b5751a9111325eb8af",
+    "salt": "c67bf41bc607f1bbb2ed6c32db72ce28",
+    "role": "admin",
+    "isActive": true,
+    "createdAt": "2026-10-03 02:56:19",
+    "updatedAt": "2026-10-03 02:56:19"
+  },
+  {
+    "id": "2",
+    "fullName": "Đặng Đức Tín",
+    "username": "user01",
+    "passwordHash": "1f0822b5167a27265abdded1e9c51cd4a4e897d13d6288eca818b7ae610a1401c5fe6dd3ba8de013c498231a6ac239495d0d60d8728f1d73e9460dddd517168f",
+    "salt": "f04560dbb591ac4108f0c966b0291282",
+    "role": "user",
+    "isActive": true,
+    "createdAt": "2026-10-03 02:56:19",
+    "updatedAt": "2026-10-03 02:56:19"
+  },
+  {
+    "id": "3",
+    "fullName": "Võ Ngọc Bảo Châu",
+    "username": "user02",
+    "passwordHash": "207da473e47e268c2e7e13f03fb3e5c8b2b5e031ddc974d60a2ac4e07032f7e951718e6706f7b287ae68f4d4f562e49c7efc862ab74f2ee47588909b2fe8da4b",
+    "salt": "de0a582347d76ade6798a62ce4bebb2a",
+    "role": "user",
+    "isActive": true,
+    "createdAt": "2026-10-03 02:56:19",
+    "updatedAt": "2026-10-03 02:56:42"
+  },
+  {
+    "id": "4",
+    "fullName": "Lý Gia Huy",
+    "username": "user03",
+    "passwordHash": "2930428291f0486b27daa5ac2a44e9bd3b668baebbd004e53ba32b322c569062769a5d8b2cd23d3090105335528e0475eaf538a4b575bb915f31b05b4166a36e",
+    "salt": "7e529f4782b6f4d5b40d78d4017887eb",
+    "role": "user",
+    "isActive": true,
+    "createdAt": "2026-10-03 02:56:19",
+    "updatedAt": "2026-10-03 02:56:42"
+  }
+]

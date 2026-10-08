@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Đăng Tải & Quản Lý Dữ Liệu - Báo Cáo Đơn Hủy</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="auth.js"></script>
+</head>
+<body>
+  <div class="app-wrapper">
+    <!-- Thanh Tab Bên Trái (Left Sidebar) -->
+    <aside class="app-sidebar">
+      <div class="sidebar-brand">
+                <div>
+          <div class="brand-title">GPG LOGISTICS</div>
+          <div class="brand-subtitle">Quản Trị Đơn Hủy 24/7</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a href="index.html" class="sidebar-link">
+          <span>Bảng Điều Hành</span>
+        </a>
+        <a href="data-table.html" class="sidebar-link">
+          <span>Dữ Liệu Chi Tiết</span>
+        </a>
+        <a href="data-table.html?tab=unpaid" class="sidebar-link">
+          <span>Đơn Chưa Thanh Toán</span>
+        </a>
+        <a href="data-table.html?tab=cancelled" class="sidebar-link">
+          <span>Đơn Hủy</span>
+        </a>
+        <a href="verification-table.html" class="sidebar-link" id="navVerificationTable">
+          <span>Dữ Liệu Check Đơn</span>
+        </a>
+        <a href="upload.html" class="sidebar-link active">
+          <span>Đăng Tải Dữ Liệu</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-user-card" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; background: rgba(255,255,255,0.08); border-radius: 8px; margin-bottom: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px; overflow: hidden;">
+            <span id="sidebarUserName" style="font-size: 12px; font-weight: 500; color: #f8fafc; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Admin</span>
+          </div>
+          <button type="button" id="sidebarBtnLogout" style="background: none; border: none; color: #94a3b8; font-size: 14px; cursor: pointer; padding: 2px;" title="Đăng xuất">Đăng xuất</button>
+        </div>
+        <div class="system-status">
+          <span class="status-dot"></span>
+          <span>Hệ thống trực tuyến</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Nội Dung Chính (Main Content) -->
+    <div class="main-content">
+      <!-- Header -->
+      <header class="app-header">
+        <div class="header-brand">
+                    <div>
+            <h1 id="uploadHeaderTitle">ĐĂNG TẢI & QUẢN LÝ DỮ LIỆU ĐƠN HỦY</h1>
+            <p class="subtitle" id="uploadHeaderSubtitle">Kiểm định cấu trúc form SQL PostgreSQL & Quản lý lịch sử nạp dữ liệu</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <a href="data-table.html" class="btn btn-outline" style="text-decoration: none;">Xem Bảng Dữ Liệu</a>
+          <a href="index.html" class="btn btn-primary" style="text-decoration: none;">Xem Bảng Điều Hành</a>
+          <div class="header-user-dropdown-container" id="headerUserMenu">
+            <button type="button" class="user-chip-btn" id="userChipBtn" aria-haspopup="true" aria-expanded="false" title="Menu người dùng">
+              tài khoản
+            </button>
+          </div>
+        </div>
+      </header>
+
+    <!-- Notification Alert -->
+    <div id="alertBox" class="alert-box" hidden></div>
+
+    <!-- Main Content: Upload & History -->
+    <main>
+      <!-- Thanh Chuyển Đổi Tab Đăng Tải -->
+      <div class="nav-tabs data-tabs" style="margin-bottom: 22px;">
+        <div class="data-tabs-buttons">
+          <button type="button" class="tab-btn active" id="tabUploadApproved" data-tab="approved">
+            <span>Đăng tải dữ liệu đơn duyệt</span>
+          </button>
+          <button type="button" class="tab-btn" id="tabUploadVerification" data-tab="verification">
+            <span>Đăng tải dữ liệu kiểm tra đơn</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Tab 1: Đăng Tải Dữ Liệu Đơn Duyệt (Gắn với ĐĂNG TẢI & QUẢN LÝ DỮ LIỆU ĐƠN HỦY) -->
+      <div id="tabContentApproved" class="tab-pane active">
+        <!-- Khối Upload & Kiểm tra File -->
+        <section class="upload-panel">
+        <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+          <div>
+            <h2>Tải File </h2>
+           
+          </div>
+          <div>
+            <button type="button" id="btnDownloadTemplateApproved" class="btn btn-outline">Tải Bản Mẫu Excel</button>
+          </div>
+        </div>
+
+        <div class="dropzone" id="dropzoneUpload">
+          <input type="file" id="fileInputUpload" accept=".csv, .xlsx, .xls" hidden>
+          <h3>Kéo thả file Báo cáo đơn hủy vào đây hoặc chọn từ máy tính</h3>
+          <p class="dropzone-hint">Hỗ trợ tệp Excel (.xlsx, .xls) hoặc .csv (Tự động nhận diện header và làm sạch ký tự rác)</p>
+          <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;" class="mt-3">
+            <button type="button" class="btn btn-secondary" id="btnSelectFile">Chọn File Từ Máy Tính</button>
+            <button type="button" class="btn btn-outline" id="btnDownloadTemplateApprovedDropzone">Tải Bản Mẫu Excel</button>
+          </div>
+          <div id="selectedFileInfo" class="selected-file-info" style="display: none;"></div>
+        </div>
+
+        <!-- Các nút thao tác kiểm tra & Import -->
+        <div class="upload-actions-bar" id="uploadActionsBar" style="display: none;">
+          <button id="btnValidateFile" class="btn btn-secondary">Kiểm Tra Form SQL</button>
+          <button id="btnExecuteImport" class="btn btn-primary">Import Dữ Liệu Vào Hệ Thống</button>
+          <button id="btnClearSelected" class="btn btn-outline">Hủy Chọn</button>
+        </div>
+
+        <!-- Khung hiển thị kết quả kiểm tra SQL (Validation Report) -->
+        <div id="validationResultCard" class="validation-card" style="display: none;">
+          <div class="validation-header">
+            <div class="validation-title">
+              <span id="validationBadge" class="badge">Đang kiểm tra...</span>
+              <h3 id="validationTitle">Kết Quả Kiểm Tra Chuẩn Form PostgreSQL</h3>
+            </div>
+            <div id="validationSummary" class="validation-summary"></div>
+          </div>
+
+          <div class="table-responsive mt-3">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Tên Cột Form Excel</th>
+                  <th>Cột Tương Ứng Trong SQL</th>
+                  <th>Kiểu Dữ Liệu SQL</th>
+                  <th>Bắt Buộc</th>
+                  <th>Trạng Thái Khớp</th>
+                </tr>
+              </thead>
+              <tbody id="tbodyValidationColumns"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Khối Lịch Sử Đăng Tải Dữ Liệu -->
+      <section class="history-panel mt-4">
+        <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+          <div>
+            <h2>Lịch Sử Đăng Tải Dữ Liệu</h2>
+            <p>Danh sách các tệp báo cáo đơn hủy đã lưu trữ trong hệ thống</p>
+          </div>
+          <div>
+            <button type="button" id="btnClearAllHistory" class="btn btn-outline btn-sm text-danger" style="display: none;">Xóa Toàn Bộ Lịch Sử</button>
+          </div>
+        </div>
+
+        <div class="table-responsive mt-3">
+          <table class="data-table history-table">
+            <thead>
+              <tr>
+                <th style="width: 25%;">Mã Đợt (ID)</th>
+                <th style="width: 42%;">Tên File</th>
+                <th style="width: 20%; text-align: center;">Thời Gian Tải</th>
+                <th style="width: 13%; text-align: center;">Thao Tác</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyHistory">
+              <tr>
+                <td colspan="4" class="text-center py-4">Đang tải danh sách lịch sử...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+      </div> <!-- /tabContentApproved -->
+
+      <!-- Tab 2: Đăng Tải Dữ Liệu Kiểm Tra Đơn -->
+      <div id="tabContentVerification" class="tab-pane" style="display: none;">
+        <!-- Khối Upload File Kiểm Tra Đơn -->
+        <section class="upload-panel">
+          <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div>
+              <h2>Tải File</h2>
+            </div>
+            <div>
+              <button type="button" id="btnDownloadTemplateVerification" class="btn btn-outline">Tải Bản Mẫu Excel</button>
+            </div>
+          </div>
+
+          <div class="dropzone" id="dropzoneVerification">
+            <input type="file" id="fileInputVerification" accept=".csv, .xlsx, .xls" hidden>
+            <h3>Kéo thả file Kiểm tra đơn vào đây hoặc chọn từ máy tính</h3>
+            <p class="dropzone-hint">Hỗ trợ tệp Excel (.xlsx, .xls) hoặc .csv</p>
+            <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;" class="mt-3">
+              <button type="button" class="btn btn-secondary" id="btnSelectFileVerification">Chọn File Từ Máy Tính</button>
+              <button type="button" class="btn btn-outline" id="btnDownloadTemplateVerificationDropzone">Tải Bản Mẫu Excel</button>
+            </div>
+            <div id="selectedFileInfoVerification" class="selected-file-info" style="display: none;"></div>
+          </div>
+
+          <!-- Các nút thao tác Import dữ liệu kiểm tra -->
+          <div class="upload-actions-bar" id="uploadActionsBarVerification" style="display: none;">
+            <button type="button" id="btnExecuteImportVerification" class="btn btn-primary">Import Dữ Liệu Kiểm Tra</button>
+            <button type="button" id="btnClearSelectedVerification" class="btn btn-outline">Hủy Chọn</button>
+          </div>
+        </section>
+
+        <!-- Khối Lịch Sử Đăng Tải Dữ Liệu Kiểm Tra Đơn -->
+        <section class="history-panel mt-4">
+          <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div>
+              <h2>Lịch Sử Đăng Tải Dữ Liệu Kiểm Tra Đơn</h2>
+              <p>Danh sách các tệp kiểm tra đơn đã lưu trữ trong hệ thống</p>
+            </div>
+            <div>
+              <button type="button" id="btnClearAllVerificationHistory" class="btn btn-outline btn-sm text-danger" style="display: none;">Xóa Toàn Bộ Lịch Sử</button>
+            </div>
+          </div>
+
+          <div class="table-responsive mt-3">
+            <table class="data-table history-table">
+              <thead>
+                <tr>
+                  <th style="width: 25%;">Mã Đợt (ID)</th>
+                  <th style="width: 37%;">Tên File</th>
+                  <th style="width: 13%; text-align: center;">Số Dòng</th>
+                  <th style="width: 15%; text-align: center;">Thời Gian Tải</th>
+                  <th style="width: 10%; text-align: center;">Thao Tác</th>
+                </tr>
+              </thead>
+              <tbody id="tbodyVerificationHistory">
+                <tr>
+                  <td colspan="5" class="text-center py-4">Đang tải danh sách lịch sử...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div> <!-- /tabContentVerification -->
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <p>Logistics Cancellation Analytics Engine &copy; 2026. Tích hợp PostgreSQL Schema & Chuẩn Kiểm Định Logistics.</p>
+    </footer>
+    </div> <!-- /main-content -->
+  </div> <!-- /app-wrapper -->
+
+  <script src="upload.js"></script>
+</body>
+</html>

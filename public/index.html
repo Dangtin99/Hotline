@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bảng Điều Hành Phân Tích Đơn Hủy Logistics & Depot</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="auth.js"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="app-wrapper">
+    <!-- Thanh Tab Bên Trái (Left Sidebar) -->
+    <aside class="app-sidebar">
+      <div class="sidebar-brand">
+                <div>
+          <div class="brand-title">GPG LOGISTICS</div>
+          <div class="brand-subtitle">Quản Trị Đơn Hủy 24/7</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a href="index.html" class="sidebar-link active" id="navDashboard">
+          <span>Bảng Điều Hành</span>
+        </a>
+        <a href="data-table.html" class="sidebar-link" id="navDataTable">
+          <span>Dữ Liệu Chi Tiết</span>
+        </a>
+        <a href="data-table.html?tab=unpaid" class="sidebar-link" id="navUnpaid">
+          <span>Đơn Chưa Thanh Toán</span>
+        </a>
+        <a href="data-table.html?tab=cancelled" class="sidebar-link" id="navCancelled">
+          <span>Đơn Hủy</span>
+        </a>
+        <a href="verification-table.html" class="sidebar-link" id="navVerificationTable">
+          <span>Dữ Liệu Check Đơn</span>
+        </a>
+        <a href="upload.html" class="sidebar-link" id="navUpload">
+          <span>Đăng Tải Dữ Liệu</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-user-card" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; background: rgba(255,255,255,0.08); border-radius: 8px; margin-bottom: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px; overflow: hidden;">
+            <span id="sidebarUserName" style="font-size: 12px; font-weight: 500; color: #f8fafc; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Admin</span>
+          </div>
+          <button type="button" id="sidebarBtnLogout" style="background: none; border: none; color: #94a3b8; font-size: 14px; cursor: pointer; padding: 2px;" title="Đăng xuất">Đăng xuất</button>
+        </div>
+        <div class="system-status">
+          <span class="status-dot"></span>
+          <span>Hệ thống trực tuyến</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Nội dung chính (Main Content) -->
+    <div class="main-content">
+      <!-- Header -->
+      <header class="app-header">
+        <div class="header-brand">
+                    <div>
+            <h1>HỆ THỐNG TRỢ LÝ AI - PHÂN TÍCH ĐƠN HỦY 24/7</h1>
+            <p class="subtitle">Bảng Điều Hành Quản Trị Logistics, Vận Hành Bãi Depot & Hãng Tàu</p>
+          </div>
+        </div>
+
+        <div class="header-user-dropdown-container" id="headerUserMenu">
+          <button type="button" class="user-chip-btn" id="userChipBtn" aria-haspopup="true" aria-expanded="false" title="Menu người dùng">
+            tài khoản
+          </button>
+        </div>
+      </header>
+
+    <!-- Notification Alert -->
+    <div id="alertBox" class="alert-box" hidden></div>
+
+    <!-- Main Dashboard Analytics -->
+    <main id="dashboardContent">
+      <!-- File source notice -->
+      <div class="source-notice">
+        <div>
+          <span style="color: var(--text-muted);">Đang phân tích tập dữ liệu:</span>
+          <strong id="currentDatasetName" style="color: var(--blue-primary); margin-left: 6px;">Đang tải dữ liệu...</strong>
+        </div>
+        <div>
+          <a href="upload.html" class="btn btn-outline btn-sm" style="text-decoration: none;">Tải File Khác</a>
+        </div>
+      </div>
+
+      <!-- Controls Bar: Bộ Lọc Dashboard Toàn Diện (Ghim cột, Depot, Hãng, Chiều cont, Trạng thái, Giờ duyệt, Hạn 3h, CSKH) -->
+      <div class="table-controls-card dashboard-filter-bar" style="margin-bottom: 22px; padding: 12px 16px; background: #ffffff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;">
+        <div class="filter-group">
+
+          <!-- Bộ lọc Depot Đa Chọn (Multi-select) -->
+          <div class="multiselect-dropdown" id="depotMultiselect">
+            <button type="button" class="multiselect-btn" id="depotDropdownBtn" aria-haspopup="true" aria-expanded="false" title="Nhấn để chọn một hoặc nhiều Depot">
+              <span class="multiselect-label" id="depotSelectedLabel">Depot (Tất cả)</span>
+              <span class="multiselect-arrow">▼</span>
+            </button>
+            <div class="multiselect-panel" id="depotDropdownPanel">
+              <div class="multiselect-header">
+                <label class="multiselect-item select-all-item">
+                  <input type="checkbox" id="depotSelectAll" checked>
+                  <span><strong>Tất cả Depot</strong></span>
+                </label>
+              </div>
+              <div class="multiselect-list" id="depotOptionsList">
+                <!-- Checkboxes Depot nạp động -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Bộ lọc Theo Ngày (Ngày Hủy / Ngày Duyệt) -->
+          <div class="date-filter-group" id="dashboardDateFilterGroup" title="Lọc theo khoảng thời gian">
+            <select id="filterDateType" class="filter-select date-type-select" title="Chọn loại ngày cần lọc">
+              <option value="ngayHuy">Ngày hủy</option>
+              <option value="ngayDuyet">Ngày duyệt</option>
+            </select>
+            <input type="date" id="filterDateFrom" class="filter-select filter-date-input" title="Lọc từ ngày" placeholder="Từ ngày">
+            <span class="date-sep">-</span>
+            <input type="date" id="filterDateTo" class="filter-select filter-date-input" title="Lọc đến ngày" placeholder="Đến ngày">
+            <button type="button" id="btnClearDateFilter" class="btn-clear-date" title="Xóa bộ lọc ngày" style="display: none;">×</button>
+          </div>
+
+          <!-- Bộ lọc Hãng tàu -->
+          <select id="filterLine" class="filter-select" title="Lọc theo Hãng tàu">
+            <option value="">Hãng tàu</option>
+          </select>
+
+          <!-- Bộ lọc Chiều container -->
+          <select id="filterDirection" class="filter-select" title="Lọc theo Chiều cont (IN/OUT)">
+            <option value="">Chiều cont</option>
+            <option value="OUT">Chiều OUT (Lấy cont)</option>
+            <option value="IN">Chiều IN (Hạ cont)</option>
+          </select>
+
+          <!-- Bộ lọc Trạng Thái Đơn Đa Chọn (Multi-select) -->
+          <div class="multiselect-dropdown" id="statusMultiselect">
+            <button type="button" class="multiselect-btn" id="statusDropdownBtn" aria-haspopup="true" aria-expanded="false" title="Nhấn để chọn một hoặc nhiều Trạng thái đơn">
+              <span class="multiselect-label" id="statusSelectedLabel">Trạng thái (Tất cả)</span>
+              <span class="multiselect-arrow">▼</span>
+            </button>
+            <div class="multiselect-panel" id="statusDropdownPanel">
+              <div class="multiselect-header">
+                <label class="multiselect-item select-all-item">
+                  <input type="checkbox" id="statusSelectAll" checked>
+                  <span><strong>Tất cả trạng thái</strong></span>
+                </label>
+              </div>
+              <div class="multiselect-list" id="statusOptionsList">
+                <!-- Checkboxes Trạng thái nạp động -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Bộ lọc Khung giờ duyệt (Từng đoạn 1 tiếng) -->
+          <select id="filterApprovedHour" class="filter-select" title="Lọc theo khung giờ của cột Ngày được duyệt">
+            <option value="">Giờ duyệt</option>
+            <option value="0">00:00 -&gt; 01:00</option>
+            <option value="1">01:00 -&gt; 02:00</option>
+            <option value="2">02:00 -&gt; 03:00</option>
+            <option value="3">03:00 -&gt; 04:00</option>
+            <option value="4">04:00 -&gt; 05:00</option>
+            <option value="5">05:00 -&gt; 06:00</option>
+            <option value="6">06:00 -&gt; 07:00</option>
+            <option value="7">07:00 -&gt; 08:00</option>
+            <option value="8">08:00 -&gt; 09:00</option>
+            <option value="9">09:00 -&gt; 10:00</option>
+            <option value="10">10:00 -&gt; 11:00</option>
+            <option value="11">11:00 -&gt; 12:00</option>
+            <option value="12">12:00 -&gt; 13:00</option>
+            <option value="13">13:00 -&gt; 14:00</option>
+            <option value="14">14:00 -&gt; 15:00</option>
+            <option value="15">15:00 -&gt; 16:00</option>
+            <option value="16">16:00 -&gt; 17:00</option>
+            <option value="17">17:00 -&gt; 18:00</option>
+            <option value="18">18:00 -&gt; 19:00</option>
+            <option value="19">19:00 -&gt; 20:00</option>
+            <option value="20">20:00 -&gt; 21:00</option>
+            <option value="21">21:00 -&gt; 22:00</option>
+            <option value="22">22:00 -&gt; 23:00</option>
+            <option value="23">23:00 -&gt; 24:00</option>
+          </select>
+
+          <!-- Bộ lọc Cảnh báo đếm ngược 3 giờ -->
+          <select id="filterWarning3h" class="filter-select" title="Lọc theo mức độ cảnh báo đếm ngược 3 giờ từ khi duyệt đơn">
+            <option value="">Hạn 3h</option>
+            <option value="safe">Còn &gt; 2h (An toàn)</option>
+            <option value="yellow">Qua 1h (Cảnh báo vàng)</option>
+            <option value="red">Qua 2h (Cảnh báo đỏ)</option>
+            <option value="expired">Quá 3h (Đã hủy)</option>
+            <option value="processed">Đã xử lý</option>
+          </select>
+
+          <!-- Bộ lọc Trạng thái CSKH / Xử lý -->
+          <select id="filterContactStatus" class="filter-select" title="Lọc theo trạng thái xử lý CSKH">
+            <option value="">Trạng thái CSKH</option>
+            <option value="Thanh toán thành công">Thanh toán thành công</option>
+            <option value="Đã liên hệ - Chờ đặt lại">Đã liên hệ - Chờ đặt lại</option>
+            <option value="Đã liên hệ - Chờ thanh toán">Đã liên hệ - Chờ thanh toán</option>
+            <option value="Đã liên hệ - Đã đặt lại">Đã liên hệ - Đã đặt lại</option>
+            <option value="Đã liên hệ - Không đặt lại">Đã liên hệ - Không đặt lại</option>
+            <option value="Không liên hệ được - Chờ thanh toán">Không liên hệ được - Chờ thanh toán</option>
+            <option value="Không liên hệ được - Hủy">Không liên hệ được - Hủy</option>
+            <option value="Tự động đặt lại">Tự động đặt lại</option>
+            <option value="__EMPTY__">Chưa cập nhật trạng thái</option>
+          </select>
+
+          <button id="btnResetFilter" class="btn btn-outline btn-sm" type="button" title="Đặt lại tất cả các bộ lọc về mặc định">Đặt Lại</button>
+        </div>
+      </div>
+
+      <!-- KPIs Overview -->
+      <section class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-title">TỔNG SỐ ĐƠN HỦY</div>
+          <div class="kpi-value" id="kpiTotalOrders">0</div>
+          <div class="kpi-sub" id="kpiTotalTeus">0 TEUs</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-title">CHIỀU VẬN HÀNH (OUT / IN)</div>
+          <div class="kpi-value text-accent" id="kpiDirection">0 / 0</div>
+          <div class="kpi-sub" id="kpiDirectionRatio">OUT: 0% | IN: 0%</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-title">TRẠNG THÁI XỬ LÝ ĐƠN</div>
+          <div class="kpi-value text-warning" id="kpiStatusMain">0</div>
+          <div class="kpi-sub" id="kpiStatusSub">Hoàn tiền: 0 đơn</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-title">ĐƠN CHƯA THANH TOÁN</div>
+          <div class="kpi-value text-danger" id="kpiActivated">0</div>
+          <div class="kpi-sub" id="kpiActivatedSub">0% tổng đơn</div>
+        </div>
+      </section>
+
+      <!-- KPI Summary Table Section -->
+      <section class="kpi-summary-section">
+        <div class="table-card">
+          <div class="d-flex-between" style="margin-bottom: 14px;">
+            <h3>Bảng Chỉ Số KPI Vận Hành & CSKH</h3>
+            <span class="text-muted" id="kpiSummaryScope" style="font-size: 13px; font-weight: 500;">Dữ liệu theo bộ lọc hiện tại</span>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table kpi-summary-table">
+              <thead>
+                <tr>
+                  <th style="width: 60px; text-align: center;">STT</th>
+                  <th>Chỉ Số KPI</th>
+                  <th style="width: 140px; text-align: right;">Số Lượng</th>
+                  <th style="width: 140px; text-align: right;">Tỉ Lệ (%)</th>
+                  <th style="min-width: 240px;">Ghi Chú / Phân Loại</th>
+                </tr>
+              </thead>
+              <tbody id="tbodyKpiSummary">
+                <!-- Sẽ được render động từ app.js -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Charts Row -->
+      <section class="charts-grid">
+        <div class="chart-card">
+          <h3>Cơ Cấu Lý Do Hủy Đơn</h3>
+          <div class="chart-container">
+            <canvas id="chartReasons"></canvas>
+          </div>
+        </div>
+        <div class="chart-card" style="display: none !important;">
+          <h3>Phân Bố Đơn Hủy Theo Depot</h3>
+          <div class="chart-container">
+            <canvas id="chartDepots"></canvas>
+          </div>
+        </div>
+        <div class="chart-card" style="display: none !important;">
+          <h3>Phân Bố Theo Hãng Tàu</h3>
+          <div class="chart-container">
+            <canvas id="chartShippingLines"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- Anomalies Alert Section -->
+      <section class="anomalies-section">
+        <div class="section-header">
+          <h3>Chi Tiết Bất Thường Cần Lưu Ý (<span id="anomalyCount">0</span> trường hợp)</h3>
+          <span class="badge-notice">Tự động phát hiện bởi AI Anomaly Engine</span>
+        </div>
+        <div id="anomaliesList" class="anomalies-list"></div>
+      </section>
+
+      <!-- Matrix Cross-Tabulation: Depot & Hãng Tàu x Trạng Thái -->
+      <section class="matrix-section">
+        <div class="matrix-card">
+          <div class="matrix-header">
+            <div class="matrix-title-group">
+              <div>
+                <h3 class="matrix-title">Ma Trận Phân Bố Số Lượng Đơn (Depot & Hãng Tàu × Trạng Thái)</h3>
+                <p class="matrix-subtitle">Thống kê số lượng đơn theo <strong>Depot & Hãng Tàu (Dòng)</strong> và <strong>Trạng Thái (Cột)</strong>. Bấm nút dấu [+] hoặc [-] để đóng / mở rộng chi tiết các Depot.</p>
+              </div>
+            </div>
+
+            <!-- Các nút điều khiển mở rộng / thu gọn ma trận -->
+            <div class="matrix-controls">
+              <button type="button" class="btn btn-outline btn-sm" id="btnExpandAllDepots" title="Mở rộng toàn bộ Depot">Mở Rộng Tất Cả</button>
+              <button type="button" class="btn btn-outline btn-sm" id="btnCollapseAllDepots" title="Thu gọn toàn bộ Depot">Thu Gọn Tất Cả</button>
+            </div>
+          </div>
+
+          <!-- Bảng Ma Trận Phân Cấp -->
+          <div class="table-responsive matrix-table-container">
+            <table class="data-table matrix-table" id="tableMatrix">
+              <thead id="theadMatrix">
+                <!-- Nạp động thead -->
+              </thead>
+              <tbody id="tbodyMatrix">
+                <!-- Nạp động tbody -->
+              </tbody>
+            </table>
+          </div>
+
+          <div class="matrix-footer-info">
+            <div class="matrix-legend">
+              <span class="legend-label">Mật độ đơn:</span>
+              <span class="legend-item"><span class="legend-box val-0">-</span> 0 đơn</span>
+              <span class="legend-item"><span class="legend-box val-low">1-3</span> 1-3 đơn</span>
+              <span class="legend-item"><span class="legend-box val-med">4-8</span> 4-8 đơn</span>
+              <span class="legend-item"><span class="legend-box val-high">&ge;9</span> &ge;9 đơn</span>
+            </div>
+            <div class="matrix-summary-text" id="matrixSummaryText">
+              Đang tải dữ liệu ma trận...
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- BẢNG THỐNG KÊ CHI TIẾT CÁC ĐƠN HÀNG (HIỂN THỊ TRỰC TIẾP TRÊN TRANG KHI BẤM MA TRẬN) -->
+      <section class="matrix-detail-section" id="matrixDetailSection">
+        <div class="matrix-detail-card" id="matrixDetailCard">
+          <div class="matrix-detail-header">
+            <div class="matrix-title-group">
+              <div>
+                <h3 class="matrix-title" id="inlineDetailTitle">Bảng Thống Kê Chi Tiết Đơn Hàng</h3>
+                <p class="matrix-subtitle" id="inlineDetailSubtitle">Đang hiển thị toàn bộ danh sách đơn hàng. Nhấp vào bất kỳ ô số lượng nào trên Bảng Ma Trận ở trên để lọc danh sách này.</p>
+              </div>
+            </div>
+
+            <div class="matrix-detail-actions">
+              <button type="button" class="btn btn-outline btn-sm" id="btnResetInlineFilter" style="display: none;">Hiện Tất Cả Đơn</button>
+              <button type="button" class="btn btn-outline btn-sm" id="btnExportInlineCsv">Xuất CSV</button>
+              <a href="data-table.html" class="btn btn-secondary btn-sm" id="btnOpenFullDataTable" target="_blank" style="text-decoration: none;">Xem Bảng Đầy Đủ 21 Cột</a>
+            </div>
+          </div>
+
+          <!-- Thanh tìm kiếm nhanh bên trong bảng chi tiết -->
+          <div class="inline-search-toolbar">
+            <div class="modal-search-box" style="background: #ffffff;">
+              <input type="text" id="inlineDetailSearch" placeholder="Tìm kiếm nhanh trong bảng này (Container, Booking, Tài xế, Nhà xe, Lý do...)...">
+            </div>
+            <div class="inline-count-badge" id="inlineDetailCountBadge">
+              Hiển thị 0 đơn hàng
+            </div>
+          </div>
+
+          <!-- Bảng Dữ Liệu Chi Tiết Trực Tiếp Trên Trang -->
+          <div class="table-responsive inline-table-container">
+            <table class="data-table inline-detail-table">
+              <thead>
+                <tr>
+                  <th style="width: 50px;">STT</th>
+                  <th>Depot</th>
+                  <th>Hãng Tàu</th>
+                  <th>Số Booking</th>
+                  <th>Số Container</th>
+                  <th>Chiều</th>
+                  <th>Trạng Thái Đơn</th>
+                  <th>Ngày Duyệt / Hủy</th>
+                  <th>Lý Do Hủy / Từ Chối</th>
+                  <th>Xử Lý CSKH</th>
+                </tr>
+              </thead>
+              <tbody id="tbodyInlineDetail">
+                <!-- Nạp động danh sách đơn hàng -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Detailed Tables -->
+      <section class="tables-grid">
+        <div class="table-card">
+          <h3>Thống Kê Chi Tiết Theo Depot</h3>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Mã Depot</th>
+                  <th>Số Đơn Hủy</th>
+                  <th>Sản Lượng (TEUs)</th>
+                  <th>Chiều IN</th>
+                  <th>Chiều OUT</th>
+                  <th>Tỷ Lệ (%)</th>
+                </tr>
+              </thead>
+              <tbody id="tbodyDepot"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <h3>Top Lý Do Hủy & Phản Hồi Từ Chối Điều Độ</h3>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>STT</th>
+                  <th>Nội dung Lý Do</th>
+                  <th>Số lượng</th>
+                  <th>Tỷ lệ (%)</th>
+                </tr>
+              </thead>
+              <tbody id="tbodyReasons"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <p>Logistics Cancellation Analytics Engine &copy; 2026. Tích hợp PostgreSQL Schema & Chuẩn Kiểm Định Logistics.</p>
+    </footer>
+    </div> <!-- /main-content -->
+  </div> <!-- /app-wrapper -->
+
+  <!-- Modal Chi Tiết Đơn Hàng Từ Ma Trận -->
+  <div id="matrixDetailModal" class="modal-backdrop" hidden>
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div class="modal-title-group">
+            <div>
+              <h3 class="modal-title" id="modalMatrixTitle">Chi Tiết Đơn Hàng</h3>
+              <p class="modal-subtitle" id="modalMatrixSubtitle">Danh sách đơn hàng theo giao điểm ma trận</p>
+            </div>
+          </div>
+          <button type="button" class="modal-close-btn" id="modalMatrixCloseBtn" title="Đóng (Esc)">&times;</button>
+        </div>
+
+        <div class="modal-toolbar">
+          <div class="modal-search-box">
+            <input type="text" id="modalMatrixSearch" placeholder="Tìm nhanh theo Container, Booking, Lý do, Tài xế...">
+          </div>
+          <div class="modal-toolbar-actions">
+            <button type="button" class="btn btn-outline btn-sm" id="btnModalExportCsv">Xuất CSV</button>
+            <a href="data-table.html" class="btn btn-secondary btn-sm" id="btnModalOpenDataTable" target="_blank" style="text-decoration: none;">Xem Bảng Đầy Đủ</a>
+          </div>
+        </div>
+
+        <div class="modal-body">
+          <div class="table-responsive modal-table-container">
+            <table class="data-table modal-data-table">
+              <thead>
+                <tr>
+                  <th style="width: 50px;">STT</th>
+                  <th>Depot</th>
+                  <th>Hãng Tàu</th>
+                  <th>Số Booking</th>
+                  <th>Số Container</th>
+                  <th>Chiều</th>
+                  <th>Trạng Thái Đơn</th>
+                  <th>Ngày Duyệt</th>
+                  <th>Lý Do Hủy</th>
+                  <th>Xử Lý CSKH</th>
+                </tr>
+              </thead>
+              <tbody id="tbodyModalMatrix">
+                <!-- Dữ liệu nạp động -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <div class="modal-footer-count" id="modalMatrixFooterCount">
+            Hiển thị 0 đơn hàng
+          </div>
+          <button type="button" class="btn btn-outline" id="btnModalCloseFooter">Đóng</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dữ Liệu Chi Tiết Đơn Hủy - Báo Cáo Excel</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="auth.js"></script>
+</head>
+<body>
+  <div class="app-wrapper">
+    <!-- Thanh Tab Bên Trái (Left Sidebar) -->
+    <aside class="app-sidebar">
+      <div class="sidebar-brand">
+                <div>
+          <div class="brand-title">GPG LOGISTICS</div>
+          <div class="brand-subtitle">Quản Trị Đơn Hủy 24/7</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a href="index.html" class="sidebar-link" id="navDashboard">
+          <span>Bảng Điều Hành</span>
+        </a>
+        <a href="data-table.html" class="sidebar-link active" id="navDataTable">
+          <span>Dữ Liệu Chi Tiết</span>
+        </a>
+        <a href="data-table.html?tab=unpaid" class="sidebar-link" id="navUnpaid">
+          <span>Đơn Chưa Thanh Toán</span>
+        </a>
+        <a href="data-table.html?tab=cancelled" class="sidebar-link" id="navCancelled">
+          <span>Đơn Hủy</span>
+        </a>
+        <a href="verification-table.html" class="sidebar-link" id="navVerificationTable">
+          <span>Dữ Liệu Check Đơn</span>
+        </a>
+        <a href="upload.html" class="sidebar-link" id="navUpload">
+          <span>Đăng Tải Dữ Liệu</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-user-card" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; background: rgba(255,255,255,0.08); border-radius: 8px; margin-bottom: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px; overflow: hidden;">
+            <span id="sidebarUserName" style="font-size: 12px; font-weight: 500; color: #f8fafc; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Admin</span>
+          </div>
+          <button type="button" id="sidebarBtnLogout" style="background: none; border: none; color: #94a3b8; font-size: 14px; cursor: pointer; padding: 2px;" title="Đăng xuất">Đăng xuất</button>
+        </div>
+        <div class="system-status">
+          <span class="status-dot"></span>
+          <span>Hệ thống trực tuyến</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Nội Dung Chính (Main Content) -->
+    <div class="main-content">
+      <!-- Header -->
+      <header class="app-header">
+        <div>
+          <h1>BẢNG DỮ LIỆU CHI TIẾT</h1>
+         
+        </div>
+        <div class="header-user-dropdown-container" id="headerUserMenu">
+          <button type="button" class="user-chip-btn" id="userChipBtn" aria-haspopup="true" aria-expanded="false" title="Menu người dùng">
+            tài khoản
+          </button>
+        </div>
+      </header>
+
+      <!-- Notification Alert -->
+      <div id="alertBox" class="alert-box" hidden></div>
+
+      <!-- File source notice -->
+      <div class="source-notice">
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <span style="color: var(--text-muted);">Tập dữ liệu nguồn:</span>
+          <strong id="currentDatasetName" style="color: var(--blue-primary); margin-left: 2px;">Đang tải...</strong>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <span id="supabaseStatusBadge" class="badge" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 12px; cursor: pointer;" title="Nhấn để kiểm tra kết nối Supabase">Supabase: Đang kiểm tra...</span>
+          <div id="totalRowsBadge" class="badge badge-info" style="font-size: 13px; padding: 6px 14px;">
+            Đang đếm số lượng dòng...
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab chuyển đổi: Tất Cả Đơn & Đơn Chưa Thanh Toán & Đơn Hủy -->
+      <div class="nav-tabs data-tabs">
+        <div class="data-tabs-buttons">
+          <button class="tab-btn active" id="tabAllOrders" data-tab="all" title="Xem tất cả các đơn hàng từ file">
+            <span>Tất Cả Đơn Hàng</span>
+            <span class="tab-count-badge" id="tabCountAll">0</span>
+          </button>
+          <button class="tab-btn" id="tabUnpaidOrders" data-tab="unpaid" title="Chỉ lọc các đơn có trạng thái Chưa thanh toán">
+            <span>Đơn Chưa Thanh Toán</span>
+            <span class="tab-count-badge badge-amber" id="tabCountUnpaid">0</span>
+          </button>
+          <button class="tab-btn" id="tabCancelledOrders" data-tab="cancelled" title="Chỉ lọc các đơn có Trạng Thái Đơn = Đã Hủy">
+            <span>Đơn Hủy</span>
+            <span class="tab-count-badge badge-danger" id="tabCountCancelled">0</span>
+          </button>
+        </div>
+
+        <!-- Vùng điều khiển tác vụ bên phải tab -->
+        <div class="data-tabs-actions" style="display: flex; align-items: center; gap: 10px;">
+          <!-- Nút Cập Nhật Dữ Liệu cho Tab Tất Cả Đơn Hàng -->
+          <button type="button" class="btn btn-primary btn-sm" id="btnUpdateData" title="Cập nhật dữ liệu">Cập Nhật Dữ Liệu</button>
+
+          <!-- Nút Lọc Đơn Trùng theo số EIR -->
+          <button type="button" class="btn btn-warning btn-sm" id="btnDeduplicateData" title="Lọc đơn trùng theo số EIR và giữ lại đơn có ngày duyệt mới nhất">Lọc Đơn Trùng</button>
+
+          <!-- Nút Thêm Dòng Nhập Liệu Thủ Công -->
+          <button type="button" class="btn btn-success btn-sm" id="btnAddManualRow" title="Thêm dòng mới để nhập thủ công trực tiếp">Thêm Dòng</button>
+
+          <!-- Đồng hồ thời gian thực giờ Việt Nam (hh:mm:ss) cho tab Đơn Chưa Thanh Toán -->
+          <div class="vn-clock-widget" id="vnClockWidget" style="display: none;" title="Thời gian thực theo chuẩn giờ Việt Nam (GMT+7)">
+            <span class="clock-live-dot"></span>
+            <span class="clock-title">Giờ Việt Nam:</span>
+            <span class="clock-display" id="vnClockDisplay">--:--:--</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bộ lọc và Tìm kiếm nhanh -->
+      <div class="filter-toolbar">
+        <div class="search-box">
+          <input type="text" id="searchInput" placeholder="Tìm kiếm theo Container, Booking, Tài xế, Nhà xe, Lý do...">
+        </div>
+
+        <div class="filter-group">
+          <!-- Điều khiển Cố Định Cột -->
+          <div class="freeze-control">
+            <label for="selectFreezeCols" class="freeze-label">Ghim:</label>
+            <select id="selectFreezeCols" class="filter-select freeze-select" title="Chọn số lượng cột cố định bên trái khi cuộn ngang">
+              <option value="0">0 cột</option>
+              <option value="1">1 cột (STT)</option>
+              <option value="2">2 cột (Depot)</option>
+              <option value="3" selected>3 cột (Hãng)</option>
+              <option value="4">4 cột (Ngày Hủy)</option>
+              <option value="5">5 cột (Ngày Duyệt)</option>
+              <option value="6">6 cột (Hạn 3h)</option>
+              <option value="7">7 cột (Booking)</option>
+              <option value="8">8 cột (Container)</option>
+              <option value="9">9 cột (EIR)</option>
+            </select>
+          </div>
+
+          <!-- Bộ lọc Depot Đa Chọn (Multi-select) -->
+          <div class="multiselect-dropdown" id="depotMultiselect">
+            <button type="button" class="multiselect-btn" id="depotDropdownBtn" aria-haspopup="true" aria-expanded="false" title="Nhấn để chọn một hoặc nhiều Depot">
+              <span class="multiselect-label" id="depotSelectedLabel">Depot</span>
+              <span class="multiselect-arrow">▼</span>
+            </button>
+            <div class="multiselect-panel" id="depotDropdownPanel">
+              <div class="multiselect-header">
+                <label class="multiselect-item select-all-item">
+                  <input type="checkbox" id="depotSelectAll" checked>
+                  <span><strong>Tất cả Depot</strong></span>
+                </label>
+              </div>
+              <div class="multiselect-list" id="depotOptionsList">
+                <!-- Checkboxes Depot nạp động -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Bộ lọc Theo Ngày (Ngày Hủy / Ngày Duyệt) -->
+          <div class="date-filter-group" id="tableDateFilterGroup" title="Lọc theo khoảng thời gian">
+            <select id="filterDateType" class="filter-select date-type-select" title="Chọn loại ngày cần lọc">
+              <option value="ngayHuy">Ngày hủy</option>
+              <option value="ngayDuyet">Ngày duyệt</option>
+            </select>
+            <input type="date" id="filterDateFrom" class="filter-select filter-date-input" title="Lọc từ ngày" placeholder="Từ ngày">
+            <span class="date-sep">-</span>
+            <input type="date" id="filterDateTo" class="filter-select filter-date-input" title="Lọc đến ngày" placeholder="Đến ngày">
+            <button type="button" id="btnClearDateFilter" class="btn-clear-date" title="Xóa bộ lọc ngày" style="display: none;">×</button>
+          </div>
+
+          <select id="filterLine" class="filter-select">
+            <option value="">Hãng tàu</option>
+          </select>
+
+          <select id="filterDirection" class="filter-select">
+            <option value="">Chiều cont</option>
+            <option value="OUT">Chiều OUT (Lấy cont)</option>
+            <option value="IN">Chiều IN (Hạ cont)</option>
+          </select>
+
+          <!-- Bộ lọc Trạng Thái Đơn Đa Chọn (Multi-select) -->
+          <div class="multiselect-dropdown" id="statusMultiselect">
+            <button type="button" class="multiselect-btn" id="statusDropdownBtn" aria-haspopup="true" aria-expanded="false" title="Nhấn để chọn một hoặc nhiều Trạng thái đơn">
+              <span class="multiselect-label" id="statusSelectedLabel">Trạng thái</span>
+              <span class="multiselect-arrow">▼</span>
+            </button>
+            <div class="multiselect-panel" id="statusDropdownPanel">
+              <div class="multiselect-header">
+                <label class="multiselect-item select-all-item">
+                  <input type="checkbox" id="statusSelectAll" checked>
+                  <span><strong>Tất cả trạng thái</strong></span>
+                </label>
+              </div>
+              <div class="multiselect-list" id="statusOptionsList">
+                <!-- Checkboxes Trạng thái nạp động -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Bộ lọc Khung giờ duyệt (Từng đoạn 1 tiếng) -->
+          <select id="filterApprovedHour" class="filter-select" title="Lọc theo khung giờ của cột Ngày được duyệt">
+            <option value="">Giờ duyệt</option>
+            <option value="0">00:00 -> 01:00</option>
+            <option value="1">01:00 -> 02:00</option>
+            <option value="2">02:00 -> 03:00</option>
+            <option value="3">03:00 -> 04:00</option>
+            <option value="4">04:00 -> 05:00</option>
+            <option value="5">05:00 -> 06:00</option>
+            <option value="6">06:00 -> 07:00</option>
+            <option value="7">07:00 -> 08:00</option>
+            <option value="8">08:00 -> 09:00</option>
+            <option value="9">09:00 -> 10:00</option>
+            <option value="10">10:00 -> 11:00</option>
+            <option value="11">11:00 -> 12:00</option>
+            <option value="12">12:00 -> 13:00</option>
+            <option value="13">13:00 -> 14:00</option>
+            <option value="14">14:00 -> 15:00</option>
+            <option value="15">15:00 -> 16:00</option>
+            <option value="16">16:00 -> 17:00</option>
+            <option value="17">17:00 -> 18:00</option>
+            <option value="18">18:00 -> 19:00</option>
+            <option value="19">19:00 -> 20:00</option>
+            <option value="20">20:00 -> 21:00</option>
+            <option value="21">21:00 -> 22:00</option>
+            <option value="22">22:00 -> 23:00</option>
+            <option value="23">23:00 -> 24:00</option>
+          </select>
+
+          <!-- Bộ lọc Cảnh báo đếm ngược 3 giờ -->
+          <select id="filterWarning3h" class="filter-select" title="Lọc theo mức độ cảnh báo đếm ngược 3 giờ từ khi duyệt đơn">
+            <option value="">Hạn 3h</option>
+            <option value="safe">Còn > 2h (An toàn)</option>
+            <option value="yellow">Qua 1h (Cảnh báo vàng)</option>
+            <option value="red">Qua 2h (Cảnh báo đỏ)</option>
+            <option value="expired">Quá 3h (Đã hủy)</option>
+            <option value="processed">Đã xử lý</option>
+          </select>
+
+          <!-- Bộ lọc Trạng thái CSKH / Xử lý (Đánh số thứ tự trong source code qua data-order, không hiển thị số ra HTML) -->
+          <select id="filterContactStatus" class="filter-select">
+            <option value="" data-order="0">Trạng thái CSKH</option>
+            <option value="Thanh toán thành công" data-order="1">Thanh toán thành công</option>
+            <option value="Đã liên hệ - Chờ đặt lại" data-order="2">Đã liên hệ - Chờ đặt lại</option>
+            <option value="Đã liên hệ - Chờ thanh toán" data-order="3">Đã liên hệ - Chờ thanh toán</option>
+            <option value="Đã liên hệ - Đã đặt lại" data-order="4">Đã liên hệ - Đã đặt lại</option>
+            <option value="Đã liên hệ - Không đặt lại" data-order="5">Đã liên hệ - Không đặt lại</option>
+            <option value="Không liên hệ được - Chờ thanh toán" data-order="6">Không liên hệ được - Chờ thanh toán</option>
+            <option value="Không liên hệ được - Hủy" data-order="7">Không liên hệ được - Hủy</option>
+            <option value="Tự động đặt lại" data-order="8">Tự động đặt lại</option>
+            <option value="__EMPTY__" data-order="99">Chưa cập nhật trạng thái</option>
+          </select>
+
+          <button id="btnResetFilter" class="btn btn-outline btn-sm">Đặt Lại</button>
+          <button id="btnExportCsv" class="btn btn-outline btn-sm" title="Xuất dữ liệu đang lọc ra tệp CSV">Xuất CSV</button>
+        </div>
+      </div>
+
+      <!-- Bảng dữ liệu chi tiết toàn bộ file Excel -->
+      <div class="full-table-container">
+        <table class="data-table full-excel-table">
+          <thead>
+            <tr>
+              <th style="width: 55px; min-width: 55px; text-align: center;">STT</th>
+              <th style="width: 80px; min-width: 80px;">Depot</th>
+              <th style="width: 90px; min-width: 90px;">Hãng Tàu</th>
+              <th style="width: 150px; min-width: 150px;">Ngày Hủy Đơn</th>
+              <th style="width: 150px; min-width: 150px;">Ngày Được Duyệt</th>
+              <th style="width: 175px; min-width: 175px; text-align: center;" title="Quy tắc: Tự động hủy sau 3h từ khi duyệt. >1h: Cảnh báo vàng, >2h: Cảnh báo đỏ">
+                Hạn Hủy Đơn (3h)
+              </th>
+              <th style="width: 130px; min-width: 130px;">Số Booking</th>
+              <th style="width: 150px; min-width: 150px;">Số Container</th>
+              <th style="width: 140px; min-width: 140px;">Số EIR</th>
+              <th style="width: 130px; min-width: 130px;">Trạng Thái Đơn</th>
+              <th style="width: 140px; min-width: 140px;">Kích Hoạt Vào Bãi</th>
+              <th style="width: 150px; min-width: 150px;">Thời Gian Kích Hoạt</th>
+              <th style="min-width: 250px;">Lý Do Hủy</th>
+              <th style="width: 150px; min-width: 150px;">Loại Container</th>
+              <th style="width: 90px; min-width: 90px; text-align: center;">Chiều</th>
+              <th style="width: 75px; min-width: 75px; text-align: center;">TEUS</th>
+              <th style="width: 150px; min-width: 150px;">Tên Tài Xế</th>
+              <th style="width: 120px; min-width: 120px;">SĐT Tài Xế</th>
+              <th style="width: 180px; min-width: 180px;">Tên Nhà Xe</th>
+              <th style="width: 120px; min-width: 120px;">SĐT Nhà Xe</th>
+              <th style="min-width: 250px;">Lý Do Từ Chối Duyệt</th>
+              <th style="width: 220px; min-width: 220px; background: #e0f2fe; color: var(--blue-primary); text-align: center;">Trạng Thái</th>
+              <th style="width: 260px; min-width: 260px; background: #e0f2fe; color: var(--blue-primary);">Giải Trình</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyFullData">
+            <tr>
+              <td colspan="23" class="text-center py-4">Đang nạp toàn bộ bảng dữ liệu...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Footer -->
+      <footer class="app-footer">
+        <p>Logistics Cancellation Analytics Engine &copy; 2026. Hiển thị toàn bộ dữ liệu đối soát đơn hủy.</p>
+      </footer>
+    </div>
+  </div>
+
+  <script src="data-table.js"></script>
+</body>
+</html>

@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bảng Dữ Liệu Kiểm Tra Đơn - GPG Logistics</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="auth.js"></script>
+  <style>
+    .verification-kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .kpi-card-mini {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      box-shadow: var(--shadow-sm);
+    }
+    .kpi-card-mini .kpi-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+    .kpi-card-mini .kpi-value {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--blue-primary);
+      line-height: 1.2;
+    }
+    .kpi-card-mini .kpi-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .pagination-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding: 12px 16px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius);
+      margin-top: 14px;
+    }
+    .pagination-info {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .pagination-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .page-btn {
+      padding: 5px 11px;
+      font-size: 13px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--text-main);
+      transition: var(--transition);
+    }
+    .page-btn:hover:not(:disabled) {
+      background: var(--blue-light);
+      border-color: var(--blue-primary);
+      color: var(--blue-primary);
+    }
+    .page-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .page-btn.active {
+      background: var(--blue-primary);
+      border-color: var(--blue-primary);
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    /* Modal Xem Chi Tiết */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(15, 23, 42, 0.55);
+      backdrop-filter: blur(2px);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal-overlay.active {
+      display: flex;
+    }
+    .modal-container {
+      background: var(--bg-surface);
+      border-radius: var(--radius);
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+      width: 100%;
+      max-width: 780px;
+      max-height: 90vh;
+      overflow-y: auto;
+      border: 1px solid var(--border-light);
+    }
+    .modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-light);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .modal-header h3 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--blue-primary);
+    }
+    .modal-close-btn {
+      background: none;
+      border: none;
+      font-size: 20px;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 4px;
+      line-height: 1;
+    }
+    .modal-close-btn:hover {
+      color: var(--danger);
+    }
+    .modal-body {
+      padding: 20px;
+    }
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px 20px;
+    }
+    .detail-item {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .detail-item.full-width {
+      grid-column: 1 / -1;
+    }
+    .detail-item label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+    .detail-item span, .detail-item div {
+      font-size: 13px;
+      color: var(--text-main);
+      word-break: break-word;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-wrapper">
+    <!-- Thanh Tab Bên Trái (Left Sidebar) -->
+    <aside class="app-sidebar">
+      <div class="sidebar-brand">
+        <div>
+          <div class="brand-title">GPG LOGISTICS</div>
+          <div class="brand-subtitle">Quản Trị Đơn Hủy & EIR 24/7</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a href="index.html" class="sidebar-link" id="navDashboard">
+          <span>Bảng Điều Hành</span>
+        </a>
+        <a href="data-table.html" class="sidebar-link" id="navDataTable">
+          <span>Dữ Liệu Chi Tiết</span>
+        </a>
+        <a href="data-table.html?tab=unpaid" class="sidebar-link" id="navUnpaid">
+          <span>Đơn Chưa Thanh Toán</span>
+        </a>
+        <a href="data-table.html?tab=cancelled" class="sidebar-link" id="navCancelled">
+          <span>Đơn Hủy</span>
+        </a>
+        <a href="verification-table.html" class="sidebar-link active" id="navVerificationTable">
+          <span>Dữ Liệu Check Đơn</span>
+        </a>
+        <a href="upload.html" class="sidebar-link" id="navUpload">
+          <span>Đăng Tải Dữ Liệu</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-user-card" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; background: rgba(255,255,255,0.08); border-radius: 8px; margin-bottom: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px; overflow: hidden;">
+            <span id="sidebarUserName" style="font-size: 12px; font-weight: 500; color: #f8fafc; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Admin</span>
+          </div>
+          <button type="button" id="sidebarBtnLogout" style="background: none; border: none; color: #94a3b8; font-size: 14px; cursor: pointer; padding: 2px;" title="Đăng xuất">Đăng xuất</button>
+        </div>
+        <div class="system-status">
+          <span class="status-dot"></span>
+          <span>Hệ thống trực tuyến</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Nội Dung Chính (Main Content) -->
+    <div class="main-content">
+      <!-- Header -->
+      <header class="app-header">
+        <div>
+          <h1>BẢNG DỮ LIỆU KIỂM TRA ĐƠN</h1>
+          <p style="font-size: 12px; color: var(--text-muted); margin-top: 3px;">Hệ thống lưu trữ & đối soát tập trung dữ liệu đơn lệnh EIR cổng bãi (Bảng SQL <code>eir_cancellation_orders</code>)</p>
+        </div>
+        <div class="header-user-dropdown-container" id="headerUserMenu">
+          <button type="button" class="user-chip-btn" id="userChipBtn" aria-haspopup="true" aria-expanded="false" title="Menu người dùng">
+            Tài Khoản
+          </button>
+        </div>
+      </header>
+
+      <!-- Notification Alert -->
+      <div id="alertBox" class="alert-box" hidden></div>
+
+      <!-- Source notice & Action Bar -->
+      <div class="source-notice">
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <span style="color: var(--text-muted);">Cơ sở dữ liệu:</span>
+          <strong style="color: var(--blue-primary);">SQLite / PostgreSQL: <code>eir_cancellation_orders</code></strong>
+          <span id="badgeFileCount" class="badge badge-info" style="font-size: 12px;">0 tệp đã tích lũy</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <div id="totalRowsBadge" class="badge badge-info" style="font-size: 13px; padding: 6px 14px;">
+            Đang đếm số lượng dòng...
+          </div>
+          <button type="button" id="btnDownloadSqlDump" class="btn btn-outline btn-sm">Tải File SQL Dump</button>
+          <a href="upload.html?tab=verification" class="btn btn-primary btn-sm">Tải Lên File Mới</a>
+        </div>
+      </div>
+
+      <!-- Khối Thẻ Thống Kê Nhanh (KPIs) -->
+      <div class="verification-kpi-grid">
+        <div class="kpi-card-mini">
+          <div class="kpi-label">Tổng Đơn Kiểm Tra</div>
+          <div class="kpi-value" id="kpiTotalOrders">0</div>
+          <div class="kpi-sub">Bản ghi đã lưu trong SQL</div>
+        </div>
+        <div class="kpi-card-mini">
+          <div class="kpi-label">Tổng Sản Lượng TEUS</div>
+          <div class="kpi-value" id="kpiTotalTeus">0</div>
+          <div class="kpi-sub">Quy đổi 20' = 1.0, 40' = 2.0</div>
+        </div>
+        <div class="kpi-card-mini">
+          <div class="kpi-label">Chiều Cont Gate IN / OUT</div>
+          <div class="kpi-value" id="kpiDirectionRatio" style="font-size: 19px; color: var(--blue-accent);">0 IN / 0 OUT</div>
+          <div class="kpi-sub">Tỉ lệ điều hành bãi</div>
+        </div>
+        <div class="kpi-card-mini">
+          <div class="kpi-label">Đã Kích Hoạt Xếp Tài</div>
+          <div class="kpi-value" id="kpiActivatedOrders" style="color: var(--success);">0</div>
+          <div class="kpi-sub">Xe đã vào cổng bãi</div>
+        </div>
+        <div class="kpi-card-mini">
+          <div class="kpi-label">Đã Thanh Toán</div>
+          <div class="kpi-value" id="kpiPaidOrders" style="color: var(--blue-primary);">0</div>
+          <div class="kpi-sub">Đơn đã hoàn tất thu phí</div>
+        </div>
+      </div>
+
+      <!-- Bộ lọc và Tìm kiếm nhanh -->
+      <div class="filter-toolbar">
+        <div class="search-box">
+          <input type="text" id="searchInput" placeholder="Tìm theo Số EIR, Booking, Container, Tài xế, Nhà xe, Lý do...">
+        </div>
+
+        <div class="filter-group">
+          <!-- Bộ lọc Depot -->
+          <select id="filterDepot" class="filter-select">
+            <option value="">Tất cả Depot</option>
+          </select>
+
+          <!-- Bộ lọc Hãng tàu -->
+          <select id="filterLine" class="filter-select">
+            <option value="">Tất cả Hãng tàu</option>
+          </select>
+
+          <!-- Bộ lọc Chiều vận hành -->
+          <select id="filterDirection" class="filter-select">
+            <option value="">Chiều Gate IN / OUT</option>
+            <option value="OUT">Gate OUT (Lấy cont)</option>
+            <option value="IN">Gate IN (Hạ cont)</option>
+          </select>
+
+          <!-- Bộ lọc Trạng thái đơn -->
+          <select id="filterStatus" class="filter-select">
+            <option value="">Trạng thái đơn</option>
+          </select>
+
+          <!-- Bộ lọc Trạng thái kích hoạt -->
+          <select id="filterActivation" class="filter-select">
+            <option value="">Kích hoạt xếp tài</option>
+            <option value="Đã kích hoạt">Đã kích hoạt</option>
+            <option value="Chưa kích hoạt">Chưa kích hoạt</option>
+          </select>
+
+          <!-- Bộ lọc Khoảng ngày -->
+          <div class="date-filter-group" title="Lọc theo ngày phát sinh">
+            <input type="date" id="filterDateFrom" class="filter-select filter-date-input" title="Từ ngày">
+            <span class="date-sep">-</span>
+            <input type="date" id="filterDateTo" class="filter-select filter-date-input" title="Đến ngày">
+            <button type="button" id="btnClearDateFilter" class="btn-clear-date" title="Xóa lọc ngày" style="display: none;">×</button>
+          </div>
+
+          <button id="btnResetFilter" class="btn btn-outline btn-sm">Đặt Lại</button>
+          <button id="btnExportCsv" class="btn btn-outline btn-sm" title="Xuất dữ liệu đang lọc ra tệp CSV">Xuất CSV</button>
+        </div>
+      </div>
+
+      <!-- Bảng dữ liệu chi tiết -->
+      <div class="full-table-container">
+        <table class="data-table full-excel-table" id="tableVerificationData">
+          <thead>
+            <tr>
+              <th style="width: 55px; min-width: 55px; text-align: center;">STT</th>
+              <th style="width: 140px; min-width: 140px;">Số EIR</th>
+              <th style="width: 80px; min-width: 80px; text-align: center;">Depot</th>
+              <th style="width: 90px; min-width: 90px; text-align: center;">Hãng Tàu</th>
+              <th style="width: 155px; min-width: 155px;">Ngày Phát Sinh</th>
+              <th style="width: 155px; min-width: 155px;">Ngày Duyệt</th>
+              <th style="width: 130px; min-width: 130px;">Số Booking</th>
+              <th style="width: 150px; min-width: 150px;">Số Container</th>
+              <th style="width: 130px; min-width: 130px;">Loại Cont</th>
+              <th style="width: 85px; min-width: 85px; text-align: center;">Chiều</th>
+              <th style="width: 70px; min-width: 70px; text-align: center;">TEUS</th>
+              <th style="width: 140px; min-width: 140px;">Trạng Thái Đơn</th>
+              <th style="width: 140px; min-width: 140px; text-align: center;">Kích Hoạt</th>
+              <th style="width: 155px; min-width: 155px;">Giờ Kích Hoạt</th>
+              <th style="min-width: 220px;">Lý Do Hủy</th>
+              <th style="min-width: 220px;">Lý Do Từ Chối</th>
+              <th style="min-width: 200px;">Ghi Chú Thêm</th>
+              <th style="width: 160px; min-width: 160px;">Tài Xế</th>
+              <th style="width: 120px; min-width: 120px;">SĐT Tài Xế</th>
+              <th style="width: 220px; min-width: 220px;">Đơn Vị Vận Tải</th>
+              <th style="width: 160px; min-width: 160px;">Tệp Nguồn</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyVerificationData">
+            <tr>
+              <td colspan="21" class="text-center py-4">Đang nạp toàn bộ bảng dữ liệu kiểm tra đơn...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Thanh Phân Trang (Pagination) -->
+      <div class="pagination-bar">
+        <div class="pagination-info" id="paginationInfo">
+          Đang hiển thị 0 - 0 trên tổng số 0 bản ghi
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted);">
+            <span>Số dòng:</span>
+            <select id="selectPageSize" class="filter-select" style="padding: 4px 8px; font-size: 13px;">
+              <option value="25">25</option>
+              <option value="50" selected>50</option>
+              <option value="100">100</option>
+              <option value="200">200</option>
+              <option value="all">Tất cả</option>
+            </select>
+          </div>
+          <div class="pagination-controls" id="paginationControls">
+            <button type="button" class="page-btn" id="btnPageFirst" title="Trang đầu">Đầu</button>
+            <button type="button" class="page-btn" id="btnPagePrev" title="Trang trước">Trước</button>
+            <span id="pageIndicator" style="font-size: 13px; font-weight: 600; padding: 0 6px;">Trang 1 / 1</span>
+            <button type="button" class="page-btn" id="btnPageNext" title="Trang sau">Sau</button>
+            <button type="button" class="page-btn" id="btnPageLast" title="Trang cuối">Cuối</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <footer class="app-footer">
+        <p>Logistics Cancellation Analytics Engine &copy; 2026. Bảng dữ liệu đối soát & kiểm tra đơn lệnh EIR cổng bãi.</p>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Modal Xem Chi Tiết Bản Ghi Đơn Hàng -->
+  <div class="modal-overlay" id="modalOrderDetail">
+    <div class="modal-container">
+      <div class="modal-header">
+        <h3 id="modalOrderTitle">Chi Tiết Đơn Hàng EIR</h3>
+        <button type="button" class="modal-close-btn" id="btnModalClose">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="detail-grid" id="modalDetailContent">
+          <!-- Dynamic details filled by JS -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="verification-table.js"></script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+# Node dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+
+# Temporary files & OS files
+.DS_Store
+Thumbs.db
+*.log
+
+# SQLite Database local dumps
+data/*.db
+data/*.db-journal
+
+# Cloudflared binaries
+cloudflared.exe
