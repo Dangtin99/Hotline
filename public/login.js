@@ -77,7 +77,18 @@ document.addEventListener("DOMContentLoaded", () => {
         body: JSON.stringify({ username, password })
       });
 
-      const data = await res.json();
+      const contentType = res.headers.get("content-type") || "";
+      let data = null;
+      if (contentType.includes("application/json")) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        throw new Error(
+          res.status === 404
+            ? "Máy chủ backend chưa được khởi động hoặc đường dẫn API không tồn tại (404)."
+            : `Máy chủ trả về phản hồi không hợp lệ (${res.status}). Vui lòng kiểm tra dịch vụ backend.`
+        );
+      }
 
       if (!res.ok || !data.success) {
         throw new Error(data.message || "Tên đăng nhập hoặc mật khẩu không chính xác.");
