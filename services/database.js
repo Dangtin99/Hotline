@@ -160,13 +160,13 @@ function loadAllFromStore() {
 // Lưu dữ liệu vào file JSON và xuất dump file .sql
 function persistStore() {
   try {
-    fs.writeFileSync(DB_JSON_PATH, JSON.stringify(memoryOrders, null, 2), "utf8");
+    if (fs.existsSync(DATA_DIR)) {
+      fs.writeFileSync(DB_JSON_PATH, JSON.stringify(memoryOrders, null, 2), "utf8");
+      generateSqlDumpFile();
+    }
   } catch (err) {
-    console.error("Lỗi khi ghi cancellation_orders.json:", err.message);
+    // Trên Vercel Serverless filesystem là read-only, dữ liệu lưu vĩnh viễn trên Turso Cloud
   }
-
-  // Đồng bộ file SQL DUMP script
-  generateSqlDumpFile();
 
   // Đồng bộ ngầm lên Turso Cloud (fire-and-forget)
   if (tursoClient) {
@@ -521,11 +521,18 @@ function loadVerificationFromStore() {
 
 function persistVerificationStore() {
   try {
-    fs.writeFileSync(VERIFICATION_JSON_PATH, JSON.stringify(memoryVerificationOrders, null, 2), "utf8");
+    if (fs.existsSync(DATA_DIR)) {
+      fs.writeFileSync(VERIFICATION_JSON_PATH, JSON.stringify(memoryVerificationOrders, null, 2), "utf8");
+      generateVerificationSqlDumpFile();
+    }
   } catch (err) {
-    console.error("Lỗi khi ghi verification_orders.json:", err.message);
+    // Trên Vercel Serverless filesystem là read-only
   }
-  generateVerificationSqlDumpFile();
+  if (tursoClient) {
+    tursoClient.syncVerificationOrdersToTurso(memoryVerificationOrders).catch(err => {
+      console.warn("[Turso] Dong bo verification len Turso that bai:", err.message);
+    });
+  }
 }
 
 function generateVerificationSqlDumpFile() {
@@ -1448,26 +1455,248 @@ function insertManualOrder(orderData) {
   };
 }
 
+/**
+ * =========================================================================
+ * ASYNC METHODS DÀNH CHO MÔI TRƯỜNG VERCEL SERVERLESS & TURSO CLOUD SQLITE
+ * =========================================================================
+ */
+
+async function getAllRecordsAsync() {
+  if (tursoClient && tursoClient.isTursoAvailable()) {
+    try {
+      const tursoRows = await tursoClient.getAllOrdersFromTurso();
+      if (Array.isArray(tursoRows) && tursoRows.length > 0) {
+        memoryOrders = tursoRows;
+        applyExpired3hCancellation(memoryOrders);
+        return memoryOrders.map((o, idx) => ({
+          ...o,
+          stt: String(idx + 1)
+        }));
+      }
+    } catch (e) {
+      console.warn("[Turso] Không thể đọc từ Turso, sử dụng memory store fallback:", e.message);
+    }
+  }
+  return getAllRecords();
+}
+
+async function insertRecordsAsync(records, metadata = {}) {
+  if (tursoClient && tursoClient.isTursoAvailable()) {
+    try {
+      const tursoRows = await tursoClient.getAllOrdersFromTurso();
+      if (Array.isArray(tursoRows) && tursoRows.length > 0) {
+        memoryOrders = tursoRows;
+      }
+    } catch (e) {}
+  }
+
+  const res = insertRecords(records, metadata, false);
+
+  if (tursoClient) {
+    try {
+      await tursoClient.syncOrdersToTurso(memoryOrders);
+    } catch (e) {
+      console.error("[Turso] Lỗi đồng bộ orders lên Turso:", e.message);
+    }
+  }
+
+  try {
+    persistStore();
+  } catch (e) {}
+
+  return {
+    ...res,
+    total: memoryOrders.length
+  };
+}
+
+async function updateOrderNoteAsync(rowKey, noteData = {}) {
+  const res = updateOrderNote(rowKey, noteData);
+  if (tursoClient) {
+    try {
+      await tursoClient.updateOrderNoteInTurso(rowKey, noteData);
+    } catch (e) {}
+  }
+  return res;
+}
+
+async function deleteRecordsByUploadIdAsync(uploadId) {
+  deleteRecordsByUploadId(uploadId);
+  if (tursoClient) {
+    try {
+      await tursoClient.deleteOrdersByUploadIdInTurso(uploadId);
+    } catch (e) {}
+  }
+}
+
+async function clearDatabaseAsync() {
+  clearDatabase();
+  if (tursoClient) {
+    try {
+      await tursoClient.clearAllOrdersInTurso();
+    } catch (e) {}
+  }
+}
+
+async function getAllVerificationRecordsAsync() {
+  if (tursoClient && tursoClient.isTursoAvailable()) {
+    try {
+      const tursoRows = await tursoClient.getAllVerificationOrdersFromTurso();
+      if (Array.isArray(tursoRows) && tursoRows.length > 0) {
+        memoryVerificationOrders = tursoRows;
+        return memoryVerificationOrders;
+      }
+    } catch (e) {
+      console.warn("[Turso] Không thể đọc verification từ Turso:", e.message);
+    }
+  }
+  return getAllVerificationRecords();
+}
+
+async function insertVerificationRecordsAsync(records, metadata = {}) {
+  if (tursoClient && tursoClient.isTursoAvailable()) {
+    try {
+      const tursoRows = await tursoClient.getAllVerificationOrdersFromTurso();
+      if (Array.isArray(tursoRows) && tursoRows.length > 0) {
+        memoryVerificationOrders = tursoRows;
+      }
+    } catch (e) {}
+  }
+
+  const res = insertVerificationRecords(records, metadata, false);
+
+  if (tursoClient) {
+    try {
+      await tursoClient.syncVerificationOrdersToTurso(memoryVerificationOrders);
+    } catch (e) {
+      console.error("[Turso] Lỗi đồng bộ verification orders lên Turso:", e.message);
+    }
+  }
+
+  try {
+    persistVerificationStore();
+  } catch (e) {}
+
+  return {
+    ...res,
+    total: memoryVerificationOrders.length
+  };
+}
+
+async function deleteVerificationRecordsByUploadIdAsync(uploadId) {
+  deleteVerificationRecordsByUploadId(uploadId);
+  if (tursoClient) {
+    try {
+      await tursoClient.deleteVerificationOrdersByUploadIdInTurso(uploadId);
+    } catch (e) {}
+  }
+}
+
+async function clearAllVerificationRecordsAsync() {
+  clearAllVerificationRecords();
+  if (tursoClient) {
+    try {
+      await tursoClient.clearAllVerificationOrdersInTurso();
+    } catch (e) {}
+  }
+}
+
+async function updateOrdersFromCheckDataAsync() {
+  if (tursoClient && tursoClient.isTursoAvailable()) {
+    try {
+      const [orders, verOrders] = await Promise.all([
+        tursoClient.getAllOrdersFromTurso(),
+        tursoClient.getAllVerificationOrdersFromTurso()
+      ]);
+      if (Array.isArray(orders) && orders.length > 0) memoryOrders = orders;
+      if (Array.isArray(verOrders)) memoryVerificationOrders = verOrders;
+    } catch (e) {}
+  }
+
+  const res = updateOrdersFromCheckData();
+
+  if (tursoClient) {
+    try {
+      await Promise.all([
+        tursoClient.syncOrdersToTurso(memoryOrders),
+        tursoClient.clearAllVerificationOrdersInTurso().then(() => tursoClient.syncVerificationOrdersToTurso(memoryVerificationOrders))
+      ]);
+    } catch (e) {}
+  }
+
+  return res;
+}
+
+async function deduplicateOrdersByEirAsync() {
+  if (tursoClient && tursoClient.isTursoAvailable()) {
+    try {
+      const orders = await tursoClient.getAllOrdersFromTurso();
+      if (Array.isArray(orders) && orders.length > 0) memoryOrders = orders;
+    } catch (e) {}
+  }
+
+  const res = deduplicateOrdersByEir();
+
+  if (tursoClient) {
+    try {
+      await tursoClient.syncOrdersToTurso(memoryOrders);
+    } catch (e) {}
+  }
+
+  return res;
+}
+
+async function insertManualOrderAsync(orderData) {
+  if (tursoClient && tursoClient.isTursoAvailable()) {
+    try {
+      const orders = await tursoClient.getAllOrdersFromTurso();
+      if (Array.isArray(orders) && orders.length > 0) memoryOrders = orders;
+    } catch (e) {}
+  }
+
+  const res = insertManualOrder(orderData);
+
+  if (tursoClient) {
+    try {
+      await tursoClient.syncOrdersToTurso(memoryOrders);
+    } catch (e) {}
+  }
+
+  return res;
+}
+
 // Khởi chạy nạp dữ liệu kiểm tra đơn từ store
 loadVerificationFromStore();
 
 module.exports = {
   insertRecords,
+  insertRecordsAsync,
   getAllRecords,
+  getAllRecordsAsync,
   updateOrderNote,
+  updateOrderNoteAsync,
   getDatabaseStats,
   generateSqlDumpFile,
   clearDatabase,
+  clearDatabaseAsync,
   deleteRecordsByUploadId,
+  deleteRecordsByUploadIdAsync,
   syncAllToSupabase,
   SQL_DUMP_PATH,
   insertVerificationRecords,
+  insertVerificationRecordsAsync,
   getAllVerificationRecords,
+  getAllVerificationRecordsAsync,
   deleteVerificationRecordsByUploadId,
+  deleteVerificationRecordsByUploadIdAsync,
   clearAllVerificationRecords,
+  clearAllVerificationRecordsAsync,
   getVerificationDatabaseStats,
   VERIFICATION_SQL_DUMP_PATH,
   updateOrdersFromCheckData,
+  updateOrdersFromCheckDataAsync,
   deduplicateOrdersByEir,
-  insertManualOrder
+  deduplicateOrdersByEirAsync,
+  insertManualOrder,
+  insertManualOrderAsync
 };

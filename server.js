@@ -13,22 +13,35 @@ const {
 } = require("./services/cancellationAnalyzer");
 const {
   insertRecords,
+  insertRecordsAsync,
   getAllRecords,
+  getAllRecordsAsync,
   updateOrderNote,
+  updateOrderNoteAsync,
   getDatabaseStats,
   deleteRecordsByUploadId,
+  deleteRecordsByUploadIdAsync,
   clearDatabase,
+  clearDatabaseAsync,
   SQL_DUMP_PATH,
   insertVerificationRecords,
+  insertVerificationRecordsAsync,
   getAllVerificationRecords,
+  getAllVerificationRecordsAsync,
   deleteVerificationRecordsByUploadId,
+  deleteVerificationRecordsByUploadIdAsync,
   clearAllVerificationRecords,
+  clearAllVerificationRecordsAsync,
   getVerificationDatabaseStats,
   VERIFICATION_SQL_DUMP_PATH,
   updateOrdersFromCheckData,
+  updateOrdersFromCheckDataAsync,
   deduplicateOrdersByEir,
-  insertManualOrder
+  deduplicateOrdersByEirAsync,
+  insertManualOrder,
+  insertManualOrderAsync
 } = require("./services/database");
+const tursoClient = require("./services/tursoClient");
 const {
   authenticate,
   verifyToken,
@@ -47,10 +60,22 @@ const HISTORY_FILE = path.join(DATA_DIR, "upload_history.json");
 const VERIFICATION_HISTORY_FILE = path.join(DATA_DIR, "verification_history.json");
 
 if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  } catch (e) {}
 }
 
 // Hàm hỗ trợ đọc / ghi lịch sử đơn duyệt
+async function loadHistoryAsync() {
+  if (tursoClient && tursoClient.isTursoAvailable()) {
+    try {
+      const items = await tursoClient.getUploadHistoryFromTurso();
+      if (Array.isArray(items) && items.length > 0) return items;
+    } catch (e) {}
+  }
+  return loadHistory();
+}
+
 function loadHistory() {
   try {
     if (fs.existsSync(HISTORY_FILE)) {
@@ -63,15 +88,40 @@ function loadHistory() {
   return [];
 }
 
+async function saveHistoryAsync(historyItem) {
+  if (tursoClient) {
+    try {
+      await tursoClient.saveUploadHistoryItemToTurso(historyItem);
+    } catch (e) {}
+  }
+  try {
+    const list = loadHistory();
+    list.unshift(historyItem);
+    saveHistory(list);
+  } catch (e) {}
+}
+
 function saveHistory(historyList) {
   try {
-    fs.writeFileSync(HISTORY_FILE, JSON.stringify(historyList, null, 2), "utf8");
+    if (fs.existsSync(DATA_DIR)) {
+      fs.writeFileSync(HISTORY_FILE, JSON.stringify(historyList, null, 2), "utf8");
+    }
   } catch (err) {
-    console.error("Lỗi khi lưu lịch sử:", err.message);
+    // Read-only filesystem trên serverless
   }
 }
 
 // Hàm hỗ trợ đọc / ghi lịch sử kiểm tra đơn
+async function loadVerificationHistoryAsync() {
+  if (tursoClient && tursoClient.isTursoAvailable()) {
+    try {
+      const items = await tursoClient.getVerificationHistoryFromTurso();
+      if (Array.isArray(items) && items.length > 0) return items;
+    } catch (e) {}
+  }
+  return loadVerificationHistory();
+}
+
 function loadVerificationHistory() {
   try {
     if (fs.existsSync(VERIFICATION_HISTORY_FILE)) {
@@ -84,11 +134,26 @@ function loadVerificationHistory() {
   return [];
 }
 
+async function saveVerificationHistoryAsync(historyItem) {
+  if (tursoClient) {
+    try {
+      await tursoClient.saveVerificationHistoryItemToTurso(historyItem);
+    } catch (e) {}
+  }
+  try {
+    const list = loadVerificationHistory();
+    list.unshift(historyItem);
+    saveVerificationHistory(list);
+  } catch (e) {}
+}
+
 function saveVerificationHistory(historyList) {
   try {
-    fs.writeFileSync(VERIFICATION_HISTORY_FILE, JSON.stringify(historyList, null, 2), "utf8");
+    if (fs.existsSync(DATA_DIR)) {
+      fs.writeFileSync(VERIFICATION_HISTORY_FILE, JSON.stringify(historyList, null, 2), "utf8");
+    }
   } catch (err) {
-    console.error("Lỗi khi lưu lịch sử kiểm tra đơn:", err.message);
+    // Read-only filesystem trên serverless
   }
 }
 
@@ -353,7 +418,7 @@ app.post("/api/validate", authRequired, upload.single("file"), (req, res) => {
 /**
  * API: Import & Lưu dữ liệu vào hệ thống (Sau khi kiểm tra hoặc import trực tiếp)
  */
-app.post("/api/upload", authRequired, upload.single("file"), (req, res) => {
+app.post("/api/upload", authRequired, upload.single("file"), async (req, res) => {
   try {
     let inputBufferOrText;
     let fileName = "data.csv";
@@ -380,16 +445,14 @@ app.post("/api/upload", authRequired, upload.single("file"), (req, res) => {
     const newId = `UP-${Date.now()}`;
     const nowStr = new Date().toISOString().replace("T", " ").substring(0, 19);
 
-    // 3. Tự động lưu trữ và tích lũy TOÀN BỘ dữ liệu vào SQL Database
-    const dbResult = insertRecords(records, {
+    // 3. Tự động lưu trữ và tích lũy TOÀN BỘ dữ liệu vào SQL Database (Chờ Turso Cloud hoàn tất)
+    const dbResult = await insertRecordsAsync(records, {
       uploadId: newId,
       fileName,
       uploadedAt: nowStr
     });
 
-    // 4. Ghi vào lịch sử từng đợt tải
-    const history = loadHistory();
-
+    // 4. Ghi vào lịch sử từng đợt tải (lưu trữ đồng bộ lên Turso Cloud)
     const historyItem = {
       id: newId,
       fileName,
@@ -403,8 +466,7 @@ app.post("/api/upload", authRequired, upload.single("file"), (req, res) => {
       data: analytics
     };
 
-    history.unshift(historyItem); // Đưa lên đầu danh sách
-    saveHistory(history);
+    await saveHistoryAsync(historyItem);
 
     return res.json({
       status: "success",
@@ -425,9 +487,9 @@ app.post("/api/upload", authRequired, upload.single("file"), (req, res) => {
 /**
  * API: Lấy toàn bộ dữ liệu tích lũy trong Cơ sở dữ liệu SQL (Tất cả các file đã tải)
  */
-app.get("/api/all-data", authRequired, (req, res) => {
+app.get("/api/all-data", authRequired, async (req, res) => {
   try {
-    const allRecords = getAllRecords();
+    const allRecords = await getAllRecordsAsync();
     const analytics = aggregateCancellationData(allRecords);
     const stats = getDatabaseStats();
 
@@ -498,13 +560,13 @@ app.get("/api/template/:type", (req, res) => {
 /**
  * API: Cập nhật ghi chú CSKH hoặc giải trình trực tiếp vào database
  */
-app.post("/api/orders/note", authRequired, (req, res) => {
+app.post("/api/orders/note", authRequired, async (req, res) => {
   try {
     const { rowKey, status, giaiTrinh } = req.body || {};
     if (!rowKey) {
       return res.status(400).json({ status: "error", message: "Thiếu rowKey." });
     }
-    updateOrderNote(rowKey, { status, giaiTrinh });
+    await updateOrderNoteAsync(rowKey, { status, giaiTrinh });
     return res.json({ status: "success" });
   } catch (err) {
     return res.status(500).json({ status: "error", message: err.message });
@@ -515,9 +577,9 @@ app.post("/api/orders/note", authRequired, (req, res) => {
  * API: Cập nhật dữ liệu đối soát từ Bảng check đơn (eir_cancellation_orders)
  * Kích hoạt khi người dùng chọn nút Cập Nhật Dữ Liệu ở trang chi tiết
  */
-app.post("/api/orders/update-from-check", authRequired, (req, res) => {
+app.post("/api/orders/update-from-check", authRequired, async (req, res) => {
   try {
-    const result = updateOrdersFromCheckData();
+    const result = await updateOrdersFromCheckDataAsync();
     return res.json({
       status: "success",
       ...result
@@ -535,9 +597,9 @@ app.post("/api/orders/update-from-check", authRequired, (req, res) => {
  * API: Lọc đơn trùng theo số EIR
  * Giữ lại đơn có Ngày được duyệt lớn nhất, tự động xóa các dòng có ngày duyệt bé hơn
  */
-app.post("/api/orders/deduplicate-by-eir", authRequired, (req, res) => {
+app.post("/api/orders/deduplicate-by-eir", authRequired, async (req, res) => {
   try {
-    const result = deduplicateOrdersByEir();
+    const result = await deduplicateOrdersByEirAsync();
     return res.json({
       status: "success",
       ...result
@@ -554,7 +616,7 @@ app.post("/api/orders/deduplicate-by-eir", authRequired, (req, res) => {
 /**
  * API: Thêm đơn hàng thủ công trực tiếp từ giao diện bảng
  */
-app.post("/api/orders/manual", authRequired, (req, res) => {
+app.post("/api/orders/manual", authRequired, async (req, res) => {
   try {
     const orderData = req.body;
     if (!orderData || typeof orderData !== "object") {
@@ -571,7 +633,7 @@ app.post("/api/orders/manual", authRequired, (req, res) => {
       });
     }
 
-    const result = insertManualOrder(orderData);
+    const result = await insertManualOrderAsync(orderData);
     return res.json({
       status: "success",
       ...result
@@ -633,9 +695,9 @@ app.post("/api/turso/sync", authRequired, async (req, res) => {
 /**
  * API: Lấy danh sách lịch sử đăng tải
  */
-app.get("/api/history", authRequired, (req, res) => {
+app.get("/api/history", authRequired, async (req, res) => {
   try {
-    const history = loadHistory();
+    const history = await loadHistoryAsync();
     // Ẩn chi tiết data lớn khi chỉ lấy danh sách lịch sử
     const summary = history.map(item => ({
       id: item.id,
@@ -656,9 +718,9 @@ app.get("/api/history", authRequired, (req, res) => {
 /**
  * API: Lấy chi tiết phân tích của 1 lần đăng tải trong lịch sử
  */
-app.get("/api/history/:id", authRequired, (req, res) => {
+app.get("/api/history/:id", authRequired, async (req, res) => {
   try {
-    const history = loadHistory();
+    const history = await loadHistoryAsync();
     const item = history.find(h => h.id === req.params.id);
     if (!item) {
       return res.status(404).json({ status: "error", message: "Không tìm thấy dữ liệu đã tải!" });
@@ -689,16 +751,19 @@ app.get("/api/history/:id", authRequired, (req, res) => {
 /**
  * API: Xóa 1 lần đăng tải khỏi lịch sử
  */
-app.delete("/api/history/:id", authRequired, (req, res) => {
+app.delete("/api/history/:id", authRequired, async (req, res) => {
   try {
-    let history = loadHistory();
+    let history = await loadHistoryAsync();
     const beforeCount = history.length;
     history = history.filter(h => h.id !== req.params.id);
     if (history.length === beforeCount) {
       return res.status(404).json({ status: "error", message: "Bản ghi không tồn tại hoặc đã bị xóa." });
     }
     saveHistory(history);
-    deleteRecordsByUploadId(req.params.id);
+    if (tursoClient) {
+      await tursoClient.deleteUploadHistoryItemFromTurso(req.params.id);
+    }
+    await deleteRecordsByUploadIdAsync(req.params.id);
     return res.json({ status: "success", message: "Đã xóa dữ liệu đăng tải thành công!" });
   } catch (err) {
     return res.status(500).json({ status: "error", message: err.message });
@@ -708,10 +773,13 @@ app.delete("/api/history/:id", authRequired, (req, res) => {
 /**
  * API: Xóa toàn bộ lịch sử đăng tải
  */
-app.delete("/api/history", authRequired, (req, res) => {
+app.delete("/api/history", authRequired, async (req, res) => {
   try {
     saveHistory([]);
-    clearDatabase();
+    if (tursoClient) {
+      await tursoClient.clearUploadHistoryInTurso();
+    }
+    await clearDatabaseAsync();
     return res.json({ status: "success", message: "Đã dọn dẹp sạch toàn bộ lịch sử dữ liệu." });
   } catch (err) {
     return res.status(500).json({ status: "error", message: err.message });
@@ -727,7 +795,7 @@ app.delete("/api/history", authRequired, (req, res) => {
 /**
  * API: Đăng tải tệp dữ liệu kiểm tra đơn & Lưu trữ vào Bảng SQL (eir_cancellation_orders)
  */
-app.post("/api/verification/upload", authRequired, upload.single("file"), (req, res) => {
+app.post("/api/verification/upload", authRequired, upload.single("file"), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ status: "error", message: "Vui lòng chọn file kiểm tra đơn (.xlsx, .xls, .csv) để tải lên." });
@@ -747,8 +815,8 @@ app.post("/api/verification/upload", authRequired, upload.single("file"), (req, 
 
     const newId = `VER-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${String(Date.now()).slice(-4)}`;
 
-    // 2. Lưu trữ toàn bộ bảng SQL lên hệ thống cơ sở dữ liệu
-    const dbResult = insertVerificationRecords(records, {
+    // 2. Lưu trữ toàn bộ bảng SQL lên hệ thống cơ sở dữ liệu (Chờ Turso Cloud hoàn tất)
+    const dbResult = await insertVerificationRecordsAsync(records, {
       uploadId: newId,
       fileName,
       uploadedAt: nowStr
@@ -766,9 +834,7 @@ app.post("/api/verification/upload", authRequired, upload.single("file"), (req, 
       uploadedBy: req.user ? req.user.username : "system"
     };
 
-    const history = loadVerificationHistory();
-    history.unshift(historyItem);
-    saveVerificationHistory(history);
+    await saveVerificationHistoryAsync(historyItem);
 
     return res.json({
       status: "success",
@@ -788,9 +854,9 @@ app.post("/api/verification/upload", authRequired, upload.single("file"), (req, 
 /**
  * API: Lấy danh sách lịch sử đăng tải kiểm tra đơn
  */
-app.get("/api/verification/history", authRequired, (req, res) => {
+app.get("/api/verification/history", authRequired, async (req, res) => {
   try {
-    const history = loadVerificationHistory();
+    const history = await loadVerificationHistoryAsync();
     return res.json({ status: "success", data: history });
   } catch (err) {
     return res.status(500).json({ status: "error", message: err.message });
@@ -800,9 +866,9 @@ app.get("/api/verification/history", authRequired, (req, res) => {
 /**
  * API: Lấy toàn bộ dữ liệu kiểm tra đơn đã tích lũy trong Bảng SQL (eir_cancellation_orders)
  */
-app.get("/api/verification/all-data", authRequired, (req, res) => {
+app.get("/api/verification/all-data", authRequired, async (req, res) => {
   try {
-    const allRecords = getAllVerificationRecords();
+    const allRecords = await getAllVerificationRecordsAsync();
     const stats = getVerificationDatabaseStats();
 
     return res.json({
@@ -835,16 +901,19 @@ app.get("/api/verification/download-sql", authRequired, (req, res) => {
 /**
  * API: Xóa 1 đợt tải kiểm tra đơn khỏi lịch sử và cơ sở dữ liệu SQL
  */
-app.delete("/api/verification/history/:id", authRequired, (req, res) => {
+app.delete("/api/verification/history/:id", authRequired, async (req, res) => {
   try {
-    let history = loadVerificationHistory();
+    let history = await loadVerificationHistoryAsync();
     const beforeCount = history.length;
     history = history.filter(h => h.id !== req.params.id);
     if (history.length === beforeCount) {
       return res.status(404).json({ status: "error", message: "Bản ghi không tồn tại hoặc đã bị xóa." });
     }
     saveVerificationHistory(history);
-    deleteVerificationRecordsByUploadId(req.params.id);
+    if (tursoClient) {
+      await tursoClient.deleteVerificationHistoryItemFromTurso(req.params.id);
+    }
+    await deleteVerificationRecordsByUploadIdAsync(req.params.id);
     return res.json({ status: "success", message: "Đã xóa dữ liệu kiểm tra đơn khỏi hệ thống SQL thành công!" });
   } catch (err) {
     return res.status(500).json({ status: "error", message: err.message });
@@ -854,10 +923,13 @@ app.delete("/api/verification/history/:id", authRequired, (req, res) => {
 /**
  * API: Xóa toàn bộ lịch sử và bảng SQL dữ liệu kiểm tra đơn
  */
-app.delete("/api/verification/history", authRequired, (req, res) => {
+app.delete("/api/verification/history", authRequired, async (req, res) => {
   try {
     saveVerificationHistory([]);
-    clearAllVerificationRecords();
+    if (tursoClient) {
+      await tursoClient.clearAllVerificationOrdersInTurso();
+    }
+    await clearAllVerificationRecordsAsync();
     return res.json({ status: "success", message: "Đã dọn dẹp sạch toàn bộ lịch sử và bảng SQL dữ liệu kiểm tra đơn." });
   } catch (err) {
     return res.status(500).json({ status: "error", message: err.message });
@@ -934,7 +1006,7 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", app: "Logistics Cancellation Analytics Engine", time: new Date() });
 });
 
-if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`=====================================================`);
     console.log(`Hệ thống Phân tích Đơn Hủy Logistics đang chạy tại:`);
