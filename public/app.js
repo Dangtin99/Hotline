@@ -1458,9 +1458,9 @@ function renderMatrixTable(records) {
   // 3. Render thead
   thead.innerHTML = `
     <tr>
-      <th style="min-width: 140px; text-align: left; padding-left: 14px;">Depot</th>
-      <th style="min-width: 120px; text-align: left;">Hãng Tàu</th>
-      ${allStatuses.map(st => `<th style="min-width: 100px; text-align: right;" title="${st}">${st}</th>`).join("")}
+      <th style="width: 140px; min-width: 140px; text-align: left; padding-left: 14px;">Depot</th>
+      <th style="width: 130px; min-width: 130px; text-align: left; padding-left: 10px;">Hãng Tàu</th>
+      ${allStatuses.map(st => `<th style="min-width: 105px; text-align: right;" title="${st}">${st}</th>`).join("")}
       <th class="matrix-col-total" style="min-width: 110px; text-align: right;">Grand Total</th>
     </tr>
   `;
@@ -1486,14 +1486,14 @@ function renderMatrixTable(records) {
     }).join("");
 
     tbodyHtml += `
-      <tr class="matrix-depot-header-row" style="background-color: #f1f5f9; font-weight: 700;">
-        <td style="text-align: left; padding-left: 10px; border-right: 1px solid var(--border-light);">
+      <tr class="matrix-depot-header-row">
+        <td style="text-align: left; padding-left: 10px;">
           <button type="button" class="btn-matrix-toggle" onclick="toggleDepotCollapse('${depotKey}')" title="${isCollapsed ? 'Mở rộng chi tiết hãng tàu' : 'Thu gọn depot này'}">
             <span class="matrix-toggle-badge">${toggleIcon}</span>
-            <span style="color: #1e3a8a; font-size: 13.5px;">${depotKey}</span>
+            <span style="color: #1e3a8a; font-size: 13.5px; font-weight: 700;">${depotKey}</span>
           </button>
         </td>
-        <td style="text-align: left; color: #64748b; font-size: 12px; font-style: italic;">
+        <td style="text-align: left; color: #64748b; font-size: 12px; font-style: italic; padding-left: 10px;">
           (${lineKeys.length} hãng tàu)
         </td>
         ${depotCells}
@@ -1526,8 +1526,12 @@ function renderMatrixTable(records) {
 
         tbodyHtml += `
           <tr class="matrix-line-subrow">
-            <td style="padding-left: 28px; color: #64748b; font-size: 12px; border-right: 1px solid var(--border-light);"></td>
-            <td style="text-align: left; font-weight: 600; color: #1e293b;">${lineKey}</td>
+            <td style="text-align: left; padding-left: 16px; font-size: 12px; color: #94a3b8; font-weight: 500;">
+              ${depotKey}
+            </td>
+            <td style="text-align: left; font-weight: 600; color: #1e293b; padding-left: 12px;">
+              <span style="color: #94a3b8; margin-right: 6px;">↳</span>${lineKey}
+            </td>
             ${lineCells}
             <td class="matrix-col-total matrix-cell-clickable" style="text-align: right;" onclick="onMatrixCellClick('${lineKey}', '${depotKey}', this, 'ALL')" title="Bấm xem ${lineData.total} đơn của Hãng ${lineKey} tại Depot ${depotKey}">
               <strong>${lineData.total}</strong>
@@ -1536,7 +1540,7 @@ function renderMatrixTable(records) {
         `;
       });
 
-      // Dòng Depot Total
+      // Dòng Depot Total (giữ nguyên không dùng colspan)
       let depotTotalCells = allStatuses.map(st => {
         const cnt = depotData.statusCounts[st] || 0;
         if (cnt === 0) return `<td class="matrix-val-empty" style="text-align: right;">-</td>`;
@@ -1544,8 +1548,9 @@ function renderMatrixTable(records) {
       }).join("");
 
       tbodyHtml += `
-        <tr class="matrix-depot-total-row" style="background-color: #f8fafc; border-bottom: 2px solid #cbd5e1; font-weight: 700;">
-          <td colspan="2" style="text-align: left; padding-left: 14px; color: #334155;">${depotKey} Total</td>
+        <tr class="matrix-depot-total-row">
+          <td style="text-align: left; padding-left: 14px; font-weight: 700; color: #334155;">${depotKey} Total</td>
+          <td style="text-align: left; font-size: 12px; color: #64748b; font-style: italic; padding-left: 10px;">Tổng Depot</td>
           ${depotTotalCells}
           <td class="matrix-col-total" style="text-align: right;"><strong style="color: #1d4ed8;">${depotData.total}</strong></td>
         </tr>
@@ -1570,8 +1575,9 @@ function renderMatrixTable(records) {
   }).join("");
 
   tbodyHtml += `
-    <tr class="matrix-row-total" style="background-color: #e2e8f0; font-weight: 800; border-top: 2px solid #94a3b8;">
-      <td colspan="2" style="text-align: left; padding-left: 14px; font-size: 13.5px; color: #0f172a;">GRAND TOTAL</td>
+    <tr class="matrix-row-total">
+      <td style="text-align: left; padding-left: 14px; font-size: 13.5px; font-weight: 800; color: #0f172a;">GRAND TOTAL</td>
+      <td style="text-align: left; font-size: 12px; font-weight: 600; color: #475569; font-style: italic; padding-left: 10px;">Toàn bộ</td>
       ${grandTotalCells}
       <td class="cell-grand-total matrix-cell-clickable" style="text-align: right; color: #1d4ed8; font-size: 14px;" onclick="onMatrixCellClick('ALL', 'ALL', this, 'ALL')" title="Bấm xem toàn bộ ${grandTotal} đơn">
         <strong>${grandTotal}</strong>
