@@ -55,6 +55,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (btnExportMarkdown) btnExportMarkdown.onclick = copyMarkdownReport;
   if (btnExportJson) btnExportJson.onclick = downloadJsonData;
   initModalEvents();
+  initExportPngEvents();
 
   // Khôi phục tùy chọn ghim cột đã lưu
   try {
@@ -1387,6 +1388,147 @@ function downloadJsonData() {
 }
 
 // =====================================================
+// CHỨC NĂNG IN / XUẤT ẢNH PNG CHO BẢNG BÁO CÁO THỐNG KÊ
+// =====================================================
+
+async function ensureHtml2CanvasLoaded() {
+  if (typeof html2canvas === "function") return true;
+  return new Promise((resolve) => {
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.head.appendChild(script);
+  });
+}
+
+async function exportElementToPng(elementOrId, fileName = "bao_cao_thong_ke.png", triggerBtn = null) {
+  const el = typeof elementOrId === "string" ? document.getElementById(elementOrId) : elementOrId;
+  if (!el) {
+    showAlert("Không tìm thấy bảng dữ liệu để in ảnh PNG.");
+    return;
+  }
+
+  const origBtnText = triggerBtn ? triggerBtn.textContent : "";
+  if (triggerBtn) {
+    triggerBtn.disabled = true;
+    triggerBtn.textContent = "Đang xuất PNG...";
+  }
+
+  showAlert("Đang xử lý kết xuất ảnh PNG cho bảng, vui lòng chờ...", false);
+
+  try {
+    const isReady = await ensureHtml2CanvasLoaded();
+    if (!isReady || typeof html2canvas !== "function") {
+      throw new Error("Không thể tải thư viện đồ họa html2canvas. Vui lòng kiểm tra lại kết nối mạng.");
+    }
+
+    // Nhịp chờ nhỏ để DOM ổn định trạng thái render
+    await new Promise(r => setTimeout(r, 120));
+
+    const canvas = await html2canvas(el, {
+      scale: 2, // Độ nét Retina x2
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: "#ffffff",
+      logging: false,
+      onclone: (clonedDoc) => {
+        // 1. Gỡ bỏ triệt để mọi giới hạn cuộn (overflow, max-height) theo quy chuẩn xuất PNG
+        const scrollContainers = clonedDoc.querySelectorAll(
+          ".table-responsive, .matrix-table-container, .inline-table-container, .modal-table-container"
+        );
+        scrollContainers.forEach((c) => {
+          c.style.maxHeight = "none";
+          c.style.overflow = "visible";
+          c.style.height = "auto";
+        });
+
+        // 2. Gỡ bỏ position: sticky trên thead và các cột ghim để ảnh canvas không bị lệch vị trí
+        const stickyElements = clonedDoc.querySelectorAll(
+          ".matrix-table thead th, .matrix-table th, .matrix-table td, " +
+          ".inline-detail-table thead th, .modal-data-table thead th, " +
+          ".matrix-row-total td, .frozen-col, .kpi-summary-table thead th, .data-table thead th"
+        );
+        stickyElements.forEach((s) => {
+          s.style.position = "static";
+        });
+
+        // 3. Ẩn các nút điều khiển giao diện (In PNG, Xuất CSV, Tìm kiếm, Đóng...) trên bản in
+        const controlsToHide = [
+          ".matrix-detail-actions",
+          ".matrix-controls",
+          ".modal-toolbar-actions",
+          ".modal-search-box",
+          "#btnExportKpiPng",
+          "#btnExportDepotPng",
+          "#btnExportReasonsPng",
+          ".modal-close-btn",
+          "#btnModalCloseFooter"
+        ];
+        controlsToHide.forEach((sel) => {
+          clonedDoc.querySelectorAll(sel).forEach((btn) => {
+            btn.style.display = "none";
+          });
+        });
+
+        // 4. Đảm bảo toàn bộ bảng chiếm 100% chiều ngang
+        clonedDoc.querySelectorAll("table").forEach((tbl) => {
+          tbl.style.width = "100%";
+        });
+      }
+    });
+
+    // Kết xuất ảnh PNG và tải xuống
+    const imageUri = canvas.toDataURL("image/png");
+    const link = document.createElement("a");
+    link.download = fileName.endsWith(".png") ? fileName : `${fileName}.png`;
+    link.href = imageUri;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    showAlert("Đã tải ảnh PNG thành công!", false);
+  } catch (err) {
+    console.error("Lỗi khi kết xuất ảnh PNG:", err);
+    showAlert("Không thể xuất ảnh PNG: " + (err.message || err));
+  } finally {
+    if (triggerBtn) {
+      triggerBtn.disabled = false;
+      triggerBtn.textContent = origBtnText;
+    }
+  }
+}
+
+function initExportPngEvents() {
+  const btnKpiPng = document.getElementById("btnExportKpiPng");
+  if (btnKpiPng) {
+    btnKpiPng.onclick = () => {
+      const card = document.getElementById("kpiSummaryCard");
+      const dateStr = new Date().toISOString().substring(0, 10);
+      exportElementToPng(card, `bang_chi_so_kpi_${dateStr}.png`, btnKpiPng);
+    };
+  }
+
+  const btnDepotPng = document.getElementById("btnExportDepotPng");
+  if (btnDepotPng) {
+    btnDepotPng.onclick = () => {
+      const card = document.getElementById("depotTableCard");
+      const dateStr = new Date().toISOString().substring(0, 10);
+      exportElementToPng(card, `thong_ke_theo_depot_${dateStr}.png`, btnDepotPng);
+    };
+  }
+
+  const btnReasonsPng = document.getElementById("btnExportReasonsPng");
+  if (btnReasonsPng) {
+    btnReasonsPng.onclick = () => {
+      const card = document.getElementById("reasonsTableCard");
+      const dateStr = new Date().toISOString().substring(0, 10);
+      exportElementToPng(card, `top_ly_do_huy_don_${dateStr}.png`, btnReasonsPng);
+    };
+  }
+}
+
+// =====================================================
 // BẢNG MA TRẬN HÃNG TÀU × DEPOT THEO TRẠNG THÁI ĐƠN HÀNG
 // =====================================================
 
@@ -1402,8 +1544,17 @@ function normalizeStr(s) {
 let collapsedDepots = new Set(); // Lưu trữ các Depot đang được thu gọn
 
 function initMatrixStatusControls(records) {
+  const btnExportMatrixPng = document.getElementById("btnExportMatrixPng");
   const btnExpand = document.getElementById("btnExpandAllDepots");
   const btnCollapse = document.getElementById("btnCollapseAllDepots");
+
+  if (btnExportMatrixPng) {
+    btnExportMatrixPng.onclick = () => {
+      const card = document.getElementById("matrixCard");
+      const dateStr = new Date().toISOString().substring(0, 10);
+      exportElementToPng(card, `ma_tran_phan_bo_don_hang_${dateStr}.png`, btnExportMatrixPng);
+    };
+  }
 
   if (btnExpand) {
     btnExpand.onclick = () => {
@@ -1738,6 +1889,17 @@ function initInlineDetailControls() {
       URL.revokeObjectURL(url);
     };
   }
+
+  const btnExportPng = document.getElementById("btnExportInlinePng");
+  if (btnExportPng) {
+    btnExportPng.onclick = () => {
+      const card = document.getElementById("matrixDetailCard");
+      const dateStr = new Date().toISOString().substring(0, 10);
+      const lineStr = currentInlineLine && currentInlineLine !== "ALL" ? `_${currentInlineLine}` : "";
+      const depotStr = currentInlineDepot && currentInlineDepot !== "ALL" ? `_${currentInlineDepot}` : "";
+      exportElementToPng(card, `bang_thong_ke_chi_tiet_don${lineStr}${depotStr}_${dateStr}.png`, btnExportPng);
+    };
+  }
 }
 
 // Cập nhật tiêu đề và nạp dữ liệu cho Bảng Thống Kê Chi Tiết
@@ -2065,6 +2227,16 @@ function initModalEvents() {
       a.download = `chi_tiet_don_ma_tran_${new Date().toISOString().substring(0, 10)}.csv`;
       a.click();
       URL.revokeObjectURL(url);
+    };
+  }
+
+  // In / Xuất PNG danh sách đơn trong modal
+  const exportPngBtn = document.getElementById("btnModalExportPng");
+  if (exportPngBtn) {
+    exportPngBtn.onclick = () => {
+      const modalContent = document.querySelector("#matrixDetailModal .modal-content");
+      const dateStr = new Date().toISOString().substring(0, 10);
+      exportElementToPng(modalContent, `chi_tiet_don_ma_tran_${dateStr}.png`, exportPngBtn);
     };
   }
 }

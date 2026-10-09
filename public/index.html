@@ -8,6 +8,8 @@
   <script src="auth.js"></script>
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <!-- html2canvas CDN phục vụ in / xuất ảnh PNG -->
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 </head>
 <body>
   <div class="app-wrapper">
@@ -319,10 +321,13 @@
 
       <!-- KPI Summary Table Section -->
       <section class="kpi-summary-section">
-        <div class="table-card">
-          <div class="d-flex-between" style="margin-bottom: 14px;">
-            <h3>Bảng Chỉ Số KPI Vận Hành & CSKH</h3>
-            <span class="text-muted" id="kpiSummaryScope" style="font-size: 13px; font-weight: 500;">Dữ liệu theo bộ lọc hiện tại</span>
+        <div class="table-card" id="kpiSummaryCard">
+          <div class="d-flex-between" style="margin-bottom: 14px; align-items: center;">
+            <div>
+              <h3>Bảng Chỉ Số KPI Vận Hành & CSKH</h3>
+              <span class="text-muted" id="kpiSummaryScope" style="font-size: 13px; font-weight: 500;">Dữ liệu theo bộ lọc hiện tại</span>
+            </div>
+            <button type="button" class="btn btn-outline btn-sm" id="btnExportKpiPng" title="Xuất ảnh PNG bảng chỉ số KPI">In PNG</button>
           </div>
           <div class="table-responsive">
             <table class="data-table kpi-summary-table">
@@ -376,7 +381,7 @@
 
       <!-- Matrix Cross-Tabulation: Depot & Hãng Tàu x Trạng Thái -->
       <section class="matrix-section">
-        <div class="matrix-card">
+        <div class="matrix-card" id="matrixCard">
           <div class="matrix-header">
             <div class="matrix-title-group">
               <div>
@@ -385,8 +390,9 @@
               </div>
             </div>
 
-            <!-- Các nút điều khiển mở rộng / thu gọn ma trận -->
+            <!-- Các nút điều khiển mở rộng / thu gọn ma trận & in PNG -->
             <div class="matrix-controls">
+              <button type="button" class="btn btn-outline btn-sm" id="btnExportMatrixPng" title="Xuất ảnh PNG bảng ma trận phân bố">In PNG</button>
               <button type="button" class="btn btn-outline btn-sm" id="btnExpandAllDepots" title="Mở rộng toàn bộ Depot">Mở Rộng Tất Cả</button>
               <button type="button" class="btn btn-outline btn-sm" id="btnCollapseAllDepots" title="Thu gọn toàn bộ Depot">Thu Gọn Tất Cả</button>
             </div>
@@ -432,6 +438,7 @@
 
             <div class="matrix-detail-actions">
               <button type="button" class="btn btn-outline btn-sm" id="btnResetInlineFilter" style="display: none;">Hiện Tất Cả Đơn</button>
+              <button type="button" class="btn btn-outline btn-sm" id="btnExportInlinePng" title="Xuất ảnh PNG bảng thống kê chi tiết đơn hàng">In PNG</button>
               <button type="button" class="btn btn-outline btn-sm" id="btnExportInlineCsv">Xuất CSV</button>
               <a href="data-table.html" class="btn btn-secondary btn-sm" id="btnOpenFullDataTable" target="_blank" style="text-decoration: none;">Xem Bảng Đầy Đủ 21 Cột</a>
             </div>
@@ -474,8 +481,11 @@
 
       <!-- Detailed Tables -->
       <section class="tables-grid">
-        <div class="table-card">
-          <h3>Thống Kê Chi Tiết Theo Depot</h3>
+        <div class="table-card" id="depotTableCard">
+          <div class="d-flex-between" style="margin-bottom: 12px; align-items: center;">
+            <h3 style="margin: 0;">Thống Kê Chi Tiết Theo Depot</h3>
+            <button type="button" class="btn btn-outline btn-sm" id="btnExportDepotPng" title="Xuất ảnh PNG bảng thống kê Depot">In PNG</button>
+          </div>
           <div class="table-responsive">
             <table class="data-table">
               <thead>
@@ -493,8 +503,11 @@
           </div>
         </div>
 
-        <div class="table-card">
-          <h3>Top Lý Do Hủy & Phản Hồi Từ Chối Điều Độ</h3>
+        <div class="table-card" id="reasonsTableCard">
+          <div class="d-flex-between" style="margin-bottom: 12px; align-items: center;">
+            <h3 style="margin: 0;">Top Lý Do Hủy & Phản Hồi Từ Chối Điều Độ</h3>
+            <button type="button" class="btn btn-outline btn-sm" id="btnExportReasonsPng" title="Xuất ảnh PNG bảng top lý do">In PNG</button>
+          </div>
           <div class="table-responsive">
             <table class="data-table">
               <thead>
@@ -538,6 +551,7 @@
             <input type="text" id="modalMatrixSearch" placeholder="Tìm nhanh theo Container, Booking, Lý do, Tài xế...">
           </div>
           <div class="modal-toolbar-actions">
+            <button type="button" class="btn btn-outline btn-sm" id="btnModalExportPng" title="Xuất ảnh PNG chi tiết đơn hàng">In PNG</button>
             <button type="button" class="btn btn-outline btn-sm" id="btnModalExportCsv">Xuất CSV</button>
             <a href="data-table.html" class="btn btn-secondary btn-sm" id="btnModalOpenDataTable" target="_blank" style="text-decoration: none;">Xem Bảng Đầy Đủ</a>
           </div>
