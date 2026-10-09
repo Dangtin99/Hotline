@@ -79,6 +79,22 @@ let pendingRows = JSON.parse(sessionStorage.getItem("gpg_pending_rows") || "[]")
 let currentFrozenCount = parseInt(localStorage.getItem("gpg_frozen_cols") ?? "3", 10);
 let currentDatasetId = "default";
 
+// Quản trị Phân Trang Máy Chủ & Giao Diện (Mặc định và tối đa 200 dòng/trang)
+let currentPage = 1;
+let pageSize = 200;
+
+const paginationBar = document.getElementById("paginationBar");
+const pageFromRow = document.getElementById("pageFromRow");
+const pageToRow = document.getElementById("pageToRow");
+const pageTotalRecords = document.getElementById("pageTotalRecords");
+const pageTotalPages = document.getElementById("pageTotalPages");
+const selectPageSize = document.getElementById("selectPageSize");
+const btnFirstPage = document.getElementById("btnFirstPage");
+const btnPrevPage = document.getElementById("btnPrevPage");
+const btnNextPage = document.getElementById("btnNextPage");
+const btnLastPage = document.getElementById("btnLastPage");
+const inputPageDirect = document.getElementById("inputPageDirect");
+
 // Bảng cấu hình và thứ tự sắp xếp chuẩn cho trạng thái CSKH
 // Đánh số thứ tự (order: 1 -> 8) trong mã nguồn để quản lý và sắp xếp, hoàn toàn không hiển thị số ra màn hình HTML
 const CSKH_STATUS_CONFIG = [
@@ -1328,6 +1344,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // Khởi động bộ đếm ngược liên tục mỗi giây trên toàn bộ bảng
   setInterval(tickCountdowns, 1000);
 
+  // Khởi tạo các sự kiện phân trang (Tối đa 200 dòng/trang)
+  initPaginationEvents();
+
   // Load dataset
   loadDataset();
 
@@ -1799,6 +1818,7 @@ function applyFilters() {
     return true;
   });
 
+  currentPage = 1; // Luôn quay về trang 1 khi áp dụng bộ lọc mới
   renderTable(filteredRecords);
 }
 
@@ -1839,30 +1859,43 @@ function resetFilters() {
   if (btnClearDateFilter) btnClearDateFilter.style.display = "none";
   if (tableDateFilterGroup) tableDateFilterGroup.classList.remove("has-selection");
 
+  currentPage = 1;
   applyFilters();
 }
 
-// Render dữ liệu bảng
+// Render dữ liệu bảng kết hợp phân trang máy chủ (Tối đa 200 dòng/trang)
 function renderTable(records) {
   const filterSummaryBadge = document.getElementById("filterSummaryBadge");
   if (filterSummaryBadge) {
     filterSummaryBadge.textContent = `${records ? records.length : 0} bản ghi`;
   }
 
+  const total = records ? records.length : 0;
+  const totalPages = Math.ceil(total / pageSize) || 1;
+  if (currentPage > totalPages) currentPage = totalPages;
+  if (currentPage < 1) currentPage = 1;
+
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, total);
+  const pagedRecords = (records || []).slice(startIndex, endIndex);
+
+  // Cập nhật thanh phân trang
+  updatePaginationUI(total, totalPages, startIndex, endIndex);
+
   const unpaidCount = allRecords.filter(isUnpaidOrder).length;
   const cancelledCount = allRecords.filter(isCancelledOrder).length;
   if (currentTab === "unpaid") {
-    totalRowsBadge.textContent = `Hiển thị: ${records.length} / ${unpaidCount} đơn chưa thanh toán (Tổng toàn bộ: ${allRecords.length})`;
+    totalRowsBadge.textContent = `Hiển thị: ${pagedRecords.length} / ${records.length} đơn chưa thanh toán (Tổng toàn bộ: ${allRecords.length})`;
     totalRowsBadge.className = "badge badge-unpaid";
     totalRowsBadge.style.fontSize = "13px";
     totalRowsBadge.style.padding = "6px 14px";
   } else if (currentTab === "cancelled") {
-    totalRowsBadge.textContent = `Hiển thị: ${records.length} / ${cancelledCount} đơn hủy (Tổng toàn bộ: ${allRecords.length})`;
+    totalRowsBadge.textContent = `Hiển thị: ${pagedRecords.length} / ${records.length} đơn hủy (Tổng toàn bộ: ${allRecords.length})`;
     totalRowsBadge.className = "badge badge-danger";
     totalRowsBadge.style.fontSize = "13px";
     totalRowsBadge.style.padding = "6px 14px";
   } else {
-    totalRowsBadge.textContent = `Hiển thị: ${records.length} / ${allRecords.length} đơn hàng`;
+    totalRowsBadge.textContent = `Hiển thị: ${pagedRecords.length} / ${records.length} đơn hàng (Tổng toàn bộ: ${allRecords.length})`;
     totalRowsBadge.className = "badge badge-info";
     totalRowsBadge.style.fontSize = "13px";
     totalRowsBadge.style.padding = "6px 14px";
@@ -1870,7 +1903,7 @@ function renderTable(records) {
 
   const colSpanCount = currentTab === "cancelled" ? 24 : 23;
 
-  if (!records || records.length === 0) {
+  if (!pagedRecords || pagedRecords.length === 0) {
     tbodyFullData.innerHTML = `
       <tr>
         <td colspan="${colSpanCount}" class="text-center py-4 text-muted">
@@ -1887,7 +1920,7 @@ function renderTable(records) {
   // - Tab Tất cả đơn hàng: hiển thị tất cả các trạng thái (1 -> 8)
   const baseStatusOptions = getTabCskhStatusOptions(currentTab);
 
-  tbodyFullData.innerHTML = records.map(r => {
+  tbodyFullData.innerHTML = pagedRecords.map(r => {
     // Trạng thái đơn hàng gốc
     let statusClass = "badge-info";
     if (r.trangThaiDonHang === "Đã hủy") statusClass = "badge-danger";
@@ -1998,6 +2031,101 @@ function renderTable(records) {
   requestAnimationFrame(() => {
     applyFrozenColumns();
   });
+}
+
+// Cập nhật các chỉ số và trạng thái nút trên thanh phân trang
+function updatePaginationUI(total, totalPages, startIndex, endIndex) {
+  if (pageFromRow) pageFromRow.textContent = total > 0 ? (startIndex + 1).toLocaleString("vi-VN") : "0";
+  if (pageToRow) pageToRow.textContent = endIndex.toLocaleString("vi-VN");
+  if (pageTotalRecords) pageTotalRecords.textContent = total.toLocaleString("vi-VN");
+  if (pageTotalPages) pageTotalPages.textContent = totalPages.toLocaleString("vi-VN");
+  if (inputPageDirect) {
+    inputPageDirect.value = currentPage;
+    inputPageDirect.max = totalPages;
+  }
+
+  if (btnFirstPage) btnFirstPage.disabled = currentPage <= 1;
+  if (btnPrevPage) btnPrevPage.disabled = currentPage <= 1;
+  if (btnNextPage) btnNextPage.disabled = currentPage >= totalPages;
+  if (btnLastPage) btnLastPage.disabled = currentPage >= totalPages;
+}
+
+// Khởi tạo các sự kiện bấm nút trên thanh phân trang
+function initPaginationEvents() {
+  if (btnFirstPage) {
+    btnFirstPage.onclick = () => {
+      if (currentPage > 1) {
+        currentPage = 1;
+        renderTable(filteredRecords);
+        const container = document.querySelector(".full-table-container");
+        if (container) container.scrollTop = 0;
+      }
+    };
+  }
+
+  if (btnPrevPage) {
+    btnPrevPage.onclick = () => {
+      if (currentPage > 1) {
+        currentPage--;
+        renderTable(filteredRecords);
+        const container = document.querySelector(".full-table-container");
+        if (container) container.scrollTop = 0;
+      }
+    };
+  }
+
+  if (btnNextPage) {
+    btnNextPage.onclick = () => {
+      const totalPages = Math.ceil((filteredRecords ? filteredRecords.length : 0) / pageSize) || 1;
+      if (currentPage < totalPages) {
+        currentPage++;
+        renderTable(filteredRecords);
+        const container = document.querySelector(".full-table-container");
+        if (container) container.scrollTop = 0;
+      }
+    };
+  }
+
+  if (btnLastPage) {
+    btnLastPage.onclick = () => {
+      const totalPages = Math.ceil((filteredRecords ? filteredRecords.length : 0) / pageSize) || 1;
+      if (currentPage < totalPages) {
+        currentPage = totalPages;
+        renderTable(filteredRecords);
+        const container = document.querySelector(".full-table-container");
+        if (container) container.scrollTop = 0;
+      }
+    };
+  }
+
+  if (inputPageDirect) {
+    inputPageDirect.onkeydown = (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        inputPageDirect.blur();
+      }
+    };
+    inputPageDirect.onchange = (e) => {
+      const totalPages = Math.ceil((filteredRecords ? filteredRecords.length : 0) / pageSize) || 1;
+      let val = parseInt(e.target.value, 10);
+      if (isNaN(val) || val < 1) val = 1;
+      if (val > totalPages) val = totalPages;
+      currentPage = val;
+      renderTable(filteredRecords);
+      const container = document.querySelector(".full-table-container");
+      if (container) container.scrollTop = 0;
+    };
+  }
+
+  if (selectPageSize) {
+    selectPageSize.onchange = (e) => {
+      pageSize = Math.min(200, Math.max(10, parseInt(e.target.value, 10) || 200));
+      currentPage = 1;
+      renderTable(filteredRecords);
+      const container = document.querySelector(".full-table-container");
+      if (container) container.scrollTop = 0;
+    };
+  }
 }
 
 /**

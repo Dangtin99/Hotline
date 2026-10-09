@@ -71,182 +71,180 @@ async function testConnection() {
 }
 
 let isSchemaInitialized = false;
+let schemaInitPromise = null;
 
 /**
- * Khởi tạo cấu trúc bảng trên Turso Cloud
+ * Khởi tạo cấu trúc bảng trên Turso Cloud (Tối ưu hóa: kiểm tra nhanh 1 round-trip hoặc batch 1 lần)
  */
 async function initTursoSchema() {
   if (isSchemaInitialized) return;
-  const client = getTursoClient();
-  if (!client) throw new Error("Chưa khởi tạo client Turso");
+  if (schemaInitPromise) return schemaInitPromise;
 
-  // 1. Bảng cancellation_orders
-  await client.execute(`
-    CREATE TABLE IF NOT EXISTS cancellation_orders (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      row_key TEXT UNIQUE,
-      upload_id TEXT,
-      file_name TEXT,
-      stt TEXT,
-      depot TEXT,
-      hang_tau TEXT,
-      ngay_huy_don TEXT,
-      ngay_duoc_duyet TEXT,
-      so_booking TEXT,
-      so_container TEXT,
-      trang_thai_don_hang TEXT,
-      trang_thai_kich_hoat TEXT,
-      thoi_gian_kich_hoat TEXT,
-      ly_do_huy TEXT,
-      loai_container TEXT,
-      loai_don_hang TEXT,
-      size_teus REAL DEFAULT 0,
-      ten_tai_xe TEXT,
-      sdt_tai_xe TEXT,
-      ten_nha_xe TEXT,
-      sdt_nha_xe TEXT,
-      ly_do_tu_choi TEXT,
-      trang_thai_xu_ly TEXT,
-      giai_trinh TEXT,
-      original_trang_thai TEXT,
-      is_auto_cancelled_3h INTEGER DEFAULT 0,
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now'))
-    );
-  `);
+  schemaInitPromise = (async () => {
+    const client = getTursoClient();
+    if (!client) throw new Error("Chưa khởi tạo client Turso");
 
-  // 2. Bảng eir_cancellation_orders (kiểm tra đơn)
-  await client.execute(`
-    CREATE TABLE IF NOT EXISTS eir_cancellation_orders (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      row_key TEXT UNIQUE,
-      upload_id TEXT,
-      file_name TEXT,
-      stt_file TEXT,
-      depot TEXT,
-      hang_tau TEXT,
-      ngay_huy_don TEXT,
-      ngay_duoc_duyet TEXT,
-      so_booking TEXT,
-      so_container TEXT,
-      loai_container TEXT,
-      loai_don_hang TEXT,
-      size_teus REAL DEFAULT 0,
-      trang_thai_don_hang TEXT,
-      trang_thai_kich_hoat TEXT,
-      thoi_gian_kich_hoat TEXT,
-      ly_do_huy TEXT,
-      ly_do_tu_choi TEXT,
-      ly_do_huy_check TEXT,
-      ten_tai_xe TEXT,
-      sdt_tai_xe TEXT,
-      ten_nha_xe TEXT,
-      sdt_nha_xe TEXT,
-      file_nguon TEXT,
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now'))
-    );
-  `);
+    // 1. Kiểm tra nhanh: Nếu bảng chính đã tồn tại, hoàn thành ngay (chỉ 1 round-trip duy nhất)
+    try {
+      await client.execute("SELECT 1 FROM cancellation_orders LIMIT 1;");
+      isSchemaInitialized = true;
+      return;
+    } catch (checkErr) {
+      // Bảng chưa tồn tại -> chạy batch tạo toàn bộ bảng 1 lần
+    }
 
-  // 3. Bảng upload_history (lịch sử đăng tải đơn hủy)
-  await client.execute(`
-    CREATE TABLE IF NOT EXISTS upload_history (
-      id TEXT PRIMARY KEY,
-      file_name TEXT,
-      file_size TEXT,
-      uploaded_at TEXT,
-      record_count INTEGER DEFAULT 0,
-      teus_count REAL DEFAULT 0,
-      match_percent REAL DEFAULT 100,
-      is_valid INTEGER DEFAULT 1,
-      validation_json TEXT,
-      data_json TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-  `);
+    const ddlScript = `
+      CREATE TABLE IF NOT EXISTS cancellation_orders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        row_key TEXT UNIQUE,
+        upload_id TEXT,
+        file_name TEXT,
+        stt TEXT,
+        depot TEXT,
+        hang_tau TEXT,
+        ngay_huy_don TEXT,
+        ngay_duoc_duyet TEXT,
+        so_booking TEXT,
+        so_container TEXT,
+        trang_thai_don_hang TEXT,
+        trang_thai_kich_hoat TEXT,
+        thoi_gian_kich_hoat TEXT,
+        ly_do_huy TEXT,
+        loai_container TEXT,
+        loai_don_hang TEXT,
+        size_teus REAL DEFAULT 0,
+        ten_tai_xe TEXT,
+        sdt_tai_xe TEXT,
+        ten_nha_xe TEXT,
+        sdt_nha_xe TEXT,
+        ly_do_tu_choi TEXT,
+        trang_thai_xu_ly TEXT,
+        giai_trinh TEXT,
+        original_trang_thai TEXT,
+        is_auto_cancelled_3h INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS eir_cancellation_orders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        row_key TEXT UNIQUE,
+        upload_id TEXT,
+        file_name TEXT,
+        stt_file TEXT,
+        depot TEXT,
+        hang_tau TEXT,
+        ngay_huy_don TEXT,
+        ngay_duoc_duyet TEXT,
+        so_booking TEXT,
+        so_container TEXT,
+        loai_container TEXT,
+        loai_don_hang TEXT,
+        size_teus REAL DEFAULT 0,
+        trang_thai_don_hang TEXT,
+        trang_thai_kich_hoat TEXT,
+        thoi_gian_kich_hoat TEXT,
+        ly_do_huy TEXT,
+        ly_do_tu_choi TEXT,
+        ly_do_huy_check TEXT,
+        ten_tai_xe TEXT,
+        sdt_tai_xe TEXT,
+        ten_nha_xe TEXT,
+        sdt_nha_xe TEXT,
+        file_nguon TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS upload_history (
+        id TEXT PRIMARY KEY,
+        file_name TEXT,
+        file_size TEXT,
+        uploaded_at TEXT,
+        record_count INTEGER DEFAULT 0,
+        teus_count REAL DEFAULT 0,
+        match_percent REAL DEFAULT 100,
+        is_valid INTEGER DEFAULT 1,
+        validation_json TEXT,
+        data_json TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS verification_upload_history (
+        id TEXT PRIMARY KEY,
+        file_name TEXT,
+        file_size TEXT,
+        uploaded_at TEXT,
+        record_count INTEGER DEFAULT 0,
+        inserted_count INTEGER DEFAULT 0,
+        updated_count INTEGER DEFAULT 0,
+        total_accumulated INTEGER DEFAULT 0,
+        uploaded_by TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS order_operational_state (
+        row_key TEXT PRIMARY KEY,
+        cskh_status TEXT DEFAULT '',
+        explanation TEXT DEFAULT '',
+        is_pending INTEGER DEFAULT 0,
+        pending_at TEXT,
+        updated_by TEXT,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS order_status_audit_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        row_key TEXT,
+        action TEXT,
+        old_status TEXT,
+        new_status TEXT,
+        old_explanation TEXT,
+        new_explanation TEXT,
+        changed_by TEXT,
+        changed_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS dim_depots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code TEXT UNIQUE,
+        name TEXT,
+        is_active INTEGER DEFAULT 1
+      );
+      CREATE TABLE IF NOT EXISTS dim_shipping_lines (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code TEXT UNIQUE,
+        name TEXT,
+        is_active INTEGER DEFAULT 1
+      );
+      CREATE TABLE IF NOT EXISTS dim_container_types (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code TEXT UNIQUE,
+        size_teus REAL DEFAULT 1.0,
+        is_active INTEGER DEFAULT 1
+      );
+      CREATE INDEX IF NOT EXISTS idx_turso_cancel_depot ON cancellation_orders(depot);
+      CREATE INDEX IF NOT EXISTS idx_turso_cancel_line ON cancellation_orders(hang_tau);
+      CREATE INDEX IF NOT EXISTS idx_turso_cancel_status ON cancellation_orders(trang_thai_don_hang);
+      CREATE INDEX IF NOT EXISTS idx_turso_cancel_depot_date ON cancellation_orders(depot, ngay_huy_don DESC);
+      CREATE INDEX IF NOT EXISTS idx_turso_cancel_book_cont ON cancellation_orders(so_booking, so_container);
+      CREATE INDEX IF NOT EXISTS idx_turso_eir_depot ON eir_cancellation_orders(depot);
+      CREATE INDEX IF NOT EXISTS idx_turso_eir_booking_cont ON eir_cancellation_orders(so_booking, so_container);
+      CREATE INDEX IF NOT EXISTS idx_turso_op_pending ON order_operational_state(is_pending);
+      CREATE INDEX IF NOT EXISTS idx_turso_audit_key ON order_status_audit_log(row_key);
+    `;
 
-  // 4. Bảng verification_upload_history (lịch sử đăng tải kiểm tra đơn)
-  await client.execute(`
-    CREATE TABLE IF NOT EXISTS verification_upload_history (
-      id TEXT PRIMARY KEY,
-      file_name TEXT,
-      file_size TEXT,
-      uploaded_at TEXT,
-      record_count INTEGER DEFAULT 0,
-      inserted_count INTEGER DEFAULT 0,
-      updated_count INTEGER DEFAULT 0,
-      total_accumulated INTEGER DEFAULT 0,
-      uploaded_by TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-  `);
+    if (typeof client.executeMultiple === "function") {
+      await client.executeMultiple(ddlScript);
+    } else {
+      await client.batch(
+        ddlScript.split(";").map(s => s.trim()).filter(Boolean).map(sql => ({ sql, args: [] })),
+        "write"
+      );
+    }
 
-  // 5. Bảng order_operational_state: Tách riêng trạng thái CSKH, Giải trình, và Cờ Pending
-  await client.execute(`
-    CREATE TABLE IF NOT EXISTS order_operational_state (
-      row_key TEXT PRIMARY KEY,
-      cskh_status TEXT DEFAULT '',
-      explanation TEXT DEFAULT '',
-      is_pending INTEGER DEFAULT 0,
-      pending_at TEXT,
-      updated_by TEXT,
-      updated_at TEXT DEFAULT (datetime('now'))
-    );
-  `);
+    isSchemaInitialized = true;
+  })();
 
-  // 6. Bảng order_status_audit_log: Lịch sử thay đổi trạng thái CSKH / Giải trình / Pending
-  await client.execute(`
-    CREATE TABLE IF NOT EXISTS order_status_audit_log (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      row_key TEXT,
-      action TEXT,
-      old_status TEXT,
-      new_status TEXT,
-      old_explanation TEXT,
-      new_explanation TEXT,
-      changed_by TEXT,
-      changed_at TEXT DEFAULT (datetime('now'))
-    );
-  `);
-
-  // 7. Các bảng Danh mục (Master Dimension Tables)
-  await client.execute(`
-    CREATE TABLE IF NOT EXISTS dim_depots (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      code TEXT UNIQUE,
-      name TEXT,
-      is_active INTEGER DEFAULT 1
-    );
-  `);
-  await client.execute(`
-    CREATE TABLE IF NOT EXISTS dim_shipping_lines (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      code TEXT UNIQUE,
-      name TEXT,
-      is_active INTEGER DEFAULT 1
-    );
-  `);
-  await client.execute(`
-    CREATE TABLE IF NOT EXISTS dim_container_types (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      code TEXT UNIQUE,
-      size_teus REAL DEFAULT 1.0,
-      is_active INTEGER DEFAULT 1
-    );
-  `);
-
-  // Indexes Tối Ưu Hóa Truy Vấn
-  await client.execute(`CREATE INDEX IF NOT EXISTS idx_turso_cancel_depot ON cancellation_orders(depot);`);
-  await client.execute(`CREATE INDEX IF NOT EXISTS idx_turso_cancel_line ON cancellation_orders(hang_tau);`);
-  await client.execute(`CREATE INDEX IF NOT EXISTS idx_turso_cancel_status ON cancellation_orders(trang_thai_don_hang);`);
-  await client.execute(`CREATE INDEX IF NOT EXISTS idx_turso_cancel_depot_date ON cancellation_orders(depot, ngay_huy_don DESC);`);
-  await client.execute(`CREATE INDEX IF NOT EXISTS idx_turso_cancel_book_cont ON cancellation_orders(so_booking, so_container);`);
-  await client.execute(`CREATE INDEX IF NOT EXISTS idx_turso_eir_depot ON eir_cancellation_orders(depot);`);
-  await client.execute(`CREATE INDEX IF NOT EXISTS idx_turso_eir_booking_cont ON eir_cancellation_orders(so_booking, so_container);`);
-  await client.execute(`CREATE INDEX IF NOT EXISTS idx_turso_op_pending ON order_operational_state(is_pending);`);
-  await client.execute(`CREATE INDEX IF NOT EXISTS idx_turso_audit_key ON order_status_audit_log(row_key);`);
-
-  isSchemaInitialized = true;
+  try {
+    await schemaInitPromise;
+  } finally {
+    schemaInitPromise = null;
+  }
 }
 
 /**

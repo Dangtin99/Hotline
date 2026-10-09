@@ -404,6 +404,32 @@
         </table>
       </div>
 
+      <!-- Thanh Phân Trang Máy Chủ (Server-Side Pagination Bar - Tối đa 200 dòng/trang) -->
+      <div class="pagination-bar" id="paginationBar">
+        <div class="pagination-info" id="paginationInfo">
+          Đang hiển thị <strong id="pageFromRow">0</strong> - <strong id="pageToRow">0</strong> trong tổng số <strong id="pageTotalRecords">0</strong> đơn hàng
+        </div>
+        <div class="pagination-controls">
+          <div class="page-size-selector">
+            <label for="selectPageSize">Hiển thị:</label>
+            <select id="selectPageSize" class="page-size-select" title="Số dòng hiển thị mỗi trang">
+              <option value="50">50 dòng</option>
+              <option value="100">100 dòng</option>
+              <option value="200" selected>200 dòng (Tối đa)</option>
+            </select>
+          </div>
+          <div class="pagination-buttons">
+            <button type="button" class="btn-page-nav" id="btnFirstPage" title="Trang đầu" disabled>⏮</button>
+            <button type="button" class="btn-page-nav" id="btnPrevPage" title="Trang trước" disabled>◀ Trước</button>
+            <span class="page-current-display">
+              Trang <input type="number" id="inputPageDirect" min="1" value="1" class="page-number-input" title="Nhập số trang và nhấn Enter"> / <span id="pageTotalPages">1</span>
+            </span>
+            <button type="button" class="btn-page-nav" id="btnNextPage" title="Trang sau" disabled>Sau ▶</button>
+            <button type="button" class="btn-page-nav" id="btnLastPage" title="Trang cuối" disabled>⏭</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Footer -->
       <footer class="app-footer">
         <p>Logistics Cancellation Analytics Engine &copy; 2026. Hiển thị toàn bộ dữ liệu đối soát đơn hủy.</p>

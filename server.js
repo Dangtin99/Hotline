@@ -69,15 +69,17 @@ if (!fs.existsSync(DATA_DIR)) {
   } catch (e) {}
 }
 
-// Hàm hỗ trợ đọc / ghi lịch sử đơn duyệt
+// Hàm hỗ trợ đọc / ghi lịch sử đơn duyệt (Ưu tiên nạp tức thời từ local store, fallback Turso khi rỗng)
 async function loadHistoryAsync() {
+  const localList = loadHistory();
+  if (Array.isArray(localList) && localList.length > 0) return localList;
   if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       const items = await tursoClient.getUploadHistoryFromTurso();
       if (Array.isArray(items) && items.length > 0) return items;
     } catch (e) {}
   }
-  return loadHistory();
+  return [];
 }
 
 function loadHistory() {
@@ -115,15 +117,17 @@ function saveHistory(historyList) {
   }
 }
 
-// Hàm hỗ trợ đọc / ghi lịch sử kiểm tra đơn
+// Hàm hỗ trợ đọc / ghi lịch sử kiểm tra đơn (Ưu tiên nạp tức thời từ local store, fallback Turso khi rỗng)
 async function loadVerificationHistoryAsync() {
+  const localList = loadVerificationHistory();
+  if (Array.isArray(localList) && localList.length > 0) return localList;
   if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       const items = await tursoClient.getVerificationHistoryFromTurso();
       if (Array.isArray(items) && items.length > 0) return items;
     } catch (e) {}
   }
-  return loadVerificationHistory();
+  return [];
 }
 
 function loadVerificationHistory() {
@@ -493,7 +497,8 @@ app.post("/api/upload", authRequired, upload.single("file"), async (req, res) =>
  */
 app.get("/api/all-data", authRequired, async (req, res) => {
   try {
-    const allRecords = await getAllRecordsAsync();
+    const forceRefresh = req.query.refresh === "1" || req.query.refresh === "true";
+    const allRecords = await getAllRecordsAsync(forceRefresh);
     const analytics = aggregateCancellationData(allRecords);
     const stats = getDatabaseStats();
 
@@ -691,8 +696,9 @@ app.get("/api/orders/pending", authRequired, (req, res) => {
 app.get("/api/orders/paged", authRequired, async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page || "1", 10));
-    const limit = Math.min(500, Math.max(10, parseInt(req.query.limit || "50", 10)));
-    const tab = req.query.tab || "all";
+    // Tối đa 200 dòng theo quy chuẩn phân trang server
+    const limit = Math.min(200, Math.max(10, parseInt(req.query.limit || "200", 10)));
+    const tab = (req.query.tab || "all").toLowerCase();
     const depot = (req.query.depot || "").trim().toUpperCase();
     const hangTau = (req.query.hangTau || "").trim().toUpperCase();
     const search = (req.query.search || "").trim().toLowerCase();
@@ -701,40 +707,46 @@ app.get("/api/orders/paged", authRequired, async (req, res) => {
 
     // 1. Lọc theo tab
     if (tab === "unpaid") {
-      allRecords = allRecords.filter(r => (r.trangThaiDonHang || "").toLowerCase().includes("chưa thanh toán") || r.isAutoCancelledBy3h);
+      allRecords = allRecords.filter(r => (r.trangThaiDonHang || "").toLowerCase().includes("chưa thanh toán") || (r.trangThaiDonHang || "").toLowerCase().includes("chua thanh toan") || r.isAutoCancelledBy3h);
     } else if (tab === "cancelled") {
-      allRecords = allRecords.filter(r => (r.trangThaiDonHang || "").toLowerCase().includes("hủy"));
+      allRecords = allRecords.filter(r => (r.trangThaiDonHang || "").toLowerCase().includes("hủy") || (r.trangThaiDonHang || "").toLowerCase().includes("huy"));
     } else if (tab === "pending") {
       allRecords = allRecords.filter(r => r.isPending === true);
     }
 
     // 2. Lọc theo bộ lọc
     if (depot) {
-      allRecords = allRecords.filter(r => (r.depot || "").toUpperCase() === depot);
+      allRecords = allRecords.filter(r => (r.depot || "").trim().toUpperCase() === depot);
     }
     if (hangTau) {
-      allRecords = allRecords.filter(r => (r.hangTau || "").toUpperCase().includes(hangTau));
+      allRecords = allRecords.filter(r => (r.hangTau || "").trim().toUpperCase().includes(hangTau));
     }
     if (search) {
       allRecords = allRecords.filter(r =>
         (r.soContainer && r.soContainer.toLowerCase().includes(search)) ||
         (r.soBooking && r.soBooking.toLowerCase().includes(search)) ||
         (r.tenTaiXe && r.tenTaiXe.toLowerCase().includes(search)) ||
-        (r.tenNhaXe && r.tenNhaXe.toLowerCase().includes(search))
+        (r.sdtTaiXe && r.sdtTaiXe.toLowerCase().includes(search)) ||
+        (r.tenNhaXe && r.tenNhaXe.toLowerCase().includes(search)) ||
+        (r.sdtNhaXe && r.sdtNhaXe.toLowerCase().includes(search)) ||
+        (r.lyDoHuy && r.lyDoHuy.toLowerCase().includes(search))
       );
     }
 
     const totalRecords = allRecords.length;
     const totalPages = Math.ceil(totalRecords / limit) || 1;
-    const offset = (page - 1) * limit;
+    const validPage = Math.min(page, totalPages);
+    const offset = (validPage - 1) * limit;
     const pagedRecords = allRecords.slice(offset, offset + limit);
 
     return res.json({
       status: "success",
-      page,
+      page: validPage,
       limit,
       totalRecords,
       totalPages,
+      fromRow: totalRecords > 0 ? offset + 1 : 0,
+      toRow: Math.min(offset + limit, totalRecords),
       records: pagedRecords
     });
   } catch (err) {
@@ -748,9 +760,11 @@ app.get("/api/orders/paged", authRequired, async (req, res) => {
 app.get("/api/turso/status", authRequired, async (req, res) => {
   try {
     const turso = require("./services/tursoClient");
-    const conn = await turso.testConnection();
-    const rowCount = await turso.getTursoRowCount();
-    const allRecords = await getAllRecordsAsync();
+    const [conn, rowCount] = await Promise.all([
+      turso.testConnection(),
+      turso.getTursoRowCount()
+    ]);
+    const stats = getDatabaseStats();
 
     return res.json({
       status: "success",
@@ -758,7 +772,7 @@ app.get("/api/turso/status", authRequired, async (req, res) => {
       version: conn.version,
       serverTime: conn.time,
       tursoRowCount: rowCount,
-      localTotalCount: (allRecords || []).length,
+      localTotalCount: stats.totalRecords,
       error: conn.message
     });
   } catch (err) {
@@ -963,7 +977,8 @@ app.get("/api/verification/history", authRequired, async (req, res) => {
  */
 app.get("/api/verification/all-data", authRequired, async (req, res) => {
   try {
-    const allRecords = await getAllVerificationRecordsAsync();
+    const forceRefresh = req.query.refresh === "1" || req.query.refresh === "true";
+    const allRecords = await getAllVerificationRecordsAsync(forceRefresh);
     const stats = getVerificationDatabaseStats();
 
     return res.json({

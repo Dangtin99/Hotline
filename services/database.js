@@ -1582,7 +1582,21 @@ function insertManualOrder(orderData) {
  * =========================================================================
  */
 
-async function getAllRecordsAsync() {
+async function getAllRecordsAsync(forceRefresh = false) {
+  // 1. Tối ưu siêu tốc: Nếu bộ nhớ RAM hoặc SQLite local đã có dữ liệu và không yêu cầu ép tải lại -> Trả về ngay lập tức (< 3ms)
+  if (!forceRefresh && Array.isArray(memoryOrders) && memoryOrders.length > 0) {
+    return getAllRecords();
+  }
+
+  // 2. Thử nạp từ Local SQLite / JSON file nếu memoryOrders đang rỗng
+  if (memoryOrders.length === 0) {
+    loadAllFromStore();
+    if (memoryOrders.length > 0 && !forceRefresh) {
+      return getAllRecords();
+    }
+  }
+
+  // 3. Nếu vẫn rỗng (môi trường Vercel serverless không ổ đĩa) hoặc được yêu cầu forceRefresh -> Kéo từ Turso Cloud
   if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       const tursoRows = await tursoClient.getAllOrdersFromTurso();
@@ -1602,18 +1616,10 @@ async function getAllRecordsAsync() {
 }
 
 async function insertRecordsAsync(records, metadata = {}) {
-  if (tursoClient && tursoClient.isTursoAvailable()) {
-    try {
-      const tursoRows = await tursoClient.getAllOrdersFromTurso();
-      if (Array.isArray(tursoRows) && tursoRows.length > 0) {
-        memoryOrders = tursoRows;
-      }
-    } catch (e) {}
-  }
-
+  // Thêm trực tiếp vào local store & memory
   const res = insertRecords(records, metadata, false);
 
-  if (tursoClient) {
+  if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       await tursoClient.syncOrdersToTurso(memoryOrders);
     } catch (e) {
@@ -1633,7 +1639,7 @@ async function insertRecordsAsync(records, metadata = {}) {
 
 async function updateOrderNoteAsync(rowKey, noteData = {}) {
   const res = updateOrderNote(rowKey, noteData);
-  if (tursoClient) {
+  if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       await tursoClient.updateOrderNoteInTurso(rowKey, noteData);
     } catch (e) {}
@@ -1643,7 +1649,7 @@ async function updateOrderNoteAsync(rowKey, noteData = {}) {
 
 async function deleteRecordsByUploadIdAsync(uploadId) {
   deleteRecordsByUploadId(uploadId);
-  if (tursoClient) {
+  if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       await tursoClient.deleteOrdersByUploadIdInTurso(uploadId);
     } catch (e) {}
@@ -1652,14 +1658,28 @@ async function deleteRecordsByUploadIdAsync(uploadId) {
 
 async function clearDatabaseAsync() {
   clearDatabase();
-  if (tursoClient) {
+  if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       await tursoClient.clearAllOrdersInTurso();
     } catch (e) {}
   }
 }
 
-async function getAllVerificationRecordsAsync() {
+async function getAllVerificationRecordsAsync(forceRefresh = false) {
+  // 1. Tối ưu siêu tốc: Nếu bộ nhớ RAM hoặc Local SQLite đã có dữ liệu -> Trả về ngay (< 2ms)
+  if (!forceRefresh && Array.isArray(memoryVerificationOrders) && memoryVerificationOrders.length > 0) {
+    return getAllVerificationRecords();
+  }
+
+  // 2. Thử nạp từ Local Store
+  if (memoryVerificationOrders.length === 0) {
+    loadVerificationFromStore();
+    if (memoryVerificationOrders.length > 0 && !forceRefresh) {
+      return getAllVerificationRecords();
+    }
+  }
+
+  // 3. Nếu vẫn rỗng -> Kéo từ Turso Cloud
   if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       const tursoRows = await tursoClient.getAllVerificationOrdersFromTurso();
