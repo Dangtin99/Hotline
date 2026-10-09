@@ -1844,6 +1844,11 @@ function resetFilters() {
 
 // Render dữ liệu bảng
 function renderTable(records) {
+  const filterSummaryBadge = document.getElementById("filterSummaryBadge");
+  if (filterSummaryBadge) {
+    filterSummaryBadge.textContent = `${records ? records.length : 0} bản ghi`;
+  }
+
   const unpaidCount = allRecords.filter(isUnpaidOrder).length;
   const cancelledCount = allRecords.filter(isCancelledOrder).length;
   if (currentTab === "unpaid") {

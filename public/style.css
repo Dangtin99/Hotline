@@ -1111,19 +1111,220 @@ body {
   padding: 10px 16px;
 }
 
-/* Filter Toolbar */
+/* Filter Panel & Control Center Layout */
+.filter-panel,
 .filter-toolbar {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  background: var(--bg-surface);
-  padding: 14px 18px;
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius);
+  gap: 16px;
+  background: #ffffff;
+  padding: 20px 24px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
   margin-bottom: 20px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   position: relative;
   z-index: 50;
+}
+
+.filter-panel .section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 14px;
+  margin-bottom: 2px;
+}
+
+.filter-panel .eyebrow {
+  font-size: 11px;
+  font-weight: 800;
+  color: #2563eb;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  margin: 0 0 4px 0;
+}
+
+.filter-panel h2 {
+  font-size: 17px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+  letter-spacing: -0.2px;
+}
+
+.filter-panel .live-status {
+  display: inline-block;
+  padding: 4px 12px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Lưới bộ lọc: Chia đều mỗi hàng 3 bộ lọc */
+.filters-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.filter-field label {
+  font-size: 11px;
+  font-weight: 800;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+
+.filter-field input,
+.filter-field select,
+.filter-field .filter-select,
+.filter-field .multiselect-btn,
+.filter-field .search-box input {
+  width: 100% !important;
+  height: 42px !important;
+  min-height: 42px !important;
+  padding: 0 14px !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 8px !important;
+  background: #f8fafc !important;
+  color: #0f172a !important;
+  font-size: 13.5px !important;
+  font-weight: 500 !important;
+  box-sizing: border-box !important;
+  transition: all 0.2s ease !important;
+  outline: none !important;
+}
+
+.filter-field input:hover,
+.filter-field select:hover,
+.filter-field .filter-select:hover,
+.filter-field .multiselect-btn:hover,
+.filter-field .search-box input:hover,
+.filter-field input:focus,
+.filter-field select:focus,
+.filter-field .filter-select:focus,
+.filter-field .multiselect-btn:focus,
+.filter-field .search-box input:focus {
+  border-color: #60a5fa !important;
+  background: #ffffff !important;
+  box-shadow: 0 0 0 3px #dbeafe !important;
+}
+
+.filter-field input::placeholder,
+.filter-field .search-box input::placeholder {
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+/* Multiselect Dropdown in Grid */
+.filter-field .multiselect-dropdown {
+  width: 100%;
+  position: relative;
+}
+
+.filter-field .multiselect-panel {
+  min-width: 100%;
+  width: 100%;
+}
+
+/* Hàng riêng cho Ghim cột và Đặt lại */
+.filter-actions-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 14px;
+  border-top: 1px solid #f1f5f9;
+  margin-top: 2px;
+}
+
+.filter-actions-row .freeze-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  padding: 6px 14px;
+  border-radius: 8px;
+  height: 38px;
+  box-sizing: border-box;
+}
+
+.filter-actions-row .freeze-control .freeze-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1e40af;
+  margin: 0;
+}
+
+.filter-actions-row .freeze-control select {
+  height: 28px !important;
+  min-height: 28px !important;
+  width: auto !important;
+  border: 1px solid #93c5fd !important;
+  border-radius: 6px !important;
+  background: #ffffff !important;
+  color: #1e3a8a !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  padding: 0 6px !important;
+  outline: none !important;
+}
+
+.filter-actions-row #btnResetFilter {
+  height: 38px;
+  padding: 0 20px;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.filter-actions-row #btnResetFilter:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  box-shadow: 0 2px 6px rgba(29, 78, 216, 0.15);
+}
+
+#btnExportCsv {
+  display: none !important;
+}
+
+@media (max-width: 992px) {
+  .filters-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .filter-field.search-field {
+    grid-column: span 1 !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .filters-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .filter-actions-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
 }
 
 .search-box {

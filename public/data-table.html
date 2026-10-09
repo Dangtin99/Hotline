@@ -164,15 +164,181 @@
       </div>
 
       <!-- Bộ lọc và Tìm kiếm nhanh -->
-      <div class="filter-toolbar">
-        <div class="search-box">
-          <input type="text" id="searchInput" placeholder="Tìm kiếm theo Container, Booking, Tài xế, Nhà xe, Lý do...">
+      <!-- Bộ lọc và Tìm kiếm nhanh theo giao diện Control Center -->
+      <section class="filter-panel" aria-labelledby="filterTitle">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">CONTROL CENTER</p>
+            <h2 id="filterTitle">Bộ lọc điều hành quản trị đơn hàng</h2>
+          </div>
+          <span id="filterSummaryBadge" class="live-status">0 bản ghi</span>
         </div>
 
-        <div class="filter-group">
-          <!-- Điều khiển Cố Định Cột -->
+        <!-- Lưới bộ lọc: Chia đều mỗi hàng 3 bộ lọc -->
+        <div class="filters-grid">
+          <!-- Hàng 1 - Cột 1: Loại Ngày -->
+          <div class="filter-field dropdown-field">
+            <label for="filterDateType">Loại ngày</label>
+            <select id="filterDateType" class="filter-select date-type-select" title="Chọn loại ngày cần lọc">
+              <option value="ngayHuy">Ngày hủy</option>
+              <option value="ngayDuyet">Ngày duyệt</option>
+            </select>
+          </div>
+
+          <!-- Hàng 1 - Cột 2: Từ Ngày -->
+          <div class="filter-field date-field">
+            <label for="filterDateFrom">Từ ngày</label>
+            <div class="date-input-container">
+              <input type="date" id="filterDateFrom" class="filter-select filter-date-input" title="Lọc từ ngày" placeholder="Từ ngày">
+            </div>
+          </div>
+
+          <!-- Hàng 1 - Cột 3: Đến Ngày -->
+          <div class="filter-field date-field">
+            <label for="filterDateTo">Đến ngày</label>
+            <div class="date-input-container" style="position: relative; display: flex; align-items: center;">
+              <input type="date" id="filterDateTo" class="filter-select filter-date-input" title="Lọc đến ngày" placeholder="Đến ngày" style="width: 100%;">
+              <button type="button" id="btnClearDateFilter" class="btn-clear-date" title="Xóa bộ lọc ngày" style="display: none; position: absolute; right: 30px;">×</button>
+            </div>
+          </div>
+
+          <!-- Hàng 2 - Cột 1: Depot -->
+          <div class="filter-field dropdown-field">
+            <label>Depot</label>
+            <div class="multiselect-dropdown" id="depotMultiselect" style="width: 100%;">
+              <button type="button" class="multiselect-btn" id="depotDropdownBtn" aria-haspopup="true" aria-expanded="false" title="Nhấn để chọn một hoặc nhiều Depot">
+                <span class="multiselect-label" id="depotSelectedLabel">Tất cả Depot</span>
+                <span class="multiselect-arrow">▼</span>
+              </button>
+              <div class="multiselect-panel" id="depotDropdownPanel">
+                <div class="multiselect-header">
+                  <label class="multiselect-item select-all-item">
+                    <input type="checkbox" id="depotSelectAll" checked>
+                    <span><strong>Tất cả Depot</strong></span>
+                  </label>
+                </div>
+                <div class="multiselect-list" id="depotOptionsList">
+                  <!-- Checkboxes Depot nạp động -->
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Hàng 2 - Cột 2: Hãng Tàu -->
+          <div class="filter-field dropdown-field">
+            <label for="filterLine">Hãng tàu (Line)</label>
+            <select id="filterLine" class="filter-select">
+              <option value="">Tất cả Hãng tàu</option>
+            </select>
+          </div>
+
+          <!-- Hàng 2 - Cột 3: Chiều Container -->
+          <div class="filter-field dropdown-field">
+            <label for="filterDirection">Chiều container</label>
+            <select id="filterDirection" class="filter-select">
+              <option value="">Tất cả Chiều cont</option>
+              <option value="OUT">Chiều OUT (Lấy cont)</option>
+              <option value="IN">Chiều IN (Hạ cont)</option>
+            </select>
+          </div>
+
+          <!-- Hàng 3 - Cột 1: Trạng Thái Đơn -->
+          <div class="filter-field dropdown-field">
+            <label>Trạng thái đơn</label>
+            <div class="multiselect-dropdown" id="statusMultiselect" style="width: 100%;">
+              <button type="button" class="multiselect-btn" id="statusDropdownBtn" aria-haspopup="true" aria-expanded="false" title="Nhấn để chọn một hoặc nhiều Trạng thái đơn">
+                <span class="multiselect-label" id="statusSelectedLabel">Tất cả trạng thái</span>
+                <span class="multiselect-arrow">▼</span>
+              </button>
+              <div class="multiselect-panel" id="statusDropdownPanel">
+                <div class="multiselect-header">
+                  <label class="multiselect-item select-all-item">
+                    <input type="checkbox" id="statusSelectAll" checked>
+                    <span><strong>Tất cả trạng thái</strong></span>
+                  </label>
+                </div>
+                <div class="multiselect-list" id="statusOptionsList">
+                  <!-- Checkboxes Trạng thái nạp động -->
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Hàng 3 - Cột 2: Khung Giờ Duyệt -->
+          <div class="filter-field dropdown-field">
+            <label for="filterApprovedHour">Khung giờ duyệt</label>
+            <select id="filterApprovedHour" class="filter-select" title="Lọc theo khung giờ của cột Ngày được duyệt">
+              <option value="">Tất cả giờ duyệt</option>
+              <option value="0">00:00 -> 01:00</option>
+              <option value="1">01:00 -> 02:00</option>
+              <option value="2">02:00 -> 03:00</option>
+              <option value="3">03:00 -> 04:00</option>
+              <option value="4">04:00 -> 05:00</option>
+              <option value="5">05:00 -> 06:00</option>
+              <option value="6">06:00 -> 07:00</option>
+              <option value="7">07:00 -> 08:00</option>
+              <option value="8">08:00 -> 09:00</option>
+              <option value="9">09:00 -> 10:00</option>
+              <option value="10">10:00 -> 11:00</option>
+              <option value="11">11:00 -> 12:00</option>
+              <option value="12">12:00 -> 13:00</option>
+              <option value="13">13:00 -> 14:00</option>
+              <option value="14">14:00 -> 15:00</option>
+              <option value="15">15:00 -> 16:00</option>
+              <option value="16">16:00 -> 17:00</option>
+              <option value="17">17:00 -> 18:00</option>
+              <option value="18">18:00 -> 19:00</option>
+              <option value="19">19:00 -> 20:00</option>
+              <option value="20">20:00 -> 21:00</option>
+              <option value="21">21:00 -> 22:00</option>
+              <option value="22">22:00 -> 23:00</option>
+              <option value="23">23:00 -> 24:00</option>
+            </select>
+          </div>
+
+          <!-- Hàng 3 - Cột 3: Hạn 3h (Cảnh Báo) -->
+          <div class="filter-field dropdown-field">
+            <label for="filterWarning3h">Hạn 3h (Cảnh báo)</label>
+            <select id="filterWarning3h" class="filter-select" title="Lọc theo mức độ cảnh báo đếm ngược 3 giờ từ khi duyệt đơn">
+              <option value="">Tất cả cảnh báo</option>
+              <option value="safe">Còn > 2h (An toàn)</option>
+              <option value="yellow">Qua 1h (Cảnh báo vàng)</option>
+              <option value="red">Qua 2h (Cảnh báo đỏ)</option>
+              <option value="expired">Quá 3h (Đã hủy)</option>
+              <option value="processed">Đã xử lý</option>
+            </select>
+          </div>
+
+          <!-- Hàng 4 - Cột 1: Trạng Thái CSKH -->
+          <div class="filter-field dropdown-field">
+            <label for="filterContactStatus">Trạng thái CSKH</label>
+            <select id="filterContactStatus" class="filter-select">
+              <option value="" data-order="0">Tất cả trạng thái CSKH</option>
+              <option value="Thanh toán thành công" data-order="1">Thanh toán thành công</option>
+              <option value="Đã liên hệ - Chờ đặt lại" data-order="2">Đã liên hệ - Chờ đặt lại</option>
+              <option value="Đã liên hệ - Chờ thanh toán" data-order="3">Đã liên hệ - Chờ thanh toán</option>
+              <option value="Đã liên hệ - Đã đặt lại" data-order="4">Đã liên hệ - Đã đặt lại</option>
+              <option value="Đã liên hệ - Không đặt lại" data-order="5">Đã liên hệ - Không đặt lại</option>
+              <option value="Không liên hệ được - Chờ thanh toán" data-order="6">Không liên hệ được - Chờ thanh toán</option>
+              <option value="Không liên hệ được - Hủy" data-order="7">Không liên hệ được - Hủy</option>
+              <option value="Tự động đặt lại" data-order="8">Tự động đặt lại</option>
+              <option value="__EMPTY__" data-order="99">Chưa cập nhật trạng thái</option>
+            </select>
+          </div>
+
+          <!-- Hàng 4 - Cột 2 & 3: Tìm Nhanh (chiếm 2 cột) -->
+          <div class="filter-field search-field" style="grid-column: span 2;">
+            <label for="searchInput">Tìm nhanh</label>
+            <div class="search-box">
+              <input type="text" id="searchInput" placeholder="Container, Booking, Tài xế, Nhà xe, Lý do...">
+            </div>
+          </div>
+        </div>
+
+        <!-- Hàng riêng: Ghim cột & Đặt lại (Ẩn nút Xuất CSV) -->
+        <div class="filter-actions-row">
           <div class="freeze-control">
-            <label for="selectFreezeCols" class="freeze-label">Ghim:</label>
+            <label for="selectFreezeCols" class="freeze-label">Ghim cột:</label>
             <select id="selectFreezeCols" class="filter-select freeze-select" title="Chọn số lượng cột cố định bên trái khi cuộn ngang">
               <option value="0">0 cột</option>
               <option value="1">1 cột (STT)</option>
@@ -187,123 +353,15 @@
             </select>
           </div>
 
-          <!-- Bộ lọc Depot Đa Chọn (Multi-select) -->
-          <div class="multiselect-dropdown" id="depotMultiselect">
-            <button type="button" class="multiselect-btn" id="depotDropdownBtn" aria-haspopup="true" aria-expanded="false" title="Nhấn để chọn một hoặc nhiều Depot">
-              <span class="multiselect-label" id="depotSelectedLabel">Depot</span>
-              <span class="multiselect-arrow">▼</span>
-            </button>
-            <div class="multiselect-panel" id="depotDropdownPanel">
-              <div class="multiselect-header">
-                <label class="multiselect-item select-all-item">
-                  <input type="checkbox" id="depotSelectAll" checked>
-                  <span><strong>Tất cả Depot</strong></span>
-                </label>
-              </div>
-              <div class="multiselect-list" id="depotOptionsList">
-                <!-- Checkboxes Depot nạp động -->
-              </div>
-            </div>
+          <div class="filter-action-buttons" style="display: flex; gap: 8px; align-items: center;">
+            <button id="btnResetFilter" class="btn btn-outline btn-sm" type="button" title="Đặt lại bộ lọc về mặc định">Đặt Lại</button>
+            <button id="btnExportCsv" class="btn btn-outline btn-sm" type="button" style="display: none !important;" title="Xuất dữ liệu đang lọc ra tệp CSV">Xuất CSV</button>
           </div>
-
-          <!-- Bộ lọc Theo Ngày (Ngày Hủy / Ngày Duyệt) -->
-          <div class="date-filter-group" id="tableDateFilterGroup" title="Lọc theo khoảng thời gian">
-            <select id="filterDateType" class="filter-select date-type-select" title="Chọn loại ngày cần lọc">
-              <option value="ngayHuy">Ngày hủy</option>
-              <option value="ngayDuyet">Ngày duyệt</option>
-            </select>
-            <input type="date" id="filterDateFrom" class="filter-select filter-date-input" title="Lọc từ ngày" placeholder="Từ ngày">
-            <span class="date-sep">-</span>
-            <input type="date" id="filterDateTo" class="filter-select filter-date-input" title="Lọc đến ngày" placeholder="Đến ngày">
-            <button type="button" id="btnClearDateFilter" class="btn-clear-date" title="Xóa bộ lọc ngày" style="display: none;">×</button>
-          </div>
-
-          <select id="filterLine" class="filter-select">
-            <option value="">Hãng tàu</option>
-          </select>
-
-          <select id="filterDirection" class="filter-select">
-            <option value="">Chiều cont</option>
-            <option value="OUT">Chiều OUT (Lấy cont)</option>
-            <option value="IN">Chiều IN (Hạ cont)</option>
-          </select>
-
-          <!-- Bộ lọc Trạng Thái Đơn Đa Chọn (Multi-select) -->
-          <div class="multiselect-dropdown" id="statusMultiselect">
-            <button type="button" class="multiselect-btn" id="statusDropdownBtn" aria-haspopup="true" aria-expanded="false" title="Nhấn để chọn một hoặc nhiều Trạng thái đơn">
-              <span class="multiselect-label" id="statusSelectedLabel">Trạng thái</span>
-              <span class="multiselect-arrow">▼</span>
-            </button>
-            <div class="multiselect-panel" id="statusDropdownPanel">
-              <div class="multiselect-header">
-                <label class="multiselect-item select-all-item">
-                  <input type="checkbox" id="statusSelectAll" checked>
-                  <span><strong>Tất cả trạng thái</strong></span>
-                </label>
-              </div>
-              <div class="multiselect-list" id="statusOptionsList">
-                <!-- Checkboxes Trạng thái nạp động -->
-              </div>
-            </div>
-          </div>
-
-          <!-- Bộ lọc Khung giờ duyệt (Từng đoạn 1 tiếng) -->
-          <select id="filterApprovedHour" class="filter-select" title="Lọc theo khung giờ của cột Ngày được duyệt">
-            <option value="">Giờ duyệt</option>
-            <option value="0">00:00 -> 01:00</option>
-            <option value="1">01:00 -> 02:00</option>
-            <option value="2">02:00 -> 03:00</option>
-            <option value="3">03:00 -> 04:00</option>
-            <option value="4">04:00 -> 05:00</option>
-            <option value="5">05:00 -> 06:00</option>
-            <option value="6">06:00 -> 07:00</option>
-            <option value="7">07:00 -> 08:00</option>
-            <option value="8">08:00 -> 09:00</option>
-            <option value="9">09:00 -> 10:00</option>
-            <option value="10">10:00 -> 11:00</option>
-            <option value="11">11:00 -> 12:00</option>
-            <option value="12">12:00 -> 13:00</option>
-            <option value="13">13:00 -> 14:00</option>
-            <option value="14">14:00 -> 15:00</option>
-            <option value="15">15:00 -> 16:00</option>
-            <option value="16">16:00 -> 17:00</option>
-            <option value="17">17:00 -> 18:00</option>
-            <option value="18">18:00 -> 19:00</option>
-            <option value="19">19:00 -> 20:00</option>
-            <option value="20">20:00 -> 21:00</option>
-            <option value="21">21:00 -> 22:00</option>
-            <option value="22">22:00 -> 23:00</option>
-            <option value="23">23:00 -> 24:00</option>
-          </select>
-
-          <!-- Bộ lọc Cảnh báo đếm ngược 3 giờ -->
-          <select id="filterWarning3h" class="filter-select" title="Lọc theo mức độ cảnh báo đếm ngược 3 giờ từ khi duyệt đơn">
-            <option value="">Hạn 3h</option>
-            <option value="safe">Còn > 2h (An toàn)</option>
-            <option value="yellow">Qua 1h (Cảnh báo vàng)</option>
-            <option value="red">Qua 2h (Cảnh báo đỏ)</option>
-            <option value="expired">Quá 3h (Đã hủy)</option>
-            <option value="processed">Đã xử lý</option>
-          </select>
-
-          <!-- Bộ lọc Trạng thái CSKH / Xử lý (Đánh số thứ tự trong source code qua data-order, không hiển thị số ra HTML) -->
-          <select id="filterContactStatus" class="filter-select">
-            <option value="" data-order="0">Trạng thái CSKH</option>
-            <option value="Thanh toán thành công" data-order="1">Thanh toán thành công</option>
-            <option value="Đã liên hệ - Chờ đặt lại" data-order="2">Đã liên hệ - Chờ đặt lại</option>
-            <option value="Đã liên hệ - Chờ thanh toán" data-order="3">Đã liên hệ - Chờ thanh toán</option>
-            <option value="Đã liên hệ - Đã đặt lại" data-order="4">Đã liên hệ - Đã đặt lại</option>
-            <option value="Đã liên hệ - Không đặt lại" data-order="5">Đã liên hệ - Không đặt lại</option>
-            <option value="Không liên hệ được - Chờ thanh toán" data-order="6">Không liên hệ được - Chờ thanh toán</option>
-            <option value="Không liên hệ được - Hủy" data-order="7">Không liên hệ được - Hủy</option>
-            <option value="Tự động đặt lại" data-order="8">Tự động đặt lại</option>
-            <option value="__EMPTY__" data-order="99">Chưa cập nhật trạng thái</option>
-          </select>
-
-          <button id="btnResetFilter" class="btn btn-outline btn-sm">Đặt Lại</button>
-          <button id="btnExportCsv" class="btn btn-outline btn-sm" title="Xuất dữ liệu đang lọc ra tệp CSV">Xuất CSV</button>
         </div>
-      </div>
+
+        <!-- Thẻ ảo ẩn để giữ compatibility id nếu JS cần -->
+        <div id="tableDateFilterGroup" style="display: none;"></div>
+      </section>
 
       <!-- Bảng dữ liệu chi tiết toàn bộ file Excel -->
       <div class="full-table-container">
