@@ -372,6 +372,15 @@ body {
   transition: var(--transition);
 }
 
+.tab-btn .tab-icon {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: middle;
+}
+
 .tab-btn:hover {
   background: #dbeafe;
   color: #1e40af;
