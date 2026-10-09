@@ -39,7 +39,11 @@ const {
   deduplicateOrdersByEir,
   deduplicateOrdersByEirAsync,
   insertManualOrder,
-  insertManualOrderAsync
+  insertManualOrderAsync,
+  setOrderPending,
+  batchSetOrdersPending,
+  getPendingOrderKeys,
+  generateSqlDumpFile
 } = require("./services/database");
 const tursoClient = require("./services/tursoClient");
 const {
@@ -513,6 +517,7 @@ app.get("/api/all-data", authRequired, async (req, res) => {
  */
 app.get("/api/download-sql", authRequired, (req, res) => {
   try {
+    generateSqlDumpFile();
     if (fs.existsSync(SQL_DUMP_PATH)) {
       res.setHeader("Content-Disposition", 'attachment; filename="cancellation_orders.sql"');
       res.setHeader("Content-Type", "application/sql");
@@ -644,6 +649,96 @@ app.post("/api/orders/manual", authRequired, async (req, res) => {
       status: "error",
       message: `Lỗi hệ thống khi thêm đơn thủ công: ${err.message}`
     });
+  }
+});
+
+/**
+ * API: Cập nhật trạng thái Chờ Xử Lý (Pending) bền vững vào Database
+ */
+app.post("/api/orders/pending", authRequired, (req, res) => {
+  try {
+    const { rowKey, rowKeys, isPending = true } = req.body || {};
+    if (Array.isArray(rowKeys) && rowKeys.length > 0) {
+      const result = batchSetOrdersPending(rowKeys, Boolean(isPending));
+      return res.json({ status: "success", ...result });
+    }
+    if (rowKey) {
+      const ok = setOrderPending(rowKey, Boolean(isPending));
+      return res.json({ status: ok ? "success" : "not_found" });
+    }
+    return res.status(400).json({ status: "error", message: "Vui lòng cung cấp rowKey hoặc danh sách rowKeys." });
+  } catch (err) {
+    return res.status(500).json({ status: "error", message: err.message });
+  }
+});
+
+/**
+ * API: Lấy danh sách các đơn đang ở trạng thái Chờ Xử Lý (Pending) từ Database
+ */
+app.get("/api/orders/pending", authRequired, (req, res) => {
+  try {
+    const pendingKeys = getPendingOrderKeys();
+    return res.json({ status: "success", count: pendingKeys.length, pendingKeys });
+  } catch (err) {
+    return res.status(500).json({ status: "error", message: err.message });
+  }
+});
+
+/**
+ * API: Phân trang & Lọc dữ liệu phía Server (Server-Side Pagination & Filtering)
+ * Giúp tối ưu hóa tốc độ tải trang khi dữ liệu lên tới hàng chục nghìn dòng
+ */
+app.get("/api/orders/paged", authRequired, async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page || "1", 10));
+    const limit = Math.min(500, Math.max(10, parseInt(req.query.limit || "50", 10)));
+    const tab = req.query.tab || "all";
+    const depot = (req.query.depot || "").trim().toUpperCase();
+    const hangTau = (req.query.hangTau || "").trim().toUpperCase();
+    const search = (req.query.search || "").trim().toLowerCase();
+
+    let allRecords = await getAllRecordsAsync();
+
+    // 1. Lọc theo tab
+    if (tab === "unpaid") {
+      allRecords = allRecords.filter(r => (r.trangThaiDonHang || "").toLowerCase().includes("chưa thanh toán") || r.isAutoCancelledBy3h);
+    } else if (tab === "cancelled") {
+      allRecords = allRecords.filter(r => (r.trangThaiDonHang || "").toLowerCase().includes("hủy"));
+    } else if (tab === "pending") {
+      allRecords = allRecords.filter(r => r.isPending === true);
+    }
+
+    // 2. Lọc theo bộ lọc
+    if (depot) {
+      allRecords = allRecords.filter(r => (r.depot || "").toUpperCase() === depot);
+    }
+    if (hangTau) {
+      allRecords = allRecords.filter(r => (r.hangTau || "").toUpperCase().includes(hangTau));
+    }
+    if (search) {
+      allRecords = allRecords.filter(r =>
+        (r.soContainer && r.soContainer.toLowerCase().includes(search)) ||
+        (r.soBooking && r.soBooking.toLowerCase().includes(search)) ||
+        (r.tenTaiXe && r.tenTaiXe.toLowerCase().includes(search)) ||
+        (r.tenNhaXe && r.tenNhaXe.toLowerCase().includes(search))
+      );
+    }
+
+    const totalRecords = allRecords.length;
+    const totalPages = Math.ceil(totalRecords / limit) || 1;
+    const offset = (page - 1) * limit;
+    const pagedRecords = allRecords.slice(offset, offset + limit);
+
+    return res.json({
+      status: "success",
+      page,
+      limit,
+      totalRecords,
+      totalPages,
+      records: pagedRecords
+    });
+  } catch (err) {
+    return res.status(500).json({ status: "error", message: err.message });
   }
 });
 

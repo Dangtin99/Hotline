@@ -111,6 +111,56 @@ try {
     CREATE INDEX IF NOT EXISTS idx_eir_hang_tau ON eir_cancellation_orders(hang_tau);
     CREATE INDEX IF NOT EXISTS idx_eir_trang_thai ON eir_cancellation_orders(trang_thai_don_hang);
     CREATE INDEX IF NOT EXISTS idx_eir_booking_container ON eir_cancellation_orders(so_booking, so_container);
+
+    -- 3. Bảng order_operational_state: Tách riêng trạng thái CSKH, Giải trình, và Cờ Pending
+    CREATE TABLE IF NOT EXISTS order_operational_state (
+      row_key TEXT PRIMARY KEY,
+      cskh_status TEXT DEFAULT '',
+      explanation TEXT DEFAULT '',
+      is_pending INTEGER DEFAULT 0,
+      pending_at TEXT,
+      updated_by TEXT,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_op_pending ON order_operational_state(is_pending);
+
+    -- 4. Bảng order_status_audit_log: Lịch sử thay đổi trạng thái CSKH / Giải trình / Pending
+    CREATE TABLE IF NOT EXISTS order_status_audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      row_key TEXT,
+      action TEXT,
+      old_status TEXT,
+      new_status TEXT,
+      old_explanation TEXT,
+      new_explanation TEXT,
+      changed_by TEXT,
+      changed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_audit_rowkey ON order_status_audit_log(row_key);
+
+    -- 5. Các bảng Danh mục (Master Dimension Tables)
+    CREATE TABLE IF NOT EXISTS dim_depots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT UNIQUE,
+      name TEXT,
+      is_active INTEGER DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS dim_shipping_lines (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT UNIQUE,
+      name TEXT,
+      is_active INTEGER DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS dim_container_types (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT UNIQUE,
+      size_teus REAL DEFAULT 1.0,
+      is_active INTEGER DEFAULT 1
+    );
+
+    -- Composite Indexes tối ưu truy vấn
+    CREATE INDEX IF NOT EXISTS idx_cancel_depot_date ON cancellation_orders(depot, ngay_huy_don DESC);
+    CREATE INDEX IF NOT EXISTS idx_cancel_book_cont ON cancellation_orders(so_booking, so_container);
   `);
   console.log("Đã kết nối cơ sở dữ liệu SQLite thành công (cancellation_orders.db)");
 } catch (e) {
@@ -157,19 +207,21 @@ function loadAllFromStore() {
   return memoryOrders;
 }
 
-// Lưu dữ liệu vào file JSON và xuất dump file .sql
-function persistStore() {
+// Lưu dữ liệu vào file JSON và xuất dump file .sql (Tối ưu I/O: chỉ sinh dump khi upload file mới hoặc người dùng yêu cầu)
+function persistStore(options = {}) {
   try {
     if (fs.existsSync(DATA_DIR)) {
       fs.writeFileSync(DB_JSON_PATH, JSON.stringify(memoryOrders, null, 2), "utf8");
-      generateSqlDumpFile();
+      if (options.generateDump === true) {
+        generateSqlDumpFile();
+      }
     }
   } catch (err) {
     // Trên Vercel Serverless filesystem là read-only, dữ liệu lưu vĩnh viễn trên Turso Cloud
   }
 
   // Đồng bộ ngầm lên Turso Cloud (fire-and-forget)
-  if (tursoClient) {
+  if (tursoClient && options.syncFullToTurso !== false) {
     tursoClient.syncOrdersToTurso(memoryOrders).catch(err => {
       console.warn("[Turso] Dong bo len Turso that bai:", err.message);
     });
@@ -386,14 +438,31 @@ function getAllRecords() {
   loadAllFromStore();
   applyExpired3hCancellation(memoryOrders);
 
-  return memoryOrders.map((o, idx) => ({
-    ...o,
-    stt: String(idx + 1)
-  }));
+  // Lấy trạng thái tác nghiệp từ bảng order_operational_state nếu có
+  let opMap = new Map();
+  if (sqliteEngine) {
+    try {
+      const rows = sqliteEngine.prepare("SELECT row_key, is_pending, cskh_status, explanation FROM order_operational_state").all();
+      rows.forEach(r => {
+        opMap.set(r.row_key, r);
+      });
+    } catch (e) {}
+  }
+
+  return memoryOrders.map((o, idx) => {
+    const op = opMap.get(o.rowKey);
+    return {
+      ...o,
+      stt: String(idx + 1),
+      isPending: op ? op.is_pending === 1 : Boolean(o.isPending),
+      trangThaiXuLy: (op && op.cskh_status) ? op.cskh_status : (o.trangThaiXuLy || ""),
+      giaiTrinh: (op && op.explanation) ? op.explanation : (o.giaiTrinh || "")
+    };
+  });
 }
 
 /**
- * Cập nhật trạng thái xử lý CSKH hoặc giải trình vào database
+ * Cập nhật trạng thái xử lý CSKH hoặc giải trình vào database (Tối ưu: cập nhật cả bảng chuẩn hóa order_operational_state)
  */
 function updateOrderNote(rowKey, noteData = {}) {
   let matched = memoryOrders.filter(o => o.rowKey === rowKey);
@@ -407,24 +476,117 @@ function updateOrderNote(rowKey, noteData = {}) {
 
   const nowStr = new Date().toISOString().replace("T", " ").substring(0, 19);
   matched.forEach(item => {
+    const oldStatus = item.trangThaiXuLy || "";
+    const oldExp = item.giaiTrinh || "";
+
     if (noteData.status !== undefined) item.trangThaiXuLy = noteData.status;
     if (noteData.giaiTrinh !== undefined) item.giaiTrinh = noteData.giaiTrinh;
     item.updatedAt = nowStr;
 
     if (sqliteEngine) {
       try {
+        // 1. Cập nhật bảng cancellation_orders (tương thích ngược)
         const stmt = sqliteEngine.prepare(`
           UPDATE cancellation_orders 
           SET trang_thai_xu_ly = ?, giai_trinh = ?, updated_at = ? 
           WHERE row_key = ?
         `);
         stmt.run(item.trangThaiXuLy || '', item.giaiTrinh || '', nowStr, item.rowKey);
+
+        // 2. Cập nhật bảng chuẩn hóa order_operational_state
+        const stmtOp = sqliteEngine.prepare(`
+          INSERT INTO order_operational_state (row_key, cskh_status, explanation, updated_at)
+          VALUES (?, ?, ?, ?)
+          ON CONFLICT(row_key) DO UPDATE SET
+            cskh_status = excluded.cskh_status,
+            explanation = excluded.explanation,
+            updated_at = excluded.updated_at
+        `);
+        stmtOp.run(item.trangThaiXuLy || '', item.giaiTrinh || '', nowStr, item.rowKey);
+
+        // 3. Ghi audit log
+        const stmtAudit = sqliteEngine.prepare(`
+          INSERT INTO order_status_audit_log (row_key, action, old_status, new_status, old_explanation, new_explanation, changed_by, changed_at)
+          VALUES (?, 'UPDATE_NOTE', ?, ?, ?, ?, ?, ?)
+        `);
+        stmtAudit.run(item.rowKey, oldStatus, item.trangThaiXuLy || '', oldExp, item.giaiTrinh || '', noteData.user || 'admin', nowStr);
       } catch (e) {}
     }
   });
 
-  persistStore();
+  // Tối ưu I/O: lưu file JSON nhưng không chạy nối chuỗi SQL Dump 300KB
+  persistStore({ generateDump: false, syncFullToTurso: false });
+
+  // Đồng bộ riêng bản ghi này lên Turso
+  if (tursoClient) {
+    tursoClient.updateOrderNoteInTurso(rowKey, noteData).catch(() => {});
+  }
+
   return true;
+}
+
+/**
+ * Cập nhật trạng thái Chờ Xử Lý (Pending) cho 1 đơn hàng vào Database
+ */
+function setOrderPending(rowKey, isPending = true) {
+  let matched = memoryOrders.filter(o => o.rowKey === rowKey);
+  if (matched.length === 0 && rowKey) {
+    matched = memoryOrders.filter(o => (o.id && String(o.id) === String(rowKey)) || (o.soEir && o.soEir === rowKey) || (o.soContainer && o.soContainer === rowKey));
+  }
+  if (matched.length === 0) return false;
+
+  const nowStr = new Date().toISOString().replace("T", " ").substring(0, 19);
+  matched.forEach(item => {
+    item.isPending = Boolean(isPending);
+    item.pendingAt = isPending ? nowStr : null;
+
+    if (sqliteEngine) {
+      try {
+        const stmt = sqliteEngine.prepare(`
+          INSERT INTO order_operational_state (row_key, is_pending, pending_at, updated_at)
+          VALUES (?, ?, ?, ?)
+          ON CONFLICT(row_key) DO UPDATE SET
+            is_pending = excluded.is_pending,
+            pending_at = excluded.pending_at,
+            updated_at = excluded.updated_at
+        `);
+        stmt.run(item.rowKey, isPending ? 1 : 0, isPending ? nowStr : null, nowStr);
+      } catch (e) {}
+    }
+
+    if (tursoClient) {
+      tursoClient.syncPendingStateToTurso(item.rowKey, isPending).catch(() => {});
+    }
+  });
+
+  persistStore({ generateDump: false, syncFullToTurso: false });
+  return true;
+}
+
+/**
+ * Cập nhật hàng loạt danh sách đơn vào/ra khỏi Chờ Xử Lý (Pending)
+ */
+function batchSetOrdersPending(rowKeys = [], isPending = true) {
+  if (!Array.isArray(rowKeys) || rowKeys.length === 0) return { updated: 0 };
+  let count = 0;
+  rowKeys.forEach(key => {
+    if (setOrderPending(key, isPending)) count++;
+  });
+  return { updated: count, total: rowKeys.length };
+}
+
+/**
+ * Lấy danh sách các rowKey đang ở trạng thái Chờ Xử Lý (Pending) từ Database
+ */
+function getPendingOrderKeys() {
+  if (sqliteEngine) {
+    try {
+      const stmt = sqliteEngine.prepare("SELECT row_key FROM order_operational_state WHERE is_pending = 1");
+      const rows = stmt.all();
+      return rows.map(r => r.row_key);
+    } catch (e) {}
+  }
+  return memoryOrders.filter(o => o.isPending).map(o => o.rowKey);
 }
 
 /**
@@ -1667,5 +1829,8 @@ module.exports = {
   deduplicateOrdersByEir,
   deduplicateOrdersByEirAsync,
   insertManualOrder,
-  insertManualOrderAsync
+  insertManualOrderAsync,
+  setOrderPending,
+  batchSetOrdersPending,
+  getPendingOrderKeys
 };

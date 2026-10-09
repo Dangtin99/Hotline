@@ -181,12 +181,70 @@ async function initTursoSchema() {
     );
   `);
 
-  // Indexes
+  // 5. Bảng order_operational_state: Tách riêng trạng thái CSKH, Giải trình, và Cờ Pending
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS order_operational_state (
+      row_key TEXT PRIMARY KEY,
+      cskh_status TEXT DEFAULT '',
+      explanation TEXT DEFAULT '',
+      is_pending INTEGER DEFAULT 0,
+      pending_at TEXT,
+      updated_by TEXT,
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+
+  // 6. Bảng order_status_audit_log: Lịch sử thay đổi trạng thái CSKH / Giải trình / Pending
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS order_status_audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      row_key TEXT,
+      action TEXT,
+      old_status TEXT,
+      new_status TEXT,
+      old_explanation TEXT,
+      new_explanation TEXT,
+      changed_by TEXT,
+      changed_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+
+  // 7. Các bảng Danh mục (Master Dimension Tables)
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS dim_depots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT UNIQUE,
+      name TEXT,
+      is_active INTEGER DEFAULT 1
+    );
+  `);
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS dim_shipping_lines (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT UNIQUE,
+      name TEXT,
+      is_active INTEGER DEFAULT 1
+    );
+  `);
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS dim_container_types (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT UNIQUE,
+      size_teus REAL DEFAULT 1.0,
+      is_active INTEGER DEFAULT 1
+    );
+  `);
+
+  // Indexes Tối Ưu Hóa Truy Vấn
   await client.execute(`CREATE INDEX IF NOT EXISTS idx_turso_cancel_depot ON cancellation_orders(depot);`);
   await client.execute(`CREATE INDEX IF NOT EXISTS idx_turso_cancel_line ON cancellation_orders(hang_tau);`);
   await client.execute(`CREATE INDEX IF NOT EXISTS idx_turso_cancel_status ON cancellation_orders(trang_thai_don_hang);`);
+  await client.execute(`CREATE INDEX IF NOT EXISTS idx_turso_cancel_depot_date ON cancellation_orders(depot, ngay_huy_don DESC);`);
+  await client.execute(`CREATE INDEX IF NOT EXISTS idx_turso_cancel_book_cont ON cancellation_orders(so_booking, so_container);`);
   await client.execute(`CREATE INDEX IF NOT EXISTS idx_turso_eir_depot ON eir_cancellation_orders(depot);`);
   await client.execute(`CREATE INDEX IF NOT EXISTS idx_turso_eir_booking_cont ON eir_cancellation_orders(so_booking, so_container);`);
+  await client.execute(`CREATE INDEX IF NOT EXISTS idx_turso_op_pending ON order_operational_state(is_pending);`);
+  await client.execute(`CREATE INDEX IF NOT EXISTS idx_turso_audit_key ON order_status_audit_log(row_key);`);
 
   isSchemaInitialized = true;
 }
@@ -295,6 +353,7 @@ async function updateOrderNoteInTurso(rowKey, noteData = {}) {
   if (!client) return false;
   try {
     const nowStr = new Date().toISOString().replace("T", " ").substring(0, 19);
+    // 1. Cập nhật vào cancellation_orders (tương thích ngược)
     await client.execute({
       sql: `UPDATE cancellation_orders 
             SET trang_thai_xu_ly = COALESCE(?, trang_thai_xu_ly),
@@ -308,10 +367,91 @@ async function updateOrderNoteInTurso(rowKey, noteData = {}) {
         rowKey
       ]
     });
+
+    // 2. Cập nhật vào bảng chuẩn hóa order_operational_state
+    await client.execute({
+      sql: `INSERT INTO order_operational_state (row_key, cskh_status, explanation, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(row_key) DO UPDATE SET
+              cskh_status = COALESCE(NULLIF(excluded.cskh_status, ''), order_operational_state.cskh_status),
+              explanation = COALESCE(NULLIF(excluded.explanation, ''), order_operational_state.explanation),
+              updated_at = excluded.updated_at;`,
+      args: [
+        rowKey,
+        noteData.status !== undefined ? noteData.status : "",
+        noteData.giaiTrinh !== undefined ? noteData.giaiTrinh : "",
+        nowStr
+      ]
+    });
+
+    // 3. Ghi nhật ký kiểm toán vào order_status_audit_log
+    await client.execute({
+      sql: `INSERT INTO order_status_audit_log (row_key, action, new_status, new_explanation, changed_by, changed_at)
+            VALUES (?, 'UPDATE_NOTE', ?, ?, ?, ?)`,
+      args: [
+        rowKey,
+        noteData.status || "",
+        noteData.giaiTrinh || "",
+        noteData.user || "admin",
+        nowStr
+      ]
+    });
+
     return true;
   } catch (e) {
     console.error("[Turso] Lỗi updateOrderNoteInTurso:", e.message);
     return false;
+  }
+}
+
+/**
+ * Cập nhật trạng thái Chờ Xử Lý (Pending) vào Turso
+ */
+async function syncPendingStateToTurso(rowKey, isPending) {
+  const client = getTursoClient();
+  if (!client) return false;
+  try {
+    const nowStr = new Date().toISOString().replace("T", " ").substring(0, 19);
+    await client.execute({
+      sql: `INSERT INTO order_operational_state (row_key, is_pending, pending_at, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(row_key) DO UPDATE SET
+              is_pending = excluded.is_pending,
+              pending_at = excluded.pending_at,
+              updated_at = excluded.updated_at;`,
+      args: [rowKey, isPending ? 1 : 0, isPending ? nowStr : null, nowStr]
+    });
+    return true;
+  } catch (e) {
+    console.error("[Turso] Lỗi syncPendingStateToTurso:", e.message);
+    return false;
+  }
+}
+
+/**
+ * Lấy toàn bộ trạng thái tác nghiệp nội bộ từ Turso
+ */
+async function getAllOperationalStatesFromTurso() {
+  const client = getTursoClient();
+  if (!client) return {};
+  try {
+    await initTursoSchema();
+    const res = await client.execute("SELECT * FROM order_operational_state;");
+    const map = {};
+    res.rows.forEach(r => {
+      map[r.row_key] = {
+        rowKey: r.row_key,
+        cskhStatus: r.cskh_status,
+        explanation: r.explanation,
+        isPending: r.is_pending === 1,
+        pendingAt: r.pending_at,
+        updatedAt: r.updated_at
+      };
+    });
+    return map;
+  } catch (e) {
+    console.error("[Turso] Lỗi getAllOperationalStatesFromTurso:", e.message);
+    return {};
   }
 }
 
@@ -689,5 +829,7 @@ module.exports = {
   getVerificationHistoryFromTurso,
   saveVerificationHistoryItemToTurso,
   deleteVerificationHistoryItemFromTurso,
-  getTursoRowCount
+  getTursoRowCount,
+  syncPendingStateToTurso,
+  getAllOperationalStatesFromTurso
 };

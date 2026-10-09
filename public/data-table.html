@@ -100,6 +100,10 @@
             <span>Đơn Hủy</span>
             <span class="tab-count-badge badge-danger" id="tabCountCancelled">0</span>
           </button>
+          <button class="tab-btn" id="tabPendingOrders" data-tab="pending" title="Các đơn hủy đang chờ xử lý - chuyển từ tab Đơn Hủy">
+            <span>Chờ Xử Lý</span>
+            <span class="tab-count-badge" id="tabCountPending" style="background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa;">0</span>
+          </button>
         </div>
 
         <!-- Vùng điều khiển tác vụ bên phải tab -->
@@ -292,6 +296,7 @@
               <th style="width: 180px; min-width: 180px;">Tên Nhà Xe</th>
               <th style="width: 120px; min-width: 120px;">SĐT Nhà Xe</th>
               <th style="min-width: 250px;">Lý Do Từ Chối Duyệt</th>
+              <th id="thColPending" class="col-pending-action" style="width: 110px; min-width: 110px; background: #fff7ed; color: #c2410c; text-align: center; display: none;">Chuyển Chờ</th>
               <th style="width: 220px; min-width: 220px; background: #e0f2fe; color: var(--blue-primary); text-align: center;">Trạng Thái</th>
               <th style="width: 260px; min-width: 260px; background: #e0f2fe; color: var(--blue-primary);">Giải Trình</th>
             </tr>

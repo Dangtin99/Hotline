@@ -46,9 +46,11 @@ const selectFreezeCols = document.getElementById("selectFreezeCols");
 const tabAllOrders = document.getElementById("tabAllOrders");
 const tabUnpaidOrders = document.getElementById("tabUnpaidOrders");
 const tabCancelledOrders = document.getElementById("tabCancelledOrders");
+const tabPendingOrders = document.getElementById("tabPendingOrders");
 const tabCountAll = document.getElementById("tabCountAll");
 const tabCountUnpaid = document.getElementById("tabCountUnpaid");
 const tabCountCancelled = document.getElementById("tabCountCancelled");
+const tabCountPending = document.getElementById("tabCountPending");
 const navDataTable = document.getElementById("navDataTable");
 const navUnpaid = document.getElementById("navUnpaid");
 const navCancelled = document.getElementById("navCancelled");
@@ -58,9 +60,20 @@ let vnClockInterval = null;
 const btnUpdateData = document.getElementById("btnUpdateData");
 const btnDeduplicateData = document.getElementById("btnDeduplicateData");
 const btnAddManualRow = document.getElementById("btnAddManualRow");
+const thColPending = document.getElementById("thColPending");
 
-// Trạng thái tab hiện tại: 'all' (Tất cả), 'unpaid' (Chưa thanh toán), hoặc 'cancelled' (Đơn Hủy)
+// Hàm ẩn/hiện cột header Chuyển Chờ - chỉ hiển thị ở tab Đơn Hủy
+function updatePendingColumnHeader() {
+  if (thColPending) {
+    thColPending.style.display = currentTab === "cancelled" ? "" : "none";
+  }
+}
+
+// Trạng thái tab hiện tại: 'all', 'unpaid', 'cancelled', 'pending'
 let currentTab = "all";
+
+// Danh sách đơn đã chuyển sang tab Chờ Xử Lý (lưu theo session, dùng sessionStorage)
+let pendingRows = JSON.parse(sessionStorage.getItem("gpg_pending_rows") || "[]");
 
 // Trạng thái số lượng cột cố định (Mặc định: 3 cột)
 let currentFrozenCount = parseInt(localStorage.getItem("gpg_frozen_cols") ?? "3", 10);
@@ -767,7 +780,7 @@ document.addEventListener("DOMContentLoaded", () => {
     applyFrozenColumns();
   });
 
-  // Lắng nghe sự kiện chuyển tab (Tất Cả <-> Chưa Thanh Toán <-> Đơn Hủy)
+  // Lắng nghe sự kiện chuyển tab (Tất Cả <-> Chưa Thanh Toán <-> Đơn Hủy <-> Chờ Xử Lý)
   if (tabAllOrders) {
     tabAllOrders.onclick = () => switchTab("all");
   }
@@ -776,6 +789,9 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   if (tabCancelledOrders) {
     tabCancelledOrders.onclick = () => switchTab("cancelled");
+  }
+  if (tabPendingOrders) {
+    tabPendingOrders.onclick = () => switchTab("pending");
   }
   if (navUnpaid) {
     navUnpaid.onclick = (e) => {
@@ -795,6 +811,32 @@ document.addEventListener("DOMContentLoaded", () => {
       switchTab("all");
     };
   }
+
+  // Lắng nghe sự kiện click nút Chuyển Chờ trên từng dòng trong bảng (chỉ có tại Tab Đơn Hủy)
+  if (tbodyFullData) {
+    tbodyFullData.addEventListener("click", (e) => {
+      const btn = e.target.closest(".btn-row-move-pending");
+      if (!btn) return;
+      const rowId = decodeURIComponent(btn.getAttribute("data-rowid") || "");
+      const rowKey = btn.getAttribute("data-rowkey") || rowId;
+      if (!rowId) return;
+      if (!pendingRows.includes(rowId)) {
+        pendingRows.push(rowId);
+        sessionStorage.setItem("gpg_pending_rows", JSON.stringify(pendingRows));
+      }
+      // Đồng bộ trạng thái Pending bền vững lên máy chủ Cơ sở dữ liệu
+      fetch("/api/orders/pending", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rowKey: rowKey, isPending: true })
+      }).catch(() => {});
+
+      updateTabCounts();
+      showAlert("Đã chuyển đơn vào danh sách Chờ Xử Lý.", false);
+      applyFilters();
+    });
+  }
+
 
   // Lắng nghe sự kiện click nút Cập Nhật Dữ Liệu (Tab Tất Cả Đơn)
   if (btnUpdateData) {
@@ -993,6 +1035,9 @@ document.addEventListener("DOMContentLoaded", () => {
         <td>
           <input type="text" id="manual_lyDoTuChoi" class="manual-row-input" placeholder="Lý do từ chối" title="Lý do từ chối">
         </td>
+        ${currentTab === "cancelled" ? `
+          <td class="col-pending-action text-center" style="color: #94a3b8; font-size: 12px; vertical-align: middle;">-</td>
+        ` : ""}
         <td>
           <select id="manual_trangThaiXuLy" class="manual-row-select" title="Trạng thái chăm sóc khách hàng">
             <option value="">-- Chọn trạng thái --</option>
@@ -1344,6 +1389,7 @@ function switchTab(tabName, updateUrl = true) {
     tabAllOrders.classList.remove("active");
     tabUnpaidOrders.classList.remove("active");
     if (tabCancelledOrders) tabCancelledOrders.classList.remove("active");
+    if (tabPendingOrders) tabPendingOrders.classList.remove("active");
     if (navDataTable) navDataTable.classList.remove("active");
     if (navUnpaid) navUnpaid.classList.remove("active");
     if (navCancelled) navCancelled.classList.remove("active");
@@ -1365,6 +1411,21 @@ function switchTab(tabName, updateUrl = true) {
       stopVietnamClock();
       if (btnUpdateData) btnUpdateData.style.display = "none";
       if (btnDeduplicateData) btnDeduplicateData.style.display = "none";
+
+    } else if (currentTab === "pending") {
+      if (tabPendingOrders) tabPendingOrders.classList.add("active");
+
+      // Đồng bộ bộ lọc trạng thái: khôi phục tất cả (pending tự lọc theo pendingRows)
+      if (statusOptionsList && allStatusValues.length > 0) {
+        const checkboxes = statusOptionsList.querySelectorAll(".status-cb");
+        checkboxes.forEach(cb => { cb.checked = true; });
+        selectedStatuses = [...allStatusValues];
+        updateStatusButtonLabel();
+      }
+      stopVietnamClock();
+      if (btnUpdateData) btnUpdateData.style.display = "none";
+      if (btnDeduplicateData) btnDeduplicateData.style.display = "none";
+
     } else if (currentTab === "unpaid") {
       tabUnpaidOrders.classList.add("active");
       if (navUnpaid) navUnpaid.classList.add("active");
@@ -1413,6 +1474,8 @@ function switchTab(tabName, updateUrl = true) {
       url.searchParams.set("tab", "unpaid");
     } else if (currentTab === "cancelled") {
       url.searchParams.set("tab", "cancelled");
+    } else if (currentTab === "pending") {
+      url.searchParams.set("tab", "pending");
     } else {
       url.searchParams.delete("tab");
     }
@@ -1421,6 +1484,9 @@ function switchTab(tabName, updateUrl = true) {
 
   // Cập nhật các tùy chọn của bộ lọc Trạng Thái CSKH theo tab tương ứng
   updateFilterContactStatusDropdown(currentTab);
+
+  // Cập nhật ẩn/hiện cột header Chuyển Chờ (chỉ hiện ở tab Đơn Hủy)
+  updatePendingColumnHeader();
 
   applyFilters();
 }
@@ -1479,6 +1545,7 @@ function updateTabCounts() {
   if (tabCountAll) tabCountAll.textContent = totalCount;
   if (tabCountUnpaid) tabCountUnpaid.textContent = unpaidCount;
   if (tabCountCancelled) tabCountCancelled.textContent = cancelledCount;
+  if (tabCountPending) tabCountPending.textContent = pendingRows.length;
 }
 
 function showAlert(msg, isError = true) {
@@ -1571,12 +1638,22 @@ async function loadDataset() {
     // Cập nhật các đơn Chưa thanh toán quá 3h thành Đã hủy
     applyExpired3hCancellation(allRecords);
 
+    // Đồng bộ danh sách đơn Chờ Xử Lý (Pending) từ Cơ sở dữ liệu máy chủ
+    allRecords.forEach(r => {
+      const rid = r.id || r._rowId || r.soEir || r.soContainer;
+      if (r.isPending && rid && !pendingRows.includes(rid)) {
+        pendingRows.push(rid);
+      }
+    });
+    sessionStorage.setItem("gpg_pending_rows", JSON.stringify(pendingRows));
+
     populateFilterDropdowns(allRecords);
     updateTabCounts();
     const initUrlParams = new URLSearchParams(window.location.search);
     let initialTab = "all";
     if (initUrlParams.get("tab") === "unpaid") initialTab = "unpaid";
     else if (initUrlParams.get("tab") === "cancelled") initialTab = "cancelled";
+    else if (initUrlParams.get("tab") === "pending") initialTab = "pending";
     switchTab(initialTab, false);
   } catch (err) {
     showAlert(err.message || "Lỗi khi nạp dữ liệu.");
@@ -1630,7 +1707,7 @@ function applyFilters() {
   }
 
   filteredRecords = allRecords.filter(r => {
-    // 0. Phân loại theo Tab (Tất Cả Đơn, Chỉ Đơn Chưa Thanh Toán, hoặc Chỉ Đơn Hủy)
+    // 0. Phân loại theo Tab (Tất Cả Đơn, Chỉ Đơn Chưa Thanh Toán, Chỉ Đơn Hủy, hoặc Chờ Xử Lý)
     if (currentTab === "unpaid") {
       if (warning3hVal === "expired") {
         if (!isUnpaidOrder(r) && !r.isAutoCancelledBy3h) return false;
@@ -1639,6 +1716,10 @@ function applyFilters() {
       }
     } else if (currentTab === "cancelled") {
       if (!isCancelledOrder(r)) return false;
+    } else if (currentTab === "pending") {
+      // Chỉ hiển thị các đơn đã được chuyển vào pending
+      const rid = r.id || r._rowId || r.soEir || r.soContainer;
+      if (!pendingRows.includes(rid)) return false;
     }
 
     // 0.1. Lọc theo Khoảng Ngày (Ngày Hủy Đơn hoặc Ngày Được Duyệt)
@@ -1782,10 +1863,12 @@ function renderTable(records) {
     totalRowsBadge.style.padding = "6px 14px";
   }
 
+  const colSpanCount = currentTab === "cancelled" ? 24 : 23;
+
   if (!records || records.length === 0) {
     tbodyFullData.innerHTML = `
       <tr>
-        <td colspan="23" class="text-center py-4 text-muted">
+        <td colspan="${colSpanCount}" class="text-center py-4 text-muted">
           Không tìm thấy đơn hàng nào phù hợp với bộ lọc hiện tại.
         </td>
       </tr>
@@ -1863,6 +1946,8 @@ function renderTable(records) {
 
     // Tách số Container và số EIR (trước dấu '-' là EIR, sau dấu '-' là Container)
     const contEir = parseContainerAndEir(r.soContainer);
+    const rId = r.id || r._rowId || r.soEir || r.soContainer || "";
+    const isRowInPending = pendingRows.includes(rId);
 
     return `
       <tr data-rowkey="${rowKey}">
@@ -1887,6 +1972,17 @@ function renderTable(records) {
         <td>${r.tenNhaXe || "-"}</td>
         <td style="font-size: 12.5px; font-family: monospace;">${r.sdtNhaXe || "-"}</td>
         <td style="max-width: 280px; white-space: normal; color: #b45309; font-size: 13px; line-height: 1.4;">${r.lyDoTuChoi || "-"}</td>
+        ${currentTab === "cancelled" ? `
+          <td class="col-pending-action text-center" style="padding: 6px 8px; vertical-align: middle;">
+            ${isRowInPending ? `
+              <span class="badge" style="background: #ffedd5; color: #c2410c; font-size: 11px; padding: 4px 8px; border: 1px solid #fed7aa; display: inline-block;">Đã chuyển chờ</span>
+            ` : `
+              <button type="button" class="btn btn-warning btn-sm btn-row-move-pending" data-rowid="${encodeURIComponent(rId)}" data-rowkey="${rowKey}" style="background: #ea580c; color: #ffffff; border: none; padding: 4px 10px; font-size: 12px; font-weight: 600; border-radius: 4px; cursor: pointer; white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.05);" title="Chuyển đơn này vào tab Chờ Xử Lý">
+                Chuyển chờ
+              </button>
+            `}
+          </td>
+        ` : ""}
         <td class="text-center" style="padding: 6px 10px;">${statusSelectHtml}</td>
         <td style="padding: 6px 10px;">${expInputHtml}</td>
       </tr>
