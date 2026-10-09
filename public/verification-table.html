@@ -295,54 +295,99 @@
         </div>
       </div>
 
-      <!-- Bộ lọc và Tìm kiếm nhanh -->
-      <div class="filter-toolbar">
-        <div class="search-box">
-          <input type="text" id="searchInput" placeholder="Tìm theo Số EIR, Booking, Container, Tài xế, Nhà xe, Lý do...">
+      <!-- Bộ lọc và Tìm kiếm nhanh theo giao diện Control Center -->
+      <section class="filter-panel" aria-labelledby="verificationFilterTitle">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">CONTROL CENTER</p>
+            <h2 id="verificationFilterTitle">Bộ lọc điều hành kiểm tra đơn</h2>
+          </div>
+          <span id="verificationRecordCountBadge" class="live-status">Dữ liệu kiểm tra</span>
         </div>
 
-        <div class="filter-group">
-          <!-- Bộ lọc Depot -->
-          <select id="filterDepot" class="filter-select">
-            <option value="">Tất cả Depot</option>
-          </select>
-
-          <!-- Bộ lọc Hãng tàu -->
-          <select id="filterLine" class="filter-select">
-            <option value="">Tất cả Hãng tàu</option>
-          </select>
-
-          <!-- Bộ lọc Chiều vận hành -->
-          <select id="filterDirection" class="filter-select">
-            <option value="">Chiều Gate IN / OUT</option>
-            <option value="OUT">Gate OUT (Lấy cont)</option>
-            <option value="IN">Gate IN (Hạ cont)</option>
-          </select>
-
-          <!-- Bộ lọc Trạng thái đơn -->
-          <select id="filterStatus" class="filter-select">
-            <option value="">Trạng thái đơn</option>
-          </select>
-
-          <!-- Bộ lọc Trạng thái kích hoạt -->
-          <select id="filterActivation" class="filter-select">
-            <option value="">Kích hoạt xếp tài</option>
-            <option value="Đã kích hoạt">Đã kích hoạt</option>
-            <option value="Chưa kích hoạt">Chưa kích hoạt</option>
-          </select>
-
-          <!-- Bộ lọc Khoảng ngày -->
-          <div class="date-filter-group" title="Lọc theo ngày phát sinh">
-            <input type="date" id="filterDateFrom" class="filter-select filter-date-input" title="Từ ngày">
-            <span class="date-sep">-</span>
-            <input type="date" id="filterDateTo" class="filter-select filter-date-input" title="Đến ngày">
-            <button type="button" id="btnClearDateFilter" class="btn-clear-date" title="Xóa lọc ngày" style="display: none;">×</button>
+        <!-- Lưới bộ lọc: Thu nhỏ, chia đều mỗi hàng 4 bộ lọc -->
+        <div class="filters-grid">
+          <!-- Hàng 1 - Cột 1: Từ Ngày -->
+          <div class="filter-field date-field">
+            <label for="filterDateFrom">Từ ngày</label>
+            <div class="date-input-container">
+              <input type="date" id="filterDateFrom" class="filter-select filter-date-input" title="Lọc từ ngày">
+            </div>
           </div>
 
-          <button id="btnResetFilter" class="btn btn-outline btn-sm">Đặt Lại</button>
-          <button id="btnExportCsv" class="btn btn-outline btn-sm" title="Xuất dữ liệu đang lọc ra tệp CSV">Xuất CSV</button>
+          <!-- Hàng 1 - Cột 2: Đến Ngày -->
+          <div class="filter-field date-field">
+            <label for="filterDateTo">Đến ngày</label>
+            <div class="date-input-container" style="position: relative; display: flex; align-items: center;">
+              <input type="date" id="filterDateTo" class="filter-select filter-date-input" title="Lọc đến ngày" style="width: 100%;">
+              <button type="button" id="btnClearDateFilter" class="btn-clear-date" title="Xóa lọc ngày" style="display: none; position: absolute; right: 30px;">×</button>
+            </div>
+          </div>
+
+          <!-- Hàng 1 - Cột 3: Depot -->
+          <div class="filter-field dropdown-field">
+            <label for="filterDepot">Depot</label>
+            <select id="filterDepot" class="filter-select">
+              <option value="">Tất cả Depot</option>
+            </select>
+          </div>
+
+          <!-- Hàng 1 - Cột 4: Hãng Tàu -->
+          <div class="filter-field dropdown-field">
+            <label for="filterLine">Hãng tàu (Line)</label>
+            <select id="filterLine" class="filter-select">
+              <option value="">Tất cả Hãng tàu</option>
+            </select>
+          </div>
+
+          <!-- Hàng 2 - Cột 1: Chiều Vận Hành -->
+          <div class="filter-field dropdown-field">
+            <label for="filterDirection">Chiều vận hành</label>
+            <select id="filterDirection" class="filter-select">
+              <option value="">Chiều Gate IN / OUT</option>
+              <option value="OUT">Gate OUT (Lấy cont)</option>
+              <option value="IN">Gate IN (Hạ cont)</option>
+            </select>
+          </div>
+
+          <!-- Hàng 2 - Cột 2: Trạng Thái Đơn -->
+          <div class="filter-field dropdown-field">
+            <label for="filterStatus">Trạng thái đơn</label>
+            <select id="filterStatus" class="filter-select">
+              <option value="">Tất cả trạng thái</option>
+            </select>
+          </div>
+
+          <!-- Hàng 2 - Cột 3: Kích Hoạt Xếp Tài -->
+          <div class="filter-field dropdown-field">
+            <label for="filterActivation">Kích hoạt xếp tài</label>
+            <select id="filterActivation" class="filter-select">
+              <option value="">Tất cả</option>
+              <option value="Đã kích hoạt">Đã kích hoạt</option>
+              <option value="Chưa kích hoạt">Chưa kích hoạt</option>
+            </select>
+          </div>
+
+          <!-- Hàng 2 - Cột 4: Tìm Nhanh -->
+          <div class="filter-field search-field">
+            <label for="searchInput">Tìm nhanh</label>
+            <div class="search-box">
+              <input type="text" id="searchInput" placeholder="EIR, Booking, Container, Tài xế, Nhà xe...">
+            </div>
+          </div>
         </div>
-      </div>
+
+        <!-- Hàng riêng: Đặt lại (Ẩn Xuất CSV) -->
+        <div class="filter-actions-row">
+          <div style="font-size: 12px; color: #64748b; font-weight: 500;">
+            Đối soát trực tiếp dữ liệu đơn lệnh EIR cổng bãi
+          </div>
+          <div class="filter-action-buttons" style="display: flex; gap: 8px; align-items: center;">
+            <button id="btnResetFilter" class="btn btn-outline btn-sm" type="button" title="Đặt lại bộ lọc về mặc định">Đặt Lại</button>
+            <button id="btnExportCsv" class="btn btn-outline btn-sm" type="button" style="display: none !important;" title="Xuất dữ liệu đang lọc ra tệp CSV">Xuất CSV</button>
+          </div>
+        </div>
+      </section>
 
       <!-- Bảng dữ liệu chi tiết -->
       <div class="full-table-container">

@@ -564,6 +564,11 @@ function initDashboardFilterControls(records) {
     if (filterWarning3h) filterWarning3h.onchange = applyDashboardFilters;
     if (filterContactStatus) filterContactStatus.onchange = applyDashboardFilters;
     if (btnResetFilter) btnResetFilter.onclick = resetDashboardFilters;
+
+    const searchInputEl = document.getElementById("dashboardSearchInput");
+    if (searchInputEl) {
+      searchInputEl.oninput = () => applyDashboardFilters();
+    }
   }
 }
 
@@ -579,6 +584,8 @@ function applyDashboardFilters() {
   const dateTypeVal = filterDateType ? filterDateType.value : "ngayHuy";
   const dateFromVal = filterDateFrom ? filterDateFrom.value : "";
   const dateToVal = filterDateTo ? filterDateTo.value : "";
+  const searchInputEl = document.getElementById("dashboardSearchInput");
+  const searchVal = searchInputEl ? searchInputEl.value.toLowerCase().trim() : "";
 
   // Cập nhật trạng thái hiển thị của nút xóa ngày và highlight viền
   if (btnClearDateFilter) {
@@ -648,10 +655,27 @@ function applyDashboardFilters() {
       }
     }
 
+    // 8. Search nhanh
+    if (searchVal) {
+      const matchSearch =
+        (r.soContainer && r.soContainer.toLowerCase().includes(searchVal)) ||
+        (r.soEir && r.soEir !== "-" && r.soEir.toLowerCase().includes(searchVal)) ||
+        (r.soBooking && r.soBooking.toLowerCase().includes(searchVal)) ||
+        (r.tenTaiXe && r.tenTaiXe.toLowerCase().includes(searchVal)) ||
+        (r.tenNhaXe && r.tenNhaXe.toLowerCase().includes(searchVal)) ||
+        (r.lyDoHuy && r.lyDoHuy.toLowerCase().includes(searchVal));
+      if (!matchSearch) return false;
+    }
+
     return true;
   });
 
   currentRecords = filtered;
+  const filterSummaryBadge = document.getElementById("filterSummaryBadge");
+  if (filterSummaryBadge) {
+    filterSummaryBadge.textContent = `${filtered ? filtered.length : 0} bản ghi`;
+  }
+
   const analytics = calculateAnalyticsFromRecords(filtered);
   currentAnalyticsData = analytics;
   renderDashboardViews(analytics, filtered);
@@ -659,6 +683,9 @@ function applyDashboardFilters() {
 
 // Đặt lại toàn bộ bộ lọc Dashboard
 function resetDashboardFilters() {
+  const searchInputEl = document.getElementById("dashboardSearchInput");
+  if (searchInputEl) searchInputEl.value = "";
+
   selectedDashboardDepots = [...allDashboardDepots];
   if (depotOptionsList) {
     const checkboxes = depotOptionsList.querySelectorAll(".depot-dashboard-cb");
