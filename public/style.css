@@ -104,7 +104,9 @@ body {
   gap: 12px;
   padding: 11px 16px;
   border-radius: 8px;
-  color: var(--text-main);
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
   font-weight: 600;
   font-size: 14px;
   text-decoration: none;
@@ -116,14 +118,17 @@ body {
 }
 
 .sidebar-link:hover {
-  background: var(--blue-light);
-  color: var(--blue-primary);
+  background: #dbeafe;
+  color: #1e40af;
+  border-color: #93c5fd;
 }
 
 .sidebar-link.active {
-  background: var(--blue-primary);
+  background: #1e3a8a;
   color: #ffffff;
-  box-shadow: 0 2px 4px rgba(29, 78, 216, 0.25);
+  border-color: #172554;
+  box-shadow: 0 3px 6px rgba(30, 58, 138, 0.35);
+  font-weight: 700;
 }
 
 .sidebar-footer {
@@ -318,9 +323,9 @@ body {
   align-items: center;
   gap: 8px;
   padding: 10px 20px;
-  border: 1px solid var(--border-light);
-  background: #ffffff;
-  color: var(--text-muted);
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
   border-radius: 8px;
   font-size: 14px;
   font-weight: 600;
@@ -329,15 +334,17 @@ body {
 }
 
 .tab-btn:hover {
-  background: var(--blue-light);
-  color: var(--blue-primary);
+  background: #dbeafe;
+  color: #1e40af;
+  border-color: #93c5fd;
 }
 
 .tab-btn.active {
-  background: var(--blue-primary);
+  background: #1e3a8a;
   color: #ffffff;
-  border-color: var(--blue-primary);
-  box-shadow: 0 2px 4px rgba(29, 78, 216, 0.2);
+  border-color: #172554;
+  box-shadow: 0 3px 6px rgba(30, 58, 138, 0.3);
+  font-weight: 700;
 }
 
 /* Data Table Sub-Tabs */
