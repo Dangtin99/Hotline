@@ -122,6 +122,7 @@ function getCskhStatusOrder(statusVal) {
   if (str === "Không liên hệ được") return 6;
   if (str === "Đã liên hệ - Đang chờ" || str === "Đã liên hệ - Chờ") return 2;
   if (str === "Không liên hệ được - hủy") return 7;
+  if (str === "Đã liên hệ đã đặt lại") return 4;
   return 999;
 }
 
@@ -133,14 +134,14 @@ function isProcessed3hStatus(trangThaiXuLy) {
 
 // Lấy danh mục trạng thái CSKH phân loại theo từng tab:
 // - Tab Đơn chưa thanh toán: hiển thị các trạng thái 1, 3, 6, 8
-// - Tab Đơn hàng hủy: chỉ hiển thị các trạng thái 2, 5, 7 (đã ẩn trạng thái 4)
+// - Tab Đơn hàng hủy: hiển thị các trạng thái 1, 2, 4, 5, 7, 8 (Thanh toán thành công, Đã liên hệ - Chờ đặt lại, Đã liên hệ - Đã đặt lại, Đã liên hệ - Không đặt lại, Không liên hệ được - Hủy, Tự động đặt lại)
 // - Tab Tất cả đơn hàng: hiển thị tất cả các trạng thái (1 -> 8)
 function getTabCskhStatusOptions(tabName) {
   if (tabName === "unpaid") {
     return CSKH_STATUS_CONFIG.filter(opt => [1, 3, 6, 8].includes(opt.order));
   }
   if (tabName === "cancelled") {
-    return CSKH_STATUS_CONFIG.filter(opt => [2, 5, 7].includes(opt.order));
+    return CSKH_STATUS_CONFIG.filter(opt => [1, 2, 4, 5, 7, 8].includes(opt.order));
   }
   return CSKH_STATUS_CONFIG;
 }
@@ -1514,14 +1515,21 @@ function switchTab(tabName, updateUrl = true) {
 function updateVietnamClock() {
   if (!vnClockDisplay) return;
   try {
-    const timeStr = new Intl.DateTimeFormat("vi-VN", {
+    const parts = new Intl.DateTimeFormat("en-GB", {
       timeZone: "Asia/Ho_Chi_Minh",
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",
       hour12: false
-    }).format(new Date());
-    vnClockDisplay.textContent = timeStr;
+    }).formatToParts(new Date());
+
+    const partMap = {};
+    parts.forEach(p => { partMap[p.type] = p.value; });
+    const hh = partMap.hour === "24" ? "00" : (partMap.hour || "00");
+    const mm = partMap.minute || "00";
+    const ss = partMap.second || "00";
+
+    vnClockDisplay.textContent = `${hh}:${mm}:${ss}`;
   } catch (e) {
     // Dự phòng tính theo độ lệch GMT+7 nếu Intl timeZone không khả dụng
     const now = new Date();
@@ -1649,6 +1657,8 @@ async function loadDataset() {
         st = "Không liên hệ được - Chờ thanh toán";
       } else if (st === "Không liên hệ được - hủy") {
         st = "Không liên hệ được - Hủy";
+      } else if (st === "Đã liên hệ đã đặt lại") {
+        st = "Đã liên hệ - Đã đặt lại";
       }
       r.trangThaiXuLy = st;
       r.giaiTrinh = note.giaiTrinh || r.giaiTrinh || "";
@@ -1811,7 +1821,11 @@ function applyFilters() {
       if (contactStatusVal === "__EMPTY__") {
         if (r.trangThaiXuLy) return false;
       } else if (r.trangThaiXuLy !== contactStatusVal) {
-        return false;
+        if (contactStatusVal === "Đã liên hệ - Đã đặt lại" && r.trangThaiXuLy === "Đã liên hệ đã đặt lại") {
+          // Khớp trạng thái Đã đặt lại
+        } else {
+          return false;
+        }
       }
     }
 

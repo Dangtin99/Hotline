@@ -1785,6 +1785,7 @@ body {
 
 /* 4. Đã liên hệ - Đã đặt lại (Thứ tự 4) */
 .status-badge-select[data-status="Đã liên hệ - Đã đặt lại"],
+.status-badge-select[data-status="Đã liên hệ đã đặt lại"],
 .status-badge-select[data-status-order="4"] {
   background-color: #dcfce7 !important;
   color: #166534 !important;

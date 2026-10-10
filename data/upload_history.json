@@ -1,5 +1,345 @@
 [
   {
+    "id": "UP-1791599960816",
+    "fileName": "bao_cao_24_7_danh_sach_don_huy_208079_20261010091040946.xlsx",
+    "fileSize": "4.2 KB",
+    "uploadedAt": "2026-10-10 02:39:20",
+    "recordCount": 3,
+    "teusCount": 6,
+    "matchPercent": 94,
+    "isValid": true,
+    "validation": {
+      "isValid": true,
+      "tableName": "cancellation_orders",
+      "headerRowIndex": 5,
+      "matchPercent": 94,
+      "totalExpectedColumns": 16,
+      "matchedColumnsCount": 15,
+      "columnsCheck": [
+        {
+          "excelHeader": "STT",
+          "sqlColumn": "stt_file",
+          "type": "VARCHAR(50)",
+          "required": true,
+          "status": "MATCHED",
+          "matchedName": "STT"
+        },
+        {
+          "excelHeader": "Depot",
+          "sqlColumn": "depot",
+          "type": "VARCHAR(20)",
+          "required": true,
+          "status": "MATCHED",
+          "matchedName": "Depot"
+        },
+        {
+          "excelHeader": "Hãng tàu",
+          "sqlColumn": "hang_tau",
+          "type": "VARCHAR(20)",
+          "required": true,
+          "status": "MATCHED",
+          "matchedName": "Hãng tàu"
+        },
+        {
+          "excelHeader": "Ngày hủy đơn",
+          "sqlColumn": "ngay_huy_don",
+          "type": "TIMESTAMP",
+          "required": true,
+          "status": "MATCHED",
+          "matchedName": "Ngày hủy đơn"
+        },
+        {
+          "excelHeader": "Trạng thái đơn hàng",
+          "sqlColumn": "trang_thai_don_hang",
+          "type": "VARCHAR(50)",
+          "required": true,
+          "status": "MATCHED",
+          "matchedName": "Trạng thái đơn hàng"
+        },
+        {
+          "excelHeader": "Lý do hủy",
+          "sqlColumn": "ly_do_huy",
+          "type": "TEXT",
+          "required": true,
+          "status": "MATCHED",
+          "matchedName": "Lý do hủy"
+        },
+        {
+          "excelHeader": "Số booking",
+          "sqlColumn": "so_booking",
+          "type": "VARCHAR(100)",
+          "required": false,
+          "status": "MATCHED",
+          "matchedName": "Số booking"
+        },
+        {
+          "excelHeader": "Số container",
+          "sqlColumn": "so_container",
+          "type": "VARCHAR(100)",
+          "required": false,
+          "status": "MATCHED",
+          "matchedName": "Số container"
+        },
+        {
+          "excelHeader": "Loại container",
+          "sqlColumn": "loai_container",
+          "type": "VARCHAR(100)",
+          "required": false,
+          "status": "MATCHED",
+          "matchedName": "Loại container"
+        },
+        {
+          "excelHeader": "Loại đơn hàng (IN/OUT)",
+          "sqlColumn": "loai_don_hang",
+          "type": "VARCHAR(10)",
+          "required": false,
+          "status": "MATCHED",
+          "matchedName": "Loại đơn hàng (IN/OUT)"
+        },
+        {
+          "excelHeader": "SizeTEUS",
+          "sqlColumn": "size_teus",
+          "type": "NUMERIC(4,2)",
+          "required": false,
+          "status": "MATCHED",
+          "matchedName": "SizeTEUS"
+        },
+        {
+          "excelHeader": "Tên tài xế",
+          "sqlColumn": "ten_tai_xe",
+          "type": "VARCHAR(150)",
+          "required": false,
+          "status": "MATCHED",
+          "matchedName": "Tên tài xế"
+        },
+        {
+          "excelHeader": "Số điện thoại tài xế",
+          "sqlColumn": "sdt_tai_xe",
+          "type": "VARCHAR(50)",
+          "required": false,
+          "status": "MATCHED",
+          "matchedName": "Số điện thoại tài xế"
+        },
+        {
+          "excelHeader": "Tên nhà xe",
+          "sqlColumn": "ten_nha_xe",
+          "type": "VARCHAR(255)",
+          "required": false,
+          "status": "MATCHED",
+          "matchedName": "Tên nhà xe"
+        },
+        {
+          "excelHeader": "Số điện thoại nhà xe",
+          "sqlColumn": "sdt_nha_xe",
+          "type": "VARCHAR(50)",
+          "required": false,
+          "status": "MATCHED",
+          "matchedName": "Số điện thoại nhà xe"
+        },
+        {
+          "excelHeader": "Lý do từ chối",
+          "sqlColumn": "ly_do_tu_choi",
+          "type": "TEXT",
+          "required": false,
+          "status": "OPTIONAL_MISSING",
+          "matchedName": null
+        }
+      ],
+      "missingRequired": [],
+      "dataRowsCount": 3,
+      "sampleRows": [
+        {
+          "STT": "1",
+          "Depot": "SLD",
+          "Hãng tàu": "CMA",
+          "Ngày hủy đơn": "46305.05332190972",
+          "Ngày được duyệt": "46305.01001878472",
+          "Số booking": "AHA0379600",
+          "Số container": "EIR34000429-",
+          "Trạng thái đơn hàng": "Đã hủy",
+          "Trạng thái kích hoạt": "Chưa kích hoạt",
+          "Thời gian kích hoạt": "",
+          "Lý do hủy": "Đơn hàng đã bị từ chối duyệt quá 1 giờ! Tự động hủy!",
+          "Loại container": "Cont 40' HC - cao Khô",
+          "Loại đơn hàng (IN/OUT)": "OUT",
+          "SizeTEUS": "2",
+          "Tên tài xế": "Nguyễn Tất Vinh",
+          "Số điện thoại tài xế": "0932063138",
+          "Tên nhà xe": "VẬN TẢI BỘ",
+          "Số điện thoại nhà xe": "",
+          "Lý do đảo chuyển": "VUI LÒNG CUNG CẤP ĐÚNG HÌNH ẢNH BOOKING/LỆNH CẤP RỖNG",
+          "Lý do hủy_Check": ""
+        },
+        {
+          "STT": "2",
+          "Depot": "SLD",
+          "Hãng tàu": "CMA",
+          "Ngày hủy đơn": "46305.08526435185",
+          "Ngày được duyệt": "46305.04022913195",
+          "Số booking": "ESGN2601005",
+          "Số container": "EIR34000443-TIIU4901151",
+          "Trạng thái đơn hàng": "Đã hủy",
+          "Trạng thái kích hoạt": "Chưa kích hoạt",
+          "Thời gian kích hoạt": "",
+          "Lý do hủy": "Đơn hàng đã bị từ chối duyệt quá 1 giờ! Tự động hủy!",
+          "Loại container": "Cont 40' HC - cao Khô",
+          "Loại đơn hàng (IN/OUT)": "IN",
+          "SizeTEUS": "2",
+          "Tên tài xế": "tống văn hùng",
+          "Số điện thoại tài xế": "0975508488",
+          "Tên nhà xe": "ĐỨC ANH PHÁT",
+          "Số điện thoại nhà xe": "09636033388",
+          "Lý do đảo chuyển": "ĐƠN HÀNG HẠ COTNTAINER, VUI LÒNG CẬP NHẬT ĐẦY ĐỦ HÌNH ẢNH EIR CẢNG & LỆNH HẠ CÓ ĐẦY ĐỦ VÀ RÕ RÀNG THÔNG TIN.",
+          "Lý do hủy_Check": ""
+        },
+        {
+          "STT": "3",
+          "Depot": "SLD",
+          "Hãng tàu": "CMA",
+          "Ngày hủy đơn": "46305.065583414354",
+          "Ngày được duyệt": "46305.02330552083",
+          "Số booking": "SGN3496703",
+          "Số container": "EIR34000439-",
+          "Trạng thái đơn hàng": "Đã hoàn tiền",
+          "Trạng thái kích hoạt": "Chưa kích hoạt",
+          "Thời gian kích hoạt": "46305.08102450232",
+          "Lý do hủy": "Thay đổi kế hoạch nâng hạ.",
+          "Loại container": "Cont 40' HC - cao Khô",
+          "Loại đơn hàng (IN/OUT)": "OUT",
+          "SizeTEUS": "2",
+          "Tên tài xế": "Trần Duy Tân",
+          "Số điện thoại tài xế": "0987866379",
+          "Tên nhà xe": "TNHH TM DV TIẾP VẬN TÙNG PHÁT",
+          "Số điện thoại nhà xe": "0966994039",
+          "Lý do đảo chuyển": "",
+          "Lý do hủy_Check": ""
+        }
+      ],
+      "errors": [],
+      "warnings": []
+    },
+    "data": {
+      "records": [
+        {
+          "stt": "1",
+          "depot": "SLD",
+          "hangTau": "CMA",
+          "ngayHuyDon": "2026-10-10 01:16:47",
+          "ngayDuocDuyet": "2026-10-10 00:14:25",
+          "soBooking": "AHA0379600",
+          "soContainer": "EIR34000429-",
+          "trangThaiDonHang": "Đã hủy",
+          "trangThaiKichHoat": "Chưa kích hoạt",
+          "thoiGianKichHoat": null,
+          "lyDoHuy": "Đơn hàng đã bị từ chối duyệt quá 1 giờ! Tự động hủy!",
+          "loaiContainer": "Cont 40' HC - cao Khô",
+          "loaiDonHang": "OUT",
+          "sizeTeus": 2,
+          "tenTaiXe": "Nguyễn Tất Vinh",
+          "sdtTaiXe": "0932063138",
+          "tenNhaXe": "VẬN TẢI BỘ",
+          "sdtNhaXe": "",
+          "lyDoTuChoi": "",
+          "lyDoHuyCheck": ""
+        },
+        {
+          "stt": "2",
+          "depot": "SLD",
+          "hangTau": "CMA",
+          "ngayHuyDon": "2026-10-10 02:02:46",
+          "ngayDuocDuyet": "2026-10-10 00:57:55",
+          "soBooking": "ESGN2601005",
+          "soContainer": "EIR34000443-TIIU4901151",
+          "trangThaiDonHang": "Đã hủy",
+          "trangThaiKichHoat": "Chưa kích hoạt",
+          "thoiGianKichHoat": null,
+          "lyDoHuy": "Đơn hàng đã bị từ chối duyệt quá 1 giờ! Tự động hủy!",
+          "loaiContainer": "Cont 40' HC - cao Khô",
+          "loaiDonHang": "IN",
+          "sizeTeus": 2,
+          "tenTaiXe": "tống văn hùng",
+          "sdtTaiXe": "0975508488",
+          "tenNhaXe": "ĐỨC ANH PHÁT",
+          "sdtNhaXe": "09636033388",
+          "lyDoTuChoi": "",
+          "lyDoHuyCheck": ""
+        },
+        {
+          "stt": "3",
+          "depot": "SLD",
+          "hangTau": "CMA",
+          "ngayHuyDon": "2026-10-10 01:34:26",
+          "ngayDuocDuyet": "2026-10-10 00:33:33",
+          "soBooking": "SGN3496703",
+          "soContainer": "EIR34000439-",
+          "trangThaiDonHang": "Đã hoàn tiền",
+          "trangThaiKichHoat": "Chưa kích hoạt",
+          "thoiGianKichHoat": "2026-10-10 01:56:40",
+          "lyDoHuy": "Thay đổi kế hoạch nâng hạ.",
+          "loaiContainer": "Cont 40' HC - cao Khô",
+          "loaiDonHang": "OUT",
+          "sizeTeus": 2,
+          "tenTaiXe": "Trần Duy Tân",
+          "sdtTaiXe": "0987866379",
+          "tenNhaXe": "TNHH TM DV TIẾP VẬN TÙNG PHÁT",
+          "sdtNhaXe": "0966994039",
+          "lyDoTuChoi": "",
+          "lyDoHuyCheck": ""
+        }
+      ],
+      "kpis": {
+        "totalOrders": 3,
+        "totalTeus": 6,
+        "byStatus": {
+          "Đã hủy": 2,
+          "Đã hoàn tiền": 1,
+          "Đang hoàn tiền": 0
+        },
+        "byActivation": {
+          "Chưa kích hoạt": 3,
+          "Đã kích hoạt": 0
+        },
+        "byDirection": {
+          "OUT": 2,
+          "IN": 1
+        },
+        "byContainerType": {
+          "Cont 40' HC - cao Khô": 3
+        }
+      },
+      "byDepot": [
+        {
+          "depot": "SLD",
+          "totalOrders": 3,
+          "totalTeus": 6,
+          "inOrders": 1,
+          "outOrders": 2
+        }
+      ],
+      "byShippingLine": [
+        {
+          "hangTau": "CMA",
+          "count": 3,
+          "percentage": 100
+        }
+      ],
+      "topCancelReasons": [
+        {
+          "reason": "Đơn hàng đã bị từ chối duyệt quá 1 giờ! Tự động hủy!",
+          "count": 2,
+          "percentage": 66.7
+        },
+        {
+          "reason": "Thay đổi kế hoạch nâng hạ.",
+          "count": 1,
+          "percentage": 33.3
+        }
+      ],
+      "topRejectReasons": [],
+      "anomalies": []
+    }
+  },
+  {
     "id": "UP-1791357249869",
     "fileName": "bao_cao_24_7_danh_sach_don_huy_208079_20261007141514270.xlsx",
     "fileSize": "8.5 KB",
