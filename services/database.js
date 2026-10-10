@@ -1583,47 +1583,68 @@ function insertManualOrder(orderData) {
  */
 
 async function getAllRecordsAsync(forceRefresh = false) {
-  // 1. Tối ưu siêu tốc: Nếu bộ nhớ RAM hoặc SQLite local đã có dữ liệu và không yêu cầu ép tải lại -> Trả về ngay lập tức (< 3ms)
-  if (!forceRefresh && Array.isArray(memoryOrders) && memoryOrders.length > 0) {
-    return getAllRecords();
-  }
-
-  // 2. Thử nạp từ Local SQLite / JSON file nếu memoryOrders đang rỗng
-  if (memoryOrders.length === 0) {
-    loadAllFromStore();
-    if (memoryOrders.length > 0 && !forceRefresh) {
-      return getAllRecords();
-    }
-  }
-
-  // 3. Nếu vẫn rỗng (môi trường Vercel serverless không ổ đĩa) hoặc được yêu cầu forceRefresh -> Kéo từ Turso Cloud
+  // 1. Nếu Turso Cloud khả dụng -> Turso là Nguồn Chân Lý duy nhất (Source of Truth) trên Vercel & Web
   if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       const tursoRows = await tursoClient.getAllOrdersFromTurso();
-      if (Array.isArray(tursoRows) && tursoRows.length > 0) {
+      if (Array.isArray(tursoRows)) {
         memoryOrders = tursoRows;
         applyExpired3hCancellation(memoryOrders);
-        return memoryOrders.map((o, idx) => ({
-          ...o,
-          stt: String(idx + 1)
-        }));
+
+        // Lấy trạng thái tác nghiệp từ bảng order_operational_state nếu có
+        let opMap = {};
+        try {
+          opMap = await tursoClient.getAllOperationalStatesFromTurso();
+        } catch (opErr) {}
+
+        return memoryOrders.map((o, idx) => {
+          const op = opMap[o.rowKey];
+          return {
+            ...o,
+            stt: String(idx + 1),
+            isPending: op ? op.isPending : Boolean(o.isPending),
+            trangThaiXuLy: (op && op.cskhStatus) ? op.cskhStatus : (o.trangThaiXuLy || ""),
+            giaiTrinh: (op && op.explanation) ? op.explanation : (o.giaiTrinh || "")
+          };
+        });
       }
     } catch (e) {
       console.warn("[Turso] Không thể đọc từ Turso, sử dụng memory store fallback:", e.message);
     }
   }
+
+  // 2. Fallback offline / local khi không có kết nối Turso
+  if (memoryOrders.length === 0) {
+    loadAllFromStore();
+  }
   return getAllRecords();
 }
 
 async function insertRecordsAsync(records, metadata = {}) {
-  // Thêm trực tiếp vào local store & memory
+  // 1. Đảm bảo nạp dữ liệu hiện tại từ Turso Cloud trước khi tích lũy file mới
+  if (tursoClient && tursoClient.isTursoAvailable()) {
+    try {
+      const existingTurso = await tursoClient.getAllOrdersFromTurso();
+      if (Array.isArray(existingTurso)) {
+        memoryOrders = existingTurso;
+      }
+    } catch (e) {
+      console.warn("[Turso] Không thể đọc từ Turso trước khi insert:", e.message);
+    }
+  } else if (memoryOrders.length === 0) {
+    loadAllFromStore();
+  }
+
+  // 2. Thêm trực tiếp vào local store & memory
   const res = insertRecords(records, metadata, false);
 
+  // 3. Đồng bộ hóa toàn bộ danh sách đơn hàng đã tích lũy lên Turso Cloud
   if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       await tursoClient.syncOrdersToTurso(memoryOrders);
     } catch (e) {
       console.error("[Turso] Lỗi đồng bộ orders lên Turso:", e.message);
+      throw new Error(`Lỗi đồng bộ lên CSDL đám mây Turso: ${e.message}`);
     }
   }
 
@@ -1666,30 +1687,25 @@ async function clearDatabaseAsync() {
 }
 
 async function getAllVerificationRecordsAsync(forceRefresh = false) {
-  // 1. Tối ưu siêu tốc: Nếu bộ nhớ RAM hoặc Local SQLite đã có dữ liệu -> Trả về ngay (< 2ms)
-  if (!forceRefresh && Array.isArray(memoryVerificationOrders) && memoryVerificationOrders.length > 0) {
-    return getAllVerificationRecords();
-  }
-
-  // 2. Thử nạp từ Local Store
-  if (memoryVerificationOrders.length === 0) {
-    loadVerificationFromStore();
-    if (memoryVerificationOrders.length > 0 && !forceRefresh) {
-      return getAllVerificationRecords();
-    }
-  }
-
-  // 3. Nếu vẫn rỗng -> Kéo từ Turso Cloud
+  // 1. Nếu Turso Cloud khả dụng -> Turso là Nguồn Chân Lý duy nhất
   if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       const tursoRows = await tursoClient.getAllVerificationOrdersFromTurso();
-      if (Array.isArray(tursoRows) && tursoRows.length > 0) {
+      if (Array.isArray(tursoRows)) {
         memoryVerificationOrders = tursoRows;
-        return memoryVerificationOrders;
+        return memoryVerificationOrders.map((o, idx) => ({
+          ...o,
+          sttFile: String(idx + 1)
+        }));
       }
     } catch (e) {
       console.warn("[Turso] Không thể đọc verification từ Turso:", e.message);
     }
+  }
+
+  // 2. Fallback offline / local
+  if (memoryVerificationOrders.length === 0) {
+    loadVerificationFromStore();
   }
   return getAllVerificationRecords();
 }

@@ -69,17 +69,19 @@ if (!fs.existsSync(DATA_DIR)) {
   } catch (e) {}
 }
 
-// Hàm hỗ trợ đọc / ghi lịch sử đơn duyệt (Ưu tiên nạp tức thời từ local store, fallback Turso khi rỗng)
+// Hàm hỗ trợ đọc / ghi lịch sử đơn duyệt (Turso Cloud là Nguồn Chân Lý duy nhất cho môi trường Web & Vercel)
 async function loadHistoryAsync() {
-  const localList = loadHistory();
-  if (Array.isArray(localList) && localList.length > 0) return localList;
   if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       const items = await tursoClient.getUploadHistoryFromTurso();
-      if (Array.isArray(items) && items.length > 0) return items;
-    } catch (e) {}
+      if (Array.isArray(items)) {
+        return items;
+      }
+    } catch (e) {
+      console.warn("[Turso] Không thể đọc upload_history từ Turso, fallback local:", e.message);
+    }
   }
-  return [];
+  return loadHistory();
 }
 
 function loadHistory() {
@@ -95,10 +97,12 @@ function loadHistory() {
 }
 
 async function saveHistoryAsync(historyItem) {
-  if (tursoClient) {
+  if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       await tursoClient.saveUploadHistoryItemToTurso(historyItem);
-    } catch (e) {}
+    } catch (e) {
+      console.error("[Turso] Lỗi lưu lịch sử đăng tải lên Turso:", e.message);
+    }
   }
   try {
     const list = loadHistory();
@@ -117,17 +121,19 @@ function saveHistory(historyList) {
   }
 }
 
-// Hàm hỗ trợ đọc / ghi lịch sử kiểm tra đơn (Ưu tiên nạp tức thời từ local store, fallback Turso khi rỗng)
+// Hàm hỗ trợ đọc / ghi lịch sử kiểm tra đơn (Turso Cloud là Nguồn Chân Lý duy nhất cho môi trường Web & Vercel)
 async function loadVerificationHistoryAsync() {
-  const localList = loadVerificationHistory();
-  if (Array.isArray(localList) && localList.length > 0) return localList;
   if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       const items = await tursoClient.getVerificationHistoryFromTurso();
-      if (Array.isArray(items) && items.length > 0) return items;
-    } catch (e) {}
+      if (Array.isArray(items)) {
+        return items;
+      }
+    } catch (e) {
+      console.warn("[Turso] Không thể đọc verification_history từ Turso, fallback local:", e.message);
+    }
   }
-  return [];
+  return loadVerificationHistory();
 }
 
 function loadVerificationHistory() {
