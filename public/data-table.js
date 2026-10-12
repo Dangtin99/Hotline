@@ -578,6 +578,39 @@ function extractDateOnly(dateStr) {
   return null;
 }
 
+// Định dạng chuỗi ngày hiển thị sang dạng DD/MM/YYYY hoặc DD/MM/YYYY HH:mm:ss
+function formatDateDisplay(val) {
+  if (!val || val === "-" || val === "null" || val === "undefined") return "-";
+  const str = String(val).trim();
+  if (!str) return "-";
+
+  // Định dạng YYYY-MM-DD hoặc YYYY/MM/DD kèm giờ tùy chọn
+  const ymdMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (ymdMatch) {
+    const y = ymdMatch[1];
+    const m = ymdMatch[2].padStart(2, "0");
+    const d = ymdMatch[3].padStart(2, "0");
+    const time = ymdMatch[4] !== undefined
+      ? ` ${ymdMatch[4].padStart(2, "0")}:${ymdMatch[5].padStart(2, "0")}:${(ymdMatch[6] || "00").padStart(2, "0")}`
+      : "";
+    return `${d}/${m}/${y}${time}`;
+  }
+
+  // Định dạng DD-MM-YYYY hoặc DD/MM/YYYY kèm giờ tùy chọn
+  const dmyMatch = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (dmyMatch) {
+    const d = dmyMatch[1].padStart(2, "0");
+    const m = dmyMatch[2].padStart(2, "0");
+    const y = dmyMatch[3];
+    const time = dmyMatch[4] !== undefined
+      ? ` ${dmyMatch[4].padStart(2, "0")}:${dmyMatch[5].padStart(2, "0")}:${(dmyMatch[6] || "00").padStart(2, "0")}`
+      : "";
+    return `${d}/${m}/${y}${time}`;
+  }
+
+  return str;
+}
+
 // Tách số EIR và số Container từ chuỗi dữ liệu gốc (Ví dụ: EIR33989627-TCKU1000412)
 // Nguyên tắc: Phần trước dấu "-" là số EIR, phần sau dấu "-" là số Container
 function parseContainerAndEir(raw) {
@@ -2006,15 +2039,15 @@ function renderTable(records) {
         <td class="text-center" style="font-weight: 600; color: var(--text-muted);">${r.stt}</td>
         <td><strong style="color: var(--blue-primary);">${r.depot}</strong></td>
         <td><strong>${r.hangTau}</strong></td>
-        <td style="font-size: 12.5px;">${r.ngayHuyDon || "-"}</td>
-        <td style="font-size: 12.5px; color: var(--text-muted);">${r.ngayDuocDuyet || "-"}</td>
+        <td style="font-size: 12.5px;">${formatDateDisplay(r.ngayHuyDon)}</td>
+        <td style="font-size: 12.5px; color: var(--text-muted);">${formatDateDisplay(r.ngayDuocDuyet)}</td>
         <td class="text-center cell-countdown-3h" style="padding: 6px 8px;">${countdownHtml}</td>
         <td><code>${r.soBooking || "-"}</code></td>
         <td><code>${contEir.soContainer}</code></td>
         <td><code>${contEir.soEir}</code></td>
         <td class="cell-order-status"><span class="badge ${statusClass}">${r.trangThaiDonHang}</span></td>
         <td>${actBadge}</td>
-        <td style="font-size: 12.5px; color: var(--text-muted);">${r.thoiGianKichHoat || "-"}</td>
+        <td style="font-size: 12.5px; color: var(--text-muted);">${formatDateDisplay(r.thoiGianKichHoat)}</td>
         <td style="max-width: 280px; white-space: normal; line-height: 1.4;">${r.lyDoHuy || "-"}</td>
         <td style="font-size: 13px;">${r.loaiContainer || "-"}</td>
         <td class="text-center">${dirBadge}</td>

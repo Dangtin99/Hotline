@@ -222,6 +222,37 @@ function extractDateOnly(dateStr) {
   return null;
 }
 
+// Định dạng chuỗi ngày hiển thị sang dạng DD/MM/YYYY hoặc DD/MM/YYYY HH:mm:ss
+function formatDateDisplay(val) {
+  if (!val || val === "-" || val === "null" || val === "undefined") return "-";
+  const str = String(val).trim();
+  if (!str) return "-";
+
+  const ymdMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (ymdMatch) {
+    const y = ymdMatch[1];
+    const m = ymdMatch[2].padStart(2, "0");
+    const d = ymdMatch[3].padStart(2, "0");
+    const time = ymdMatch[4] !== undefined
+      ? ` ${ymdMatch[4].padStart(2, "0")}:${ymdMatch[5].padStart(2, "0")}:${(ymdMatch[6] || "00").padStart(2, "0")}`
+      : "";
+    return `${d}/${m}/${y}${time}`;
+  }
+
+  const dmyMatch = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (dmyMatch) {
+    const d = dmyMatch[1].padStart(2, "0");
+    const m = dmyMatch[2].padStart(2, "0");
+    const y = dmyMatch[3];
+    const time = dmyMatch[4] !== undefined
+      ? ` ${dmyMatch[4].padStart(2, "0")}:${dmyMatch[5].padStart(2, "0")}:${(dmyMatch[6] || "00").padStart(2, "0")}`
+      : "";
+    return `${d}/${m}/${y}${time}`;
+  }
+
+  return str;
+}
+
 // Kiểm tra trạng thái CSKH có thuộc nhóm 1, 3, 6 (tự động cập nhật ĐÃ XỬ LÝ cho hạn hủy 3h) hay không
 function isProcessed3hStatus(trangThaiXuLy) {
   if (!trangThaiXuLy) return false;
@@ -2004,7 +2035,7 @@ function populateInlineDetailRows(records) {
         <td><strong>${r.soContainer || "-"}</strong></td>
         <td>${dirBadge}</td>
         <td><span class="badge ${statusCls}">${status}</span></td>
-        <td><span style="font-size: 12px; color: #475569;">${r.ngayDuocDuyet || r.ngayHuyDon || "-"}</span></td>
+        <td><span style="font-size: 12px; color: #475569;">${formatDateDisplay(r.ngayDuocDuyet || r.ngayHuyDon)}</span></td>
         <td title="${reasonText.replace(/"/g, '&quot;')}">${shortReason}</td>
         <td>${contactStatus}</td>
       </tr>
@@ -2134,7 +2165,7 @@ function renderModalTable(records) {
         <td><strong>${r.soContainer || "-"}</strong></td>
         <td>${dirBadge}</td>
         <td><span class="badge ${statusCls}">${status}</span></td>
-        <td><span style="font-size: 12px; color: #475569;">${r.ngayDuocDuyet || r.ngayHuyDon || "-"}</span></td>
+        <td><span style="font-size: 12px; color: #475569;">${formatDateDisplay(r.ngayDuocDuyet || r.ngayHuyDon)}</span></td>
         <td title="${reasonText.replace(/"/g, '&quot;')}">${shortReason}</td>
         <td>${contactStatus}</td>
       </tr>

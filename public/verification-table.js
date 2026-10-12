@@ -335,8 +335,8 @@ function renderTable() {
         <td><code>${escapeHtml(r.sttFile || "-")}</code></td>
         <td class="text-center"><span class="badge badge-info" style="font-weight:700;">${escapeHtml(r.depot || "-")}</span></td>
         <td class="text-center"><strong>${escapeHtml(r.hangTau || "-")}</strong></td>
-        <td>${escapeHtml(r.ngayHuyDon || "-")}</td>
-        <td>${escapeHtml(r.ngayDuocDuyet || "-")}</td>
+        <td>${escapeHtml(formatDateDisplay(r.ngayHuyDon))}</td>
+        <td>${escapeHtml(formatDateDisplay(r.ngayDuocDuyet))}</td>
         <td><code>${escapeHtml(r.soBooking || "-")}</code></td>
         <td><strong>${escapeHtml(r.soContainer || "-")}</strong></td>
         <td>${escapeHtml(r.loaiContainer || "-")}</td>
@@ -344,7 +344,7 @@ function renderTable() {
         <td class="text-center font-semibold">${Number(r.sizeTeus || 0).toFixed(1)}</td>
         <td>${statusBadge}</td>
         <td class="text-center">${actBadge}</td>
-        <td>${escapeHtml(r.thoiGianKichHoat || "-")}</td>
+        <td>${escapeHtml(formatDateDisplay(r.thoiGianKichHoat))}</td>
         <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.lyDoHuy || "")}">${escapeHtml(r.lyDoHuy || "-")}</td>
         <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.lyDoTuChoi || "")}">${escapeHtml(r.lyDoTuChoi || "-")}</td>
         <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.lyDoHuyCheck || "")}">${escapeHtml(r.lyDoHuyCheck || "-")}</td>
@@ -424,11 +424,11 @@ window.viewOrderDetail = function(key) {
       </div>
       <div class="detail-item">
         <label>Ngày Phát Sinh</label>
-        <div>${escapeHtml(item.ngayHuyDon || "-")}</div>
+        <div>${escapeHtml(formatDateDisplay(item.ngayHuyDon))}</div>
       </div>
       <div class="detail-item">
         <label>Ngày Giờ Được Duyệt</label>
-        <div>${escapeHtml(item.ngayDuocDuyet || "-")}</div>
+        <div>${escapeHtml(formatDateDisplay(item.ngayDuocDuyet))}</div>
       </div>
       <div class="detail-item">
         <label>Trạng Thái Đơn Hàng</label>
@@ -440,7 +440,7 @@ window.viewOrderDetail = function(key) {
       </div>
       <div class="detail-item">
         <label>Thời Gian Kích Hoạt Xếp Tài</label>
-        <div>${escapeHtml(item.thoiGianKichHoat || "-")}</div>
+        <div>${escapeHtml(formatDateDisplay(item.thoiGianKichHoat))}</div>
       </div>
       <div class="detail-item">
         <label>Tệp Dữ Liệu Nguồn</label>
@@ -488,6 +488,36 @@ function escapeHtml(str) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function formatDateDisplay(val) {
+  if (!val || val === "-" || val === "null" || val === "undefined") return "-";
+  const str = String(val).trim();
+  if (!str) return "-";
+
+  const ymdMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (ymdMatch) {
+    const y = ymdMatch[1];
+    const m = ymdMatch[2].padStart(2, "0");
+    const d = ymdMatch[3].padStart(2, "0");
+    const time = ymdMatch[4] !== undefined
+      ? ` ${ymdMatch[4].padStart(2, "0")}:${ymdMatch[5].padStart(2, "0")}:${(ymdMatch[6] || "00").padStart(2, "0")}`
+      : "";
+    return `${d}/${m}/${y}${time}`;
+  }
+
+  const dmyMatch = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (dmyMatch) {
+    const d = dmyMatch[1].padStart(2, "0");
+    const m = dmyMatch[2].padStart(2, "0");
+    const y = dmyMatch[3];
+    const time = dmyMatch[4] !== undefined
+      ? ` ${dmyMatch[4].padStart(2, "0")}:${dmyMatch[5].padStart(2, "0")}:${(dmyMatch[6] || "00").padStart(2, "0")}`
+      : "";
+    return `${d}/${m}/${y}${time}`;
+  }
+
+  return str;
 }
 
 // Xuất CSV dữ liệu đang lọc
