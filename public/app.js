@@ -790,21 +790,21 @@ function applyFrozenColumnsToDetailTable(count) {
 
   const maxCols = Math.min(count, headerCells.length);
   const leftOffsets = [];
-  let currentLeft = 0;
 
   for (let i = 0; i < maxCols; i++) {
-    leftOffsets.push(currentLeft);
     const th = headerCells[i];
+    const leftVal = th.offsetLeft;
+    leftOffsets.push(leftVal);
     th.classList.add("frozen-col");
-    th.style.left = `${currentLeft}px`;
+    th.style.left = `${leftVal}px`;
     if (i === maxCols - 1) {
       th.classList.add("frozen-col-last");
     }
-    currentLeft += Math.round(th.getBoundingClientRect().width);
   }
 
   rows.forEach(tr => {
-    if (tr.children.length < headerCells.length) return;
+    const firstCell = tr.firstElementChild;
+    if (firstCell && firstCell.hasAttribute("colspan")) return;
     for (let i = 0; i < maxCols; i++) {
       const td = tr.children[i];
       if (!td) continue;

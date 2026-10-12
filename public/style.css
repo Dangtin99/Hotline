@@ -1698,18 +1698,18 @@ body {
 .inline-detail-table td.frozen-col {
   position: sticky !important;
   z-index: 5 !important;
-  background-color: #ffffff;
+  background-color: #ffffff !important;
 }
 
-.full-excel-table tr:nth-child(even) td.frozen-col,
-.inline-detail-table tr:nth-child(even) td.frozen-col {
-  background-color: #f8fafc;
+.full-excel-table tbody tr:nth-child(even) td.frozen-col,
+.inline-detail-table tbody tr:nth-child(even) td.frozen-col {
+  background-color: #f8fafc !important;
 }
 
-.full-excel-table tr:hover td.frozen-col,
-.full-excel-table tr:nth-child(even):hover td.frozen-col,
-.inline-detail-table tr:hover td.frozen-col,
-.inline-detail-table tr:nth-child(even):hover td.frozen-col {
+.full-excel-table tbody tr:hover td.frozen-col,
+.full-excel-table tbody tr:nth-child(even):hover td.frozen-col,
+.inline-detail-table tbody tr:hover td.frozen-col,
+.inline-detail-table tbody tr:nth-child(even):hover td.frozen-col {
   background-color: #eff6ff !important;
 }
 

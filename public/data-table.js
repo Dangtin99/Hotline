@@ -2213,23 +2213,23 @@ function applyFrozenColumns(count) {
 
   const maxCols = Math.min(count, headerCells.length);
   const leftOffsets = [];
-  let currentLeft = 0;
 
   for (let i = 0; i < maxCols; i++) {
-    leftOffsets.push(currentLeft);
     const th = headerCells[i];
+    const leftVal = th.offsetLeft;
+    leftOffsets.push(leftVal);
     th.classList.add("frozen-col");
-    th.style.left = `${currentLeft}px`;
+    th.style.left = `${leftVal}px`;
     if (i === maxCols - 1) {
       th.classList.add("frozen-col-last");
     }
-    currentLeft += Math.round(th.getBoundingClientRect().width);
   }
 
   // Áp dụng cho các dòng dữ liệu trong tbody
   rows.forEach(tr => {
-    // Bỏ qua các dòng thông báo (colspan)
-    if (tr.children.length < headerCells.length) return;
+    // Bỏ qua các dòng thông báo (như dòng 'Không tìm thấy dữ liệu' có td colspan)
+    const firstCell = tr.firstElementChild;
+    if (firstCell && firstCell.hasAttribute("colspan")) return;
 
     for (let i = 0; i < maxCols; i++) {
       const td = tr.children[i];
