@@ -1929,6 +1929,136 @@ function initExportPngEvents() {
       exportElementToPng(card, `top_ly_do_huy_don_${dateStr}.png`, btnReasonsPng);
     };
   }
+
+  const btnDashboardPng = document.getElementById("btnExportDashboardPng");
+  if (btnDashboardPng) {
+    btnDashboardPng.onclick = () => {
+      exportDashboardOverviewPng(btnDashboardPng);
+    };
+  }
+}
+
+// Xuất ảnh PNG toàn bộ Dashboard (loại trừ Bảng thống kê chi tiết đơn, Bảng Depot, Bảng Lý do hủy và Mục Bất thường)
+async function exportDashboardOverviewPng(triggerBtn = null) {
+  const el = document.getElementById("dashboardContent");
+  if (!el) {
+    showAlert("Không tìm thấy nội dung Dashboard để xuất ảnh PNG.");
+    return;
+  }
+
+  const origBtnText = triggerBtn ? triggerBtn.textContent : "";
+  if (triggerBtn) {
+    triggerBtn.disabled = true;
+    triggerBtn.textContent = "Đang xuất PNG...";
+  }
+
+  showAlert("Đang xử lý kết xuất ảnh PNG cho toàn bộ Dashboard, vui lòng chờ...", false);
+
+  try {
+    const isReady = await ensureHtml2CanvasLoaded();
+    if (!isReady || typeof html2canvas !== "function") {
+      throw new Error("Không thể tải thư viện đồ họa html2canvas. Vui lòng kiểm tra lại kết nối mạng.");
+    }
+
+    await new Promise(r => setTimeout(r, 120));
+
+    const dateStr = new Date().toISOString().substring(0, 10);
+    const canvas = await html2canvas(el, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: "#f8fafc",
+      logging: false,
+      onclone: (clonedDoc) => {
+        // 1. Ẩn 4 cấu phần theo yêu cầu người dùng:
+        // - Bảng Thống Kê Chi Tiết Toàn Bộ Đơn Hàng (#matrixDetailSection)
+        // - Thống Kê Chi Tiết Theo Depot (#depotTableCard)
+        // - Top Lý Do Hủy & Phản Hồi Từ Chối Điều Độ (#reasonsTableCard)
+        // - Chi Tiết Bất Thường Cần Lưu Ý (.anomalies-section)
+        const exclusions = [
+          "#matrixDetailSection",
+          "#depotTableCard",
+          "#reasonsTableCard",
+          ".anomalies-section"
+        ];
+        exclusions.forEach((sel) => {
+          clonedDoc.querySelectorAll(sel).forEach((node) => {
+            node.style.setProperty("display", "none", "important");
+          });
+        });
+
+        // Ẩn bảng tables-grid nếu cả hai thẻ con đều đã bị ẩn
+        clonedDoc.querySelectorAll(".tables-grid").forEach((grid) => {
+          const visibleChildren = Array.from(grid.children).filter(c => c.style.display !== "none");
+          if (visibleChildren.length === 0) {
+            grid.style.setProperty("display", "none", "important");
+          }
+        });
+
+        // 2. Ẩn các bộ điều khiển tương tác, nút bấm, thông báo nguồn
+        const interactiveToHide = [
+          ".source-notice",
+          ".filter-panel",
+          ".matrix-controls",
+          ".matrix-detail-actions",
+          "#btnExportKpiPng",
+          "#btnExportTopDepotLinePng",
+          "#btnExportDepotPng",
+          "#btnExportReasonsPng",
+          "#btnExportMatrixPng",
+          "#btnExportInlinePng",
+          ".btn-matrix-toggle span.matrix-toggle-badge"
+        ];
+        interactiveToHide.forEach((sel) => {
+          clonedDoc.querySelectorAll(sel).forEach((node) => {
+            node.style.setProperty("display", "none", "important");
+          });
+        });
+
+        // 3. Gỡ bỏ thanh cuộn, mở rộng chiều cao để vẽ trọn vẹn toàn bộ các bảng & ma trận
+        const scrollContainers = clonedDoc.querySelectorAll(
+          ".table-responsive, .matrix-table-container, .inline-table-container, .modal-table-container"
+        );
+        scrollContainers.forEach((c) => {
+          c.style.maxHeight = "none";
+          c.style.overflow = "visible";
+          c.style.height = "auto";
+        });
+
+        // 4. Gỡ bỏ position: sticky trên header bảng và cột ghim
+        const stickyElements = clonedDoc.querySelectorAll(
+          ".matrix-table thead th, .matrix-table th, .matrix-table td, " +
+          ".matrix-row-total td, .frozen-col, .kpi-summary-table thead th, .data-table thead th"
+        );
+        stickyElements.forEach((s) => {
+          s.style.position = "static";
+        });
+
+        // 5. Đảm bảo toàn bộ bảng chiếm 100% chiều ngang
+        clonedDoc.querySelectorAll("table").forEach((tbl) => {
+          tbl.style.width = "100%";
+        });
+      }
+    });
+
+    const imageUri = canvas.toDataURL("image/png");
+    const link = document.createElement("a");
+    link.download = `dashboard_bao_cao_tong_quan_${dateStr}.png`;
+    link.href = imageUri;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    showAlert("Đã xuất ảnh PNG Dashboard thành công!", false);
+  } catch (err) {
+    console.error("Lỗi khi kết xuất ảnh PNG Dashboard:", err);
+    showAlert("Không thể xuất ảnh PNG Dashboard: " + (err.message || err));
+  } finally {
+    if (triggerBtn) {
+      triggerBtn.disabled = false;
+      triggerBtn.textContent = origBtnText;
+    }
+  }
 }
 
 // =====================================================
