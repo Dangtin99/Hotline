@@ -169,6 +169,28 @@ function isUnpaidOrder(r) {
   return isUnpaidStatus(r.trangThaiDonHang);
 }
 
+// Kiểm tra trạng thái có thuộc nhóm Đã Hủy / Từ chối duyệt hay không
+function isCancelledStatus(val) {
+  if (!val) return false;
+  const raw = String(val).trim().toLowerCase();
+  if (raw === "đã hủy" || raw === "đã huỷ" || raw === "hủy" || raw === "huỷ" || raw === "từ chối duyệt") return true;
+  const s = raw.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").trim();
+  return s === "da huy" || s === "huy" || s.includes("da huy") || s.includes("tu choi duyet");
+}
+
+// Kiểm tra xem đơn hàng có trạng thái Đã Hủy hay không
+function isCancelledOrder(r) {
+  if (!r) return false;
+  if (r.isAutoCancelledBy3h) return true;
+  if (!r.trangThaiDonHang) return false;
+  return isCancelledStatus(r.trangThaiDonHang);
+}
+
+// Kiểm tra xem đơn hàng có bị tự động hủy do quá hạn 3h hay không
+function isAutoCancelledBy3h(r) {
+  return Boolean(r && r.isAutoCancelledBy3h);
+}
+
 function parseApprovalTimestamp(dateStr) {
   if (!dateStr) return null;
   const str = String(dateStr).trim().replace("T", " ");
