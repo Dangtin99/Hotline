@@ -279,10 +279,15 @@
           </div>
         </div>
 
-        <!-- Hàng riêng: Đặt lại bộ lọc -->
-        <div class="filter-actions-row">
-          <div style="font-size: 12px; color: #64748b; font-weight: 500;">
-            Bộ lọc áp dụng đồng bộ toàn bộ chỉ số KPI, biểu đồ và ma trận phân tích
+        <!-- Hàng riêng: Đặt lại bộ lọc & Chọn nhanh khoảng ngày so sánh -->
+        <div class="filter-actions-row" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+            <span style="font-size: 12px; color: #475569; font-weight: 600;">So sánh nhanh:</span>
+            <button type="button" class="btn btn-outline btn-sm btn-quick-range" data-days="1" data-preset="today" title="So sánh ngày hôm nay với ngày hôm trước">Hôm nay</button>
+            <button type="button" class="btn btn-outline btn-sm btn-quick-range" data-days="1" data-preset="yesterday" title="So sánh ngày hôm qua với ngày hôm trước đó">Hôm qua</button>
+            <button type="button" class="btn btn-outline btn-sm btn-quick-range" data-days="7" title="Xem 7 ngày gần nhất và so sánh với 7 ngày trước đó">7 ngày</button>
+            <button type="button" class="btn btn-outline btn-sm btn-quick-range" data-days="10" title="Xem 10 ngày gần nhất và so sánh với 10 ngày trước đó">10 ngày</button>
+            <button type="button" class="btn btn-outline btn-sm btn-quick-range" data-days="30" title="Xem 30 ngày gần nhất và so sánh với 30 ngày trước đó">30 ngày</button>
           </div>
           <div class="filter-action-buttons">
             <button id="btnResetFilter" class="btn btn-outline btn-sm" type="button" title="Đặt lại tất cả các bộ lọc về mặc định">Đặt Lại</button>
@@ -331,10 +336,11 @@
             <table class="data-table kpi-summary-table">
               <thead>
                 <tr>
-                  <th style="width: 60px; text-align: center;">STT</th>
+                  <th style="width: 50px; text-align: center;">STT</th>
                   <th>Chỉ Số KPI</th>
-                  <th style="width: 140px; text-align: right;">Số Lượng</th>
-                  <th style="width: 140px; text-align: right;">Tỉ Lệ (%)</th>
+                  <th style="width: 120px; text-align: right;">Số Lượng</th>
+                  <th style="width: 100px; text-align: right;">Tỉ Lệ (%)</th>
+                  <th style="width: 200px; text-align: right;" id="thKpiCompare">Tăng / Giảm Cùng Kỳ</th>
                   <th style="min-width: 240px;">Ghi Chú / Phân Loại</th>
                 </tr>
               </thead>

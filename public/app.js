@@ -17,6 +17,7 @@ let allDashboardStatuses = [];
 let selectedDashboardStatuses = [];
 let currentFrozenDetailCount = 0;
 let dashboardFiltersInitialized = false;
+let currentComparisonInfo = null;
 
 // DOM Elements
 const alertBox = document.getElementById("alertBox");
@@ -273,6 +274,60 @@ function formatDateDisplay(val) {
   }
 
   return str;
+}
+
+// Tính khoảng thời gian cùng kỳ trước liền kề dựa trên Từ ngày và Đến ngày
+function getComparisonPeriodRange(dateFromStr, dateToStr) {
+  if (!dateFromStr && !dateToStr) return null;
+
+  const fromStr = dateFromStr || dateToStr;
+  const toStr = dateToStr || dateFromStr;
+
+  const dFrom = new Date(fromStr + "T00:00:00");
+  const dTo = new Date(toStr + "T00:00:00");
+  if (isNaN(dFrom.getTime()) || isNaN(dTo.getTime())) return null;
+
+  // Tính số ngày của khoảng thời gian hiện tại
+  const diffTime = dTo.getTime() - dFrom.getTime();
+  const diffDays = Math.max(1, Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1);
+
+  // Khoảng thời gian cùng kỳ liền trước
+  const prevToTime = dFrom.getTime() - (1 * 24 * 60 * 60 * 1000);
+  const prevFromTime = prevToTime - ((diffDays - 1) * 24 * 60 * 60 * 1000);
+
+  const prevDFrom = new Date(prevFromTime);
+  const prevDTo = new Date(prevToTime);
+
+  const formatYMD = d => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
+  return {
+    diffDays,
+    currentFrom: fromStr,
+    currentTo: toStr,
+    prevFrom: formatYMD(prevDFrom),
+    prevTo: formatYMD(prevDTo)
+  };
+}
+
+// Tìm ngày mới nhất trong danh sách bản ghi
+function getLatestRecordDate(records, dateType = "ngayHuy") {
+  if (!records || records.length === 0) {
+    return new Date().toISOString().substring(0, 10);
+  }
+  let maxDate = "";
+  records.forEach(r => {
+    const raw = dateType === "ngayDuyet" ? r.ngayDuocDuyet : r.ngayHuyDon;
+    const d = extractDateOnly(raw);
+    if (d && (!maxDate || d > maxDate)) {
+      maxDate = d;
+    }
+  });
+  return maxDate || new Date().toISOString().substring(0, 10);
 }
 
 // Kiểm tra trạng thái CSKH có thuộc nhóm 1, 3, 6 (tự động cập nhật ĐÃ XỬ LÝ cho hạn hủy 3h) hay không
@@ -623,7 +678,124 @@ function initDashboardFilterControls(records) {
     if (searchInputEl) {
       searchInputEl.oninput = () => applyDashboardFilters();
     }
+
+    initQuickDateRangeControls();
   }
+}
+
+// Khởi tạo các nút chọn nhanh khoảng ngày so sánh (Hôm nay, Hôm qua, 7 ngày, 10 ngày, 30 ngày)
+function initQuickDateRangeControls() {
+  const quickBtns = document.querySelectorAll(".btn-quick-range");
+  quickBtns.forEach(btn => {
+    btn.onclick = () => {
+      if (!masterDashboardRecords || masterDashboardRecords.length === 0) return;
+      const days = parseInt(btn.getAttribute("data-days") || "1", 10);
+      const preset = btn.getAttribute("data-preset");
+
+      const dateTypeVal = filterDateType ? filterDateType.value : "ngayHuy";
+      const maxDateStr = getLatestRecordDate(masterDashboardRecords, dateTypeVal);
+      const baseDate = new Date(maxDateStr + "T00:00:00");
+
+      let targetToDate = new Date(baseDate.getTime());
+      let targetFromDate = new Date(baseDate.getTime());
+
+      if (preset === "yesterday") {
+        targetToDate = new Date(baseDate.getTime() - 1 * 24 * 60 * 60 * 1000);
+        targetFromDate = new Date(targetToDate.getTime());
+      } else if (days > 1) {
+        targetFromDate = new Date(targetToDate.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
+      }
+
+      const formatYMD = d => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${y}-${m}-${day}`;
+      };
+
+      if (filterDateFrom) {
+        filterDateFrom.value = formatYMD(targetFromDate);
+        filterDateFrom.removeAttribute("max");
+      }
+      if (filterDateTo) {
+        filterDateTo.value = formatYMD(targetToDate);
+        filterDateTo.removeAttribute("min");
+      }
+
+      if (filterDateFrom && filterDateTo && filterDateFrom.value && filterDateTo.value) {
+        filterDateTo.min = filterDateFrom.value;
+        filterDateFrom.max = filterDateTo.value;
+      }
+
+      quickBtns.forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+
+      applyDashboardFilters();
+    };
+  });
+}
+
+// Kiểm tra bản ghi có khớp các bộ lọc Dashboard chung hay không (Depot, Hãng tàu, Chiều, Khung giờ, CSKH, Search...)
+function matchesCommonDashboardFilters(r, lineVal, dirVal, hourVal, warning3hVal, contactStatusVal, searchVal) {
+  // 1. Multi-select Depot
+  if (allDashboardDepots.length > 0) {
+    if (selectedDashboardDepots.length === 0) return false;
+    if (selectedDashboardDepots.length < allDashboardDepots.length) {
+      if (!selectedDashboardDepots.includes(r.depot)) return false;
+    }
+  }
+
+  // 2. Shipping Line
+  if (lineVal && normalizeStr(r.hangTau).toLowerCase() !== normalizeStr(lineVal).toLowerCase()) return false;
+
+  // 3. Direction (IN/OUT)
+  if (dirVal && normalizeStr(r.loaiDonHang).toUpperCase() !== normalizeStr(dirVal).toUpperCase()) return false;
+
+  // 4. Multi-select Status
+  if (allDashboardStatuses.length > 0) {
+    if (selectedDashboardStatuses.length === 0) return false;
+    if (selectedDashboardStatuses.length < allDashboardStatuses.length) {
+      const itemStatus = normalizeStr(r.trangThaiDonHang).toLowerCase();
+      const hasMatch = selectedDashboardStatuses.some(s => normalizeStr(s).toLowerCase() === itemStatus);
+      if (!hasMatch) return false;
+    }
+  }
+
+  // 5. Approved Hour
+  if (hourVal !== "") {
+    const targetHour = parseInt(hourVal, 10);
+    const itemHour = extractHour(r.ngayDuocDuyet);
+    if (itemHour !== targetHour) return false;
+  }
+
+  // 6. 3h Warning level
+  if (warning3hVal) {
+    const level = getWarning3hLevel(r.ngayDuocDuyet, isUnpaidOrder(r) || r.isAutoCancelledBy3h, r.trangThaiXuLy);
+    if (level !== warning3hVal) return false;
+  }
+
+  // 7. CSKH Contact status
+  if (contactStatusVal) {
+    if (contactStatusVal === "__EMPTY__") {
+      if (r.trangThaiXuLy) return false;
+    } else if (r.trangThaiXuLy !== contactStatusVal) {
+      return false;
+    }
+  }
+
+  // 8. Search nhanh
+  if (searchVal) {
+    const matchSearch =
+      (r.soContainer && r.soContainer.toLowerCase().includes(searchVal)) ||
+      (r.soEir && r.soEir !== "-" && r.soEir.toLowerCase().includes(searchVal)) ||
+      (r.soBooking && r.soBooking.toLowerCase().includes(searchVal)) ||
+      (r.tenTaiXe && r.tenTaiXe.toLowerCase().includes(searchVal)) ||
+      (r.tenNhaXe && r.tenNhaXe.toLowerCase().includes(searchVal)) ||
+      (r.lyDoHuy && r.lyDoHuy.toLowerCase().includes(searchVal));
+    if (!matchSearch) return false;
+  }
+
+  return true;
 }
 
 // Áp dụng các bộ lọc Dashboard
@@ -663,66 +835,30 @@ function applyDashboardFilters() {
       if (dateToVal && recDate > dateToVal) return false;
     }
 
-    // 1. Multi-select Depot
-    if (allDashboardDepots.length > 0) {
-      if (selectedDashboardDepots.length === 0) return false;
-      if (selectedDashboardDepots.length < allDashboardDepots.length) {
-        if (!selectedDashboardDepots.includes(r.depot)) return false;
-      }
-    }
-
-    // 2. Shipping Line
-    if (lineVal && normalizeStr(r.hangTau).toLowerCase() !== normalizeStr(lineVal).toLowerCase()) return false;
-
-    // 3. Direction (IN/OUT)
-    if (dirVal && normalizeStr(r.loaiDonHang).toUpperCase() !== normalizeStr(dirVal).toUpperCase()) return false;
-
-    // 4. Multi-select Status
-    if (allDashboardStatuses.length > 0) {
-      if (selectedDashboardStatuses.length === 0) return false;
-      if (selectedDashboardStatuses.length < allDashboardStatuses.length) {
-        const itemStatus = normalizeStr(r.trangThaiDonHang).toLowerCase();
-        const hasMatch = selectedDashboardStatuses.some(s => normalizeStr(s).toLowerCase() === itemStatus);
-        if (!hasMatch) return false;
-      }
-    }
-
-    // 5. Approved Hour
-    if (hourVal !== "") {
-      const targetHour = parseInt(hourVal, 10);
-      const itemHour = extractHour(r.ngayDuocDuyet);
-      if (itemHour !== targetHour) return false;
-    }
-
-    // 6. 3h Warning level
-    if (warning3hVal) {
-      const level = getWarning3hLevel(r.ngayDuocDuyet, isUnpaidOrder(r) || r.isAutoCancelledBy3h, r.trangThaiXuLy);
-      if (level !== warning3hVal) return false;
-    }
-
-    // 7. CSKH Contact status
-    if (contactStatusVal) {
-      if (contactStatusVal === "__EMPTY__") {
-        if (r.trangThaiXuLy) return false;
-      } else if (r.trangThaiXuLy !== contactStatusVal) {
-        return false;
-      }
-    }
-
-    // 8. Search nhanh
-    if (searchVal) {
-      const matchSearch =
-        (r.soContainer && r.soContainer.toLowerCase().includes(searchVal)) ||
-        (r.soEir && r.soEir !== "-" && r.soEir.toLowerCase().includes(searchVal)) ||
-        (r.soBooking && r.soBooking.toLowerCase().includes(searchVal)) ||
-        (r.tenTaiXe && r.tenTaiXe.toLowerCase().includes(searchVal)) ||
-        (r.tenNhaXe && r.tenNhaXe.toLowerCase().includes(searchVal)) ||
-        (r.lyDoHuy && r.lyDoHuy.toLowerCase().includes(searchVal));
-      if (!matchSearch) return false;
-    }
-
-    return true;
+    return matchesCommonDashboardFilters(r, lineVal, dirVal, hourVal, warning3hVal, contactStatusVal, searchVal);
   });
+
+  // Tính khoảng cùng kỳ liền kề trước đó và lọc previousRecords
+  const compRange = getComparisonPeriodRange(dateFromVal, dateToVal);
+  let previousRecords = [];
+  if (compRange) {
+    previousRecords = masterDashboardRecords.filter(r => {
+      const rawDate = dateTypeVal === "ngayDuyet" ? r.ngayDuocDuyet : r.ngayHuyDon;
+      const recDate = extractDateOnly(rawDate);
+      if (!recDate) return false;
+      if (recDate < compRange.prevFrom || recDate > compRange.prevTo) return false;
+      return matchesCommonDashboardFilters(r, lineVal, dirVal, hourVal, warning3hVal, contactStatusVal, searchVal);
+    });
+  }
+
+  currentComparisonInfo = compRange ? {
+    hasComparison: true,
+    ...compRange,
+    previousRecords
+  } : {
+    hasComparison: false,
+    previousRecords: []
+  };
 
   currentRecords = filtered;
   const filterSummaryBadge = document.getElementById("filterSummaryBadge");
@@ -732,7 +868,7 @@ function applyDashboardFilters() {
 
   const analytics = calculateAnalyticsFromRecords(filtered);
   currentAnalyticsData = analytics;
-  renderDashboardViews(analytics, filtered);
+  renderDashboardViews(analytics, filtered, currentComparisonInfo);
 }
 
 // Đặt lại toàn bộ bộ lọc Dashboard
@@ -771,6 +907,8 @@ function resetDashboardFilters() {
   }
   if (btnClearDateFilter) btnClearDateFilter.style.display = "none";
   if (dashboardDateFilterGroup) dashboardDateFilterGroup.classList.remove("has-selection");
+
+  document.querySelectorAll(".btn-quick-range").forEach(b => b.classList.remove("active"));
 
   applyDashboardFilters();
 }
@@ -945,7 +1083,7 @@ function renderDashboard(data, records = []) {
 }
 
 // Render toàn bộ giao diện dashboard theo bộ dữ liệu (gốc hoặc đã lọc)
-function renderDashboardViews(data, records = []) {
+function renderDashboardViews(data, records = [], comparisonInfo = null) {
   const { kpis, byDepot, byShippingLine, topCancelReasons, anomalies } = data;
 
   // 1. KPIs
@@ -994,7 +1132,11 @@ function renderDashboardViews(data, records = []) {
   }
 
   // 5. Tables
-  renderKpiSummaryTable(records, masterDashboardRecords ? masterDashboardRecords.length : (records ? records.length : 0));
+  renderKpiSummaryTable(
+    records, 
+    masterDashboardRecords ? masterDashboardRecords.length : (records ? records.length : 0),
+    comparisonInfo || currentComparisonInfo
+  );
   renderTopDepotLineCancelTable(records);
   renderDepotTable(byDepot, kpis.totalOrders);
   renderReasonsTable(topCancelReasons);
@@ -1279,81 +1421,181 @@ function renderTopDepotLineCancelTable(records = []) {
   }).join("");
 }
 
-// Render Bảng Chỉ Số KPI Vận Hành & CSKH
-function renderKpiSummaryTable(records, totalMasterCount) {
-  const tbody = document.getElementById("tbodyKpiSummary");
-  if (!tbody) return;
-
-  const list = records || [];
+// Trích xuất toàn bộ 11 chỉ số KPI Vận Hành & CSKH từ danh sách bản ghi
+function extractKpiSummaryMetrics(list = []) {
   const currentTotal = list.length;
-
-  const scopeEl = document.getElementById("kpiSummaryScope");
-  if (scopeEl) {
-    if (totalMasterCount && totalMasterCount > currentTotal) {
-      scopeEl.textContent = `Hiển thị ${currentTotal} / ${totalMasterCount} đơn theo bộ lọc`;
-    } else {
-      scopeEl.textContent = `Tổng cộng: ${currentTotal} đơn`;
-    }
-  }
-
-  // 1. Tổng số đơn hủy
   const totalCancelled = list.filter(r => {
     const s = normalizeStr(r.trangThaiDonHang || "").toLowerCase();
     return s.includes("đã hủy") || s.includes("da huy") || s.includes("hủy") || s.includes("huy");
   }).length;
 
-  // 2. Số đơn chưa thanh toán (chỉ thống kê theo trạng thái đơn hàng)
-  const totalUnpaid = list.filter(r => {
-    return isUnpaidOrder(r);
-  }).length;
+  const totalUnpaid = list.filter(r => isUnpaidOrder(r)).length;
 
-  // 3. Tổng số đơn đã được phân loại trạng thái đã xử lý
   const totalProcessed = list.filter(r => {
     const st = r.trangThaiXuLy;
     return st && st !== "null" && st !== "undefined" && String(st).trim() !== "";
   }).length;
 
-  // 4. Đã thanh toán (Thanh toán thành công)
   const countPaid = list.filter(r => {
     const x = normalizeStr(r.trangThaiXuLy || "").toLowerCase();
     return x === "thanh toán thành công" || x === "đã thanh toán" || x === "đã hoàn thành";
   }).length;
 
-  // 5. Tự động đặt lại
   const countAutoReset = list.filter(r => {
     return normalizeStr(r.trangThaiXuLy || "").trim() === "Tự động đặt lại";
   }).length;
 
-  // 6. Không liên hệ được
   const countUncontacted = list.filter(r => {
     return (r.trangThaiXuLy || "").trim().startsWith("Không liên hệ được");
   }).length;
 
-  // 7. Đã liên hệ - Chờ thanh toán
   const countContactWaitPay = list.filter(r => {
     return (r.trangThaiXuLy || "").trim() === "Đã liên hệ - Chờ thanh toán";
   }).length;
 
-  // 8. Đã liên hệ - Đã đặt lại
   const countContactRebooked = list.filter(r => {
     return (r.trangThaiXuLy || "").trim() === "Đã liên hệ - Đã đặt lại";
   }).length;
 
-  // 9. Đã liên hệ - Chờ đặt lại
   const countContactWaitRebook = list.filter(r => {
     const x = (r.trangThaiXuLy || "").trim();
     return x === "Đã liên hệ - Chờ đặt lại" || x === "Đã liên hệ - Chờ" || x === "Đã liên hệ - Đang chờ";
   }).length;
 
-  // Tổng số cuộc gọi liên hệ (Đã liên hệ + Không liên hệ được)
   const totalContacted = list.filter(r => (r.trangThaiXuLy || "").trim().startsWith("Đã liên hệ")).length;
   const totalCalls = totalContacted + countUncontacted;
 
-  // 10. Tỉ lệ liên hệ được
   const rateContacted = totalCalls > 0 ? ((totalContacted / totalCalls) * 100).toFixed(1) : "0.0";
-
-  // 11. Tỉ lệ liên hệ không được
   const rateUncontacted = totalCalls > 0 ? ((countUncontacted / totalCalls) * 100).toFixed(1) : "0.0";
+
+  return {
+    currentTotal,
+    totalCancelled,
+    totalUnpaid,
+    totalProcessed,
+    countPaid,
+    countAutoReset,
+    countUncontacted,
+    countContactWaitPay,
+    countContactRebooked,
+    countContactWaitRebook,
+    totalContacted,
+    totalCalls,
+    rateContacted,
+    rateUncontacted
+  };
+}
+
+// Định dạng độ chênh lệch tăng giảm của chỉ số số lượng (count)
+function formatCountDiff(cur, prev, hasComp, isIncreaseNegative = false) {
+  if (!hasComp) {
+    return `<span style="color: #94a3b8; font-size: 13px;">-</span>`;
+  }
+  const diff = cur - prev;
+  let pctStr = "0.0%";
+  if (prev > 0) {
+    pctStr = ((Math.abs(diff) / prev) * 100).toFixed(1) + "%";
+  } else if (cur > 0) {
+    pctStr = "+100%";
+  }
+
+  const prevText = `Kỳ trước: ${prev.toLocaleString("vi-VN")}`;
+
+  if (diff === 0) {
+    return `
+      <div style="font-weight: 600; color: #475569; font-size: 13px;">0 (0.0%)</div>
+      <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${prevText}</div>
+    `;
+  }
+
+  if (diff > 0) {
+    const color = isIncreaseNegative ? "#b91c1c" : "#15803d";
+    return `
+      <div style="font-weight: 700; color: ${color}; font-size: 13.5px;">+${diff.toLocaleString("vi-VN")} (+${pctStr})</div>
+      <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${prevText}</div>
+    `;
+  } else {
+    const color = isIncreaseNegative ? "#15803d" : "#b91c1c";
+    return `
+      <div style="font-weight: 700; color: ${color}; font-size: 13.5px;">${diff.toLocaleString("vi-VN")} (-${pctStr})</div>
+      <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${prevText}</div>
+    `;
+  }
+}
+
+// Định dạng độ chênh lệch tăng giảm của chỉ số tỷ lệ % (rate)
+function formatRateDiff(curRate, prevRate, curCalls, prevCalls, hasComp, isIncreaseNegative = false) {
+  if (!hasComp) {
+    return `<span style="color: #94a3b8; font-size: 13px;">-</span>`;
+  }
+  if (prevCalls === 0) {
+    return `
+      <div style="font-weight: 600; color: #475569; font-size: 12.5px;">Chưa có dữ liệu</div>
+      <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Kỳ trước: 0 cuộc</div>
+    `;
+  }
+
+  const cRate = parseFloat(curRate) || 0;
+  const pRate = parseFloat(prevRate) || 0;
+  const diff = (cRate - pRate).toFixed(1);
+  const prevText = `Kỳ trước: ${prevRate}%`;
+
+  if (Math.abs(parseFloat(diff)) === 0) {
+    return `
+      <div style="font-weight: 600; color: #475569; font-size: 13px;">0.0%</div>
+      <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${prevText}</div>
+    `;
+  }
+
+  if (diff > 0) {
+    const color = isIncreaseNegative ? "#b91c1c" : "#15803d";
+    return `
+      <div style="font-weight: 700; color: ${color}; font-size: 13.5px;">+${diff}%</div>
+      <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${prevText}</div>
+    `;
+  } else {
+    const color = isIncreaseNegative ? "#15803d" : "#b91c1c";
+    return `
+      <div style="font-weight: 700; color: ${color}; font-size: 13.5px;">${diff}%</div>
+      <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${prevText}</div>
+    `;
+  }
+}
+
+// Render Bảng Chỉ Số KPI Vận Hành & CSKH Kèm So Sánh Cùng Kỳ
+function renderKpiSummaryTable(records, totalMasterCount, comparisonInfo = null) {
+  const tbody = document.getElementById("tbodyKpiSummary");
+  if (!tbody) return;
+
+  const list = records || [];
+  const currentTotal = list.length;
+  const hasComp = Boolean(comparisonInfo && comparisonInfo.hasComparison);
+  const prevList = hasComp ? (comparisonInfo.previousRecords || []) : [];
+
+  const curM = extractKpiSummaryMetrics(list);
+  const prevM = hasComp ? extractKpiSummaryMetrics(prevList) : null;
+
+  const scopeEl = document.getElementById("kpiSummaryScope");
+  if (scopeEl) {
+    if (hasComp && comparisonInfo) {
+      const daysText = comparisonInfo.diffDays === 1 ? "1 ngày" : `${comparisonInfo.diffDays} ngày`;
+      const curFrom = formatDateDisplay(comparisonInfo.currentFrom);
+      const curTo = formatDateDisplay(comparisonInfo.currentTo);
+      const prevFrom = formatDateDisplay(comparisonInfo.prevFrom);
+      const prevTo = formatDateDisplay(comparisonInfo.prevTo);
+      scopeEl.innerHTML = `
+        <span>Kỳ này (${daysText}): <strong style="color: #1e293b;">${curFrom} - ${curTo}</strong> (${currentTotal.toLocaleString("vi-VN")} đơn)</span>
+        <span style="margin: 0 8px; color: #cbd5e1;">|</span>
+        <span style="color: #475569;">Cùng kỳ trước: <strong style="color: #1e293b;">${prevFrom} - ${prevTo}</strong> (${prevList.length.toLocaleString("vi-VN")} đơn)</span>
+      `;
+    } else {
+      if (totalMasterCount && totalMasterCount > currentTotal) {
+        scopeEl.innerHTML = `<span>Hiển thị ${currentTotal.toLocaleString("vi-VN")} / ${totalMasterCount.toLocaleString("vi-VN")} đơn theo bộ lọc</span> <span style="font-size: 12px; color: #94a3b8; margin-left: 8px;">(Chọn khoảng ngày để so sánh cùng kỳ)</span>`;
+      } else {
+        scopeEl.innerHTML = `<span>Tổng cộng: ${currentTotal.toLocaleString("vi-VN")} đơn</span> <span style="font-size: 12px; color: #94a3b8; margin-left: 8px;">(Chọn khoảng ngày để so sánh cùng kỳ)</span>`;
+      }
+    }
+  }
 
   // Tính phần trăm so với tổng số đơn hiện tại
   const calcPct = cnt => currentTotal > 0 ? ((cnt / currentTotal) * 100).toFixed(1) + "%" : "0.0%";
@@ -1362,8 +1604,9 @@ function renderKpiSummaryTable(records, totalMasterCount) {
     {
       stt: 1,
       title: "Tổng số đơn hủy",
-      count: totalCancelled,
-      pct: calcPct(totalCancelled),
+      count: curM.totalCancelled,
+      pct: calcPct(curM.totalCancelled),
+      compareHtml: formatCountDiff(curM.totalCancelled, prevM ? prevM.totalCancelled : 0, hasComp, true),
       note: "Đơn có trạng thái đơn hàng là Đã hủy",
       badgeClass: "badge-danger",
       isHighlight: true
@@ -1371,8 +1614,9 @@ function renderKpiSummaryTable(records, totalMasterCount) {
     {
       stt: 2,
       title: "Số đơn chưa thanh toán",
-      count: totalUnpaid,
-      pct: calcPct(totalUnpaid),
+      count: curM.totalUnpaid,
+      pct: calcPct(curM.totalUnpaid),
+      compareHtml: formatCountDiff(curM.totalUnpaid, prevM ? prevM.totalUnpaid : 0, hasComp, true),
       note: "Đơn có trạng thái đơn hàng là Chưa thanh toán",
       badgeClass: "badge-warning",
       isHighlight: true
@@ -1380,8 +1624,9 @@ function renderKpiSummaryTable(records, totalMasterCount) {
     {
       stt: 3,
       title: "Tổng số đơn đã được phân loại trạng thái đã xử lý",
-      count: totalProcessed,
-      pct: calcPct(totalProcessed),
+      count: curM.totalProcessed,
+      pct: calcPct(curM.totalProcessed),
+      compareHtml: formatCountDiff(curM.totalProcessed, prevM ? prevM.totalProcessed : 0, hasComp, false),
       note: "Các đơn CSKH đã cập nhật trạng thái xử lý",
       badgeClass: "badge-info",
       isHighlight: true
@@ -1389,8 +1634,9 @@ function renderKpiSummaryTable(records, totalMasterCount) {
     {
       stt: 4,
       title: "Đã thanh toán",
-      count: countPaid,
-      pct: calcPct(countPaid),
+      count: curM.countPaid,
+      pct: calcPct(curM.countPaid),
+      compareHtml: formatCountDiff(curM.countPaid, prevM ? prevM.countPaid : 0, hasComp, false),
       note: "Trạng thái xử lý: Thanh toán thành công / Đã thanh toán",
       badgeClass: "badge-success",
       isHighlight: false
@@ -1398,8 +1644,9 @@ function renderKpiSummaryTable(records, totalMasterCount) {
     {
       stt: 5,
       title: "Tự động đặt lại",
-      count: countAutoReset,
-      pct: calcPct(countAutoReset),
+      count: curM.countAutoReset,
+      pct: calcPct(curM.countAutoReset),
+      compareHtml: formatCountDiff(curM.countAutoReset, prevM ? prevM.countAutoReset : 0, hasComp, false),
       note: "Trạng thái xử lý: Tự động đặt lại",
       badgeClass: "badge-secondary",
       isHighlight: false
@@ -1407,8 +1654,9 @@ function renderKpiSummaryTable(records, totalMasterCount) {
     {
       stt: 6,
       title: "Không liên hệ được",
-      count: countUncontacted,
-      pct: calcPct(countUncontacted),
+      count: curM.countUncontacted,
+      pct: calcPct(curM.countUncontacted),
+      compareHtml: formatCountDiff(curM.countUncontacted, prevM ? prevM.countUncontacted : 0, hasComp, true),
       note: "Trạng thái xử lý: Không liên hệ được (Chờ thanh toán / Hủy)",
       badgeClass: "badge-warning",
       isHighlight: false
@@ -1416,8 +1664,9 @@ function renderKpiSummaryTable(records, totalMasterCount) {
     {
       stt: 7,
       title: "Đã liên hệ - Chờ thanh toán",
-      count: countContactWaitPay,
-      pct: calcPct(countContactWaitPay),
+      count: curM.countContactWaitPay,
+      pct: calcPct(curM.countContactWaitPay),
+      compareHtml: formatCountDiff(curM.countContactWaitPay, prevM ? prevM.countContactWaitPay : 0, hasComp, false),
       note: "Trạng thái xử lý: Đã liên hệ - Chờ thanh toán",
       badgeClass: "badge-warning",
       isHighlight: false
@@ -1425,8 +1674,9 @@ function renderKpiSummaryTable(records, totalMasterCount) {
     {
       stt: 8,
       title: "Đã liên hệ - Đã đặt lại",
-      count: countContactRebooked,
-      pct: calcPct(countContactRebooked),
+      count: curM.countContactRebooked,
+      pct: calcPct(curM.countContactRebooked),
+      compareHtml: formatCountDiff(curM.countContactRebooked, prevM ? prevM.countContactRebooked : 0, hasComp, false),
       note: "Trạng thái xử lý: Đã liên hệ - Đã đặt lại",
       badgeClass: "badge-success",
       isHighlight: false
@@ -1434,8 +1684,9 @@ function renderKpiSummaryTable(records, totalMasterCount) {
     {
       stt: 9,
       title: "Đã liên hệ - Chờ đặt lại",
-      count: countContactWaitRebook,
-      pct: calcPct(countContactWaitRebook),
+      count: curM.countContactWaitRebook,
+      pct: calcPct(curM.countContactWaitRebook),
+      compareHtml: formatCountDiff(curM.countContactWaitRebook, prevM ? prevM.countContactWaitRebook : 0, hasComp, false),
       note: "Trạng thái xử lý: Đã liên hệ - Chờ đặt lại",
       badgeClass: "badge-secondary",
       isHighlight: false
@@ -1443,18 +1694,20 @@ function renderKpiSummaryTable(records, totalMasterCount) {
     {
       stt: 10,
       title: "Tỉ lệ liên hệ được",
-      count: `${totalContacted} / ${totalCalls} cuộc`,
-      pct: `${rateContacted}%`,
-      note: `Tổng số cuộc gọi đã kết nối thành công (${totalContacted} cuộc)`,
+      count: `${curM.totalContacted} / ${curM.totalCalls} cuộc`,
+      pct: `${curM.rateContacted}%`,
+      compareHtml: formatRateDiff(curM.rateContacted, prevM ? prevM.rateContacted : "0.0", curM.totalCalls, prevM ? prevM.totalCalls : 0, hasComp, false),
+      note: `Tổng số cuộc gọi đã kết nối thành công (${curM.totalContacted} cuộc)`,
       badgeClass: "badge-success",
       isHighlight: true
     },
     {
       stt: 11,
       title: "Tỉ lệ liên hệ không được",
-      count: `${countUncontacted} / ${totalCalls} cuộc`,
-      pct: `${rateUncontacted}%`,
-      note: `Số cuộc gọi không thể liên lạc được (${countUncontacted} cuộc)`,
+      count: `${curM.countUncontacted} / ${curM.totalCalls} cuộc`,
+      pct: `${curM.rateUncontacted}%`,
+      compareHtml: formatRateDiff(curM.rateUncontacted, prevM ? prevM.rateUncontacted : "0.0", curM.totalCalls, prevM ? prevM.totalCalls : 0, hasComp, true),
+      note: `Số cuộc gọi không thể liên lạc được (${curM.countUncontacted} cuộc)`,
       badgeClass: "badge-danger",
       isHighlight: true
     }
@@ -1473,6 +1726,9 @@ function renderKpiSummaryTable(records, totalMasterCount) {
         </td>
         <td style="text-align: right; font-weight: 600; color: #334155;">
           ${row.pct}
+        </td>
+        <td style="text-align: right;">
+          ${row.compareHtml}
         </td>
         <td>
           <span class="badge ${row.badgeClass}" style="margin-right: 6px;">${row.note}</span>
