@@ -1244,8 +1244,8 @@ function renderTopDepotLineCancelTable(records = []) {
   // Chuyển Map thành mảng, sắp xếp giảm dần theo số lượng đơn hủy
   const sortedPairs = Array.from(groupMap.values()).sort((a, b) => b.cancelCount - a.cancelCount);
 
-  // Hiển thị tối đa Top 15 cặp Depot - Hãng tàu có đơn hủy nhiều nhất
-  const topPairs = sortedPairs.slice(0, 15);
+  // Hiển thị Top 3 cặp Depot - Hãng tàu có đơn hủy nhiều nhất
+  const topPairs = sortedPairs.slice(0, 3);
 
   tbody.innerHTML = topPairs.map((pair, idx) => {
     const pct = ((pair.cancelCount / totalCancelled) * 100).toFixed(1);
