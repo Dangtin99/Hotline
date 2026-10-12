@@ -1230,7 +1230,7 @@ body {
   line-height: 1.2 !important;
 }
 
-.filter-field input,
+.filter-field input:not([type="checkbox"]),
 .filter-field select,
 .filter-field .filter-select,
 .filter-field .multiselect-btn,
@@ -1250,12 +1250,12 @@ body {
   outline: none !important;
 }
 
-.filter-field input:hover,
+.filter-field input:not([type="checkbox"]):hover,
 .filter-field select:hover,
 .filter-field .filter-select:hover,
 .filter-field .multiselect-btn:hover,
 .filter-field .search-box input:hover,
-.filter-field input:focus,
+.filter-field input:not([type="checkbox"]):focus,
 .filter-field select:focus,
 .filter-field .filter-select:focus,
 .filter-field .multiselect-btn:focus,
@@ -1265,7 +1265,7 @@ body {
   box-shadow: 0 0 0 2px #dbeafe !important;
 }
 
-.filter-field input::placeholder,
+.filter-field input:not([type="checkbox"])::placeholder,
 .filter-field .search-box input::placeholder {
   color: #94a3b8;
   font-weight: 500;
@@ -1647,6 +1647,7 @@ body {
   user-select: none;
   transition: background 0.15s ease;
   color: var(--text-main);
+  white-space: nowrap;
 }
 
 .multiselect-item:hover {
@@ -1657,9 +1658,20 @@ body {
 .multiselect-item input[type="checkbox"] {
   cursor: pointer;
   accent-color: var(--blue-primary);
-  width: 15px;
-  height: 15px;
-  margin: 0;
+  width: 14px !important;
+  height: 14px !important;
+  min-width: 14px !important;
+  min-height: 14px !important;
+  max-width: 14px !important;
+  max-height: 14px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  flex-shrink: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 3px !important;
+  background: transparent !important;
 }
 
 /* Full Excel Table Container */
