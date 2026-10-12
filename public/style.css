@@ -879,6 +879,47 @@ body {
   transform: translateY(-2px);
 }
 
+/* Đường viền màu sắc riêng biệt cho từng KPI Card */
+.kpi-card:nth-child(1),
+.kpi-card.kpi-card-orders {
+  border-top: 4px solid #1d4ed8; /* Xanh dương đậm chủ đạo */
+}
+.kpi-card:nth-child(1):hover,
+.kpi-card.kpi-card-orders:hover {
+  border-color: #93c5fd;
+  border-top-color: #1d4ed8;
+}
+
+.kpi-card:nth-child(2),
+.kpi-card.kpi-card-direction {
+  border-top: 4px solid #0284c7; /* Xanh biển tươi (Sky / Cyan) */
+}
+.kpi-card:nth-child(2):hover,
+.kpi-card.kpi-card-direction:hover {
+  border-color: #7dd3fc;
+  border-top-color: #0284c7;
+}
+
+.kpi-card:nth-child(3),
+.kpi-card.kpi-card-status {
+  border-top: 4px solid #d97706; /* Cam hổ phách (Warning / Amber) */
+}
+.kpi-card:nth-child(3):hover,
+.kpi-card.kpi-card-status:hover {
+  border-color: #fde68a;
+  border-top-color: #d97706;
+}
+
+.kpi-card:nth-child(4),
+.kpi-card.kpi-card-unpaid {
+  border-top: 4px solid #dc2626; /* Đỏ cảnh báo (Danger / Red) */
+}
+.kpi-card:nth-child(4):hover,
+.kpi-card.kpi-card-unpaid:hover {
+  border-color: #fca5a5;
+  border-top-color: #dc2626;
+}
+
 .kpi-title {
   font-size: 12px;
   font-weight: 700;
