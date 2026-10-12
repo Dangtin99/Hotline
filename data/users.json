@@ -42,5 +42,38 @@
     "isActive": true,
     "createdAt": "2026-10-03 02:56:19",
     "updatedAt": "2026-10-03 02:56:42"
+  },
+  {
+    "id": "5",
+    "fullName": "User 04",
+    "username": "user04",
+    "passwordHash": "530a73b645a7b055c7f6bc96b5fe9d2a12233d8cecd0a4ff87b2c8dce95db1988ba4b081a678950d22b3526a786b91c0cda963b317833e8cb9c5f43f45d63151",
+    "salt": "fc32521c0ac808020766c52a9548876a",
+    "role": "user",
+    "isActive": true,
+    "createdAt": "2026-10-12 13:17:39",
+    "updatedAt": "2026-10-12 13:17:39"
+  },
+  {
+    "id": "6",
+    "fullName": "User 05",
+    "username": "user05",
+    "passwordHash": "8babfafb5c698b299b613a7a650e16957317ed59699c66d33d00a2e0cf27e149da55f516445985782d912bb4c89c2f84364bf8bf346a4023bbe0707a7253faf7",
+    "salt": "66604aa7c6d12c4aa6cb61ea603939ee",
+    "role": "user",
+    "isActive": true,
+    "createdAt": "2026-10-12 13:17:39",
+    "updatedAt": "2026-10-12 13:17:39"
+  },
+  {
+    "id": "7",
+    "fullName": "User 06",
+    "username": "user06",
+    "passwordHash": "a476a17acac9beee0b3bd0caf2cb1ced448d484aaae036fe10f3f9fa9d137a3ebc44599b81ec1059116a66c61998f56d608cd063315ff1333afd0884459b1eb5",
+    "salt": "e98e6a1763b93eae14be9a0b730e3f84",
+    "role": "user",
+    "isActive": true,
+    "createdAt": "2026-10-12 13:17:39",
+    "updatedAt": "2026-10-12 13:17:39"
   }
 ]

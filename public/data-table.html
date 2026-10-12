@@ -34,10 +34,10 @@
         <a href="data-table.html" class="sidebar-link active" id="navDataTable">
           <span>Dữ Liệu Chi Tiết</span>
         </a>
-        <a href="data-table.html?tab=unpaid" class="sidebar-link" id="navUnpaid">
+        <a href="data-table.html?tab=unpaid" class="sidebar-link" id="navUnpaid" style="display: none !important;">
           <span>Đơn Chưa Thanh Toán</span>
         </a>
-        <a href="data-table.html?tab=cancelled" class="sidebar-link" id="navCancelled">
+        <a href="data-table.html?tab=cancelled" class="sidebar-link" id="navCancelled" style="display: none !important;">
           <span>Đơn Hủy</span>
         </a>
         <a href="verification-table.html" class="sidebar-link" id="navVerificationTable">
@@ -91,11 +91,11 @@
 
       <!-- File source notice -->
       <div class="source-notice">
-        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+        <div style="display: none; align-items: center; gap: 8px; flex-wrap: wrap;">
           <span style="color: var(--text-muted);">Tập dữ liệu nguồn:</span>
           <strong id="currentDatasetName" style="color: var(--blue-primary); margin-left: 2px;">Đang tải...</strong>
         </div>
-        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto;">
           <span id="tursoStatusBadge" class="badge" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 12px; cursor: pointer;" title="Nhấn để kiểm tra kết nối CSDL Turso Cloud">CSDL Turso: Đang kiểm tra...</span>
           <div id="totalRowsBadge" class="badge badge-info" style="font-size: 13px; padding: 6px 14px;">
             Đang đếm số lượng dòng...

@@ -154,16 +154,22 @@ CREATE INDEX idx_users_tai_khoan ON users (tai_khoan);
 CREATE INDEX idx_users_quyen ON users (quyen);
 CREATE INDEX idx_users_is_active ON users (is_active);
 
--- Dữ liệu khởi tạo 4 tài khoản hệ thống chuẩn (Tên | Tài khoản | Mật khẩu | Quyền):
+-- Dữ liệu khởi tạo 7 tài khoản hệ thống chuẩn (Tên | Tài khoản | Mật khẩu | Quyền):
 -- 1. ADMIN | admin | 123456789@ | admin
 -- 2. Đặng Đức Tín | user01 | 123456789@ | user
 -- 3. Võ Ngọc Bảo Châu | user02 | 123456789@ | user
 -- 4. Lý Gia Huy | user03 | 123456789@ | user
+-- 5. User 04 | user04 | 123456789@ | user
+-- 6. User 05 | user05 | 123456789@ | user
+-- 7. User 06 | user06 | 123456789@ | user
 INSERT INTO users (ten, tai_khoan, mat_khau, quyen, is_active) VALUES
 ('ADMIN', 'admin', '123456789@', 'admin', 1),
 ('Đặng Đức Tín', 'user01', '123456789@', 'user', 1),
 ('Võ Ngọc Bảo Châu', 'user02', '123456789@', 'user', 1),
-('Lý Gia Huy', 'user03', '123456789@', 'user', 1)
+('Lý Gia Huy', 'user03', '123456789@', 'user', 1),
+('User 04', 'user04', '123456789@', 'user', 1),
+('User 05', 'user05', '123456789@', 'user', 1),
+('User 06', 'user06', '123456789@', 'user', 1)
 ON CONFLICT (tai_khoan) DO UPDATE SET
     ten = EXCLUDED.ten,
     mat_khau = EXCLUDED.mat_khau,

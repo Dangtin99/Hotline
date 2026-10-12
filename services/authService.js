@@ -43,7 +43,7 @@ function hashPassword(password, salt) {
   return crypto.pbkdf2Sync(password, salt, 1000, 64, "sha512").toString("hex");
 }
 
-// 4 Tài khoản chuẩn theo yêu cầu của hệ thống
+// 7 Tài khoản chuẩn theo yêu cầu của hệ thống
 const SEED_ACCOUNTS = [
   {
     fullName: "ADMIN",
@@ -69,6 +69,27 @@ const SEED_ACCOUNTS = [
   {
     fullName: "Lý Gia Huy",
     username: "user03",
+    password: "123456789@",
+    role: "user",
+    isActive: 1
+  },
+  {
+    fullName: "User 04",
+    username: "user04",
+    password: "123456789@",
+    role: "user",
+    isActive: 1
+  },
+  {
+    fullName: "User 05",
+    username: "user05",
+    password: "123456789@",
+    role: "user",
+    isActive: 1
+  },
+  {
+    fullName: "User 06",
+    username: "user06",
     password: "123456789@",
     role: "user",
     isActive: 1
@@ -205,11 +226,11 @@ function syncUserToStorage(user) {
 // Khởi tạo các tài khoản mẫu nếu chưa có
 (function initUsers() {
   const users = loadUsers();
-  // Kiểm tra nếu chưa đủ 4 tài khoản chuẩn thì thực hiện seed lại
+  // Kiểm tra nếu chưa đủ các tài khoản chuẩn thì thực hiện seed lại
   const userUsernames = users.map(u => u.username.toLowerCase());
   const needsSeed = SEED_ACCOUNTS.some(acc => !userUsernames.includes(acc.username.toLowerCase()));
   if (needsSeed || users.length === 0) {
-    console.log("Khởi tạo 4 tài khoản hệ thống chuẩn...");
+    console.log(`Khởi tạo ${SEED_ACCOUNTS.length} tài khoản hệ thống chuẩn...`);
     seedDefaultUsers();
   }
 })();
