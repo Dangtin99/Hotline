@@ -1960,6 +1960,16 @@ async function exportDashboardOverviewPng(triggerBtn = null) {
       throw new Error("Không thể tải thư viện đồ họa html2canvas. Vui lòng kiểm tra lại kết nối mạng.");
     }
 
+    // 1. Lưu lại các canvas chart hiện tại thành ảnh base64 để đồng bộ sang bản clone
+    const canvasDataUrls = {};
+    el.querySelectorAll("canvas").forEach((cv, idx) => {
+      try {
+        canvasDataUrls[idx] = cv.toDataURL("image/png");
+      } catch (e) {
+        console.warn("Không thể chụp canvas index", idx, e);
+      }
+    });
+
     await new Promise(r => setTimeout(r, 120));
 
     const dateStr = new Date().toISOString().substring(0, 10);
@@ -1969,8 +1979,30 @@ async function exportDashboardOverviewPng(triggerBtn = null) {
       allowTaint: true,
       backgroundColor: "#f8fafc",
       logging: false,
+      scrollX: 0,
+      scrollY: 0,
+      windowWidth: Math.max(document.documentElement.clientWidth || 0, 1366),
       onclone: (clonedDoc) => {
-        // 1. Ẩn 4 cấu phần theo yêu cầu người dùng:
+        // 1. Đồng bộ lại dữ liệu vẽ trên các thẻ <canvas> (như chartReasons)
+        const clonedCanvases = clonedDoc.querySelectorAll("#dashboardContent canvas");
+        clonedCanvases.forEach((clonedCv, idx) => {
+          const dataUrl = canvasDataUrls[idx];
+          if (dataUrl) {
+            try {
+              const ctx = clonedCv.getContext("2d");
+              if (ctx) {
+                const img = new Image();
+                img.src = dataUrl;
+                // Vẽ đè ảnh snapshot lên canvas của bản clone
+                ctx.drawImage(img, 0, 0, clonedCv.width, clonedCv.height);
+              }
+            } catch (err) {
+              console.warn("Lỗi vẽ lại canvas clone:", err);
+            }
+          }
+        });
+
+        // 2. Ẩn 4 cấu phần theo yêu cầu người dùng:
         // - Bảng Thống Kê Chi Tiết Toàn Bộ Đơn Hàng (#matrixDetailSection)
         // - Thống Kê Chi Tiết Theo Depot (#depotTableCard)
         // - Top Lý Do Hủy & Phản Hồi Từ Chối Điều Độ (#reasonsTableCard)
@@ -1995,7 +2027,7 @@ async function exportDashboardOverviewPng(triggerBtn = null) {
           }
         });
 
-        // 2. Ẩn các bộ điều khiển tương tác, nút bấm, thông báo nguồn
+        // 3. Ẩn các bộ điều khiển tương tác, nút bấm, thông báo nguồn
         const interactiveToHide = [
           ".source-notice",
           ".filter-panel",
@@ -2015,9 +2047,17 @@ async function exportDashboardOverviewPng(triggerBtn = null) {
           });
         });
 
-        // 3. Gỡ bỏ thanh cuộn, mở rộng chiều cao để vẽ trọn vẹn toàn bộ các bảng & ma trận
+        // 4. Gỡ bỏ triệt để thanh cuộn, giới hạn chiều cao trên toàn bộ thẻ cha và thẻ con
+        const clonedDashboard = clonedDoc.getElementById("dashboardContent");
+        if (clonedDashboard) {
+          clonedDashboard.style.overflow = "visible";
+          clonedDashboard.style.height = "auto";
+          clonedDashboard.style.maxHeight = "none";
+          clonedDashboard.style.width = "100%";
+        }
+
         const scrollContainers = clonedDoc.querySelectorAll(
-          ".table-responsive, .matrix-table-container, .inline-table-container, .modal-table-container"
+          ".main-content, .table-responsive, .matrix-table-container, .inline-table-container, .modal-table-container"
         );
         scrollContainers.forEach((c) => {
           c.style.maxHeight = "none";
@@ -2025,7 +2065,7 @@ async function exportDashboardOverviewPng(triggerBtn = null) {
           c.style.height = "auto";
         });
 
-        // 4. Gỡ bỏ position: sticky trên header bảng và cột ghim
+        // 5. Gỡ bỏ position: sticky trên header bảng và cột ghim để không bị xê dịch toạ độ
         const stickyElements = clonedDoc.querySelectorAll(
           ".matrix-table thead th, .matrix-table th, .matrix-table td, " +
           ".matrix-row-total td, .frozen-col, .kpi-summary-table thead th, .data-table thead th"
@@ -2034,8 +2074,8 @@ async function exportDashboardOverviewPng(triggerBtn = null) {
           s.style.position = "static";
         });
 
-        // 5. Đảm bảo toàn bộ bảng chiếm 100% chiều ngang
-        clonedDoc.querySelectorAll("table").forEach((tbl) => {
+        // 6. Đảm bảo toàn bộ bảng và card chiếm 100% chiều ngang
+        clonedDoc.querySelectorAll("table, .matrix-card, .table-card").forEach((tbl) => {
           tbl.style.width = "100%";
         });
       }
