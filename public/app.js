@@ -973,6 +973,7 @@ function renderDashboardViews(data, records = []) {
 
   // 5. Tables
   renderKpiSummaryTable(records, masterDashboardRecords ? masterDashboardRecords.length : (records ? records.length : 0));
+  renderTopDepotLineCancelTable(records);
   renderDepotTable(byDepot, kpis.totalOrders);
   renderReasonsTable(topCancelReasons);
 }
@@ -1172,6 +1173,88 @@ function renderReasonsTable(reasons) {
       <td>${r.percentage}%</td>
     </tr>
   `).join("");
+}
+
+// Render Bảng Thống Kê Top Depot & Hãng Tàu Có Số Lượng Đơn Hủy Nhiều Nhất Kèm Lý Do Phổ Biến
+function renderTopDepotLineCancelTable(records = []) {
+  const tbody = document.getElementById("tbodyTopDepotLineCancel");
+  if (!tbody) return;
+
+  const list = records || [];
+  // Lọc chỉ lấy các đơn hủy (Đã hủy / Quá 3h tự động hủy / Từ chối duyệt)
+  const cancelledList = list.filter(r => isCancelledOrder(r) || isAutoCancelledBy3h(r));
+  const totalCancelled = cancelledList.length;
+
+  if (totalCancelled === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="7" class="text-center text-muted" style="padding: 24px;">Không có đơn hủy nào trong bộ lọc hiện tại.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  // Gom nhóm theo cặp: Depot + Hãng Tàu
+  const groupMap = new Map();
+  cancelledList.forEach(r => {
+    const depot = (r.depot || "Chưa xác định").trim();
+    const hangTau = (r.hangTau || "Khác").trim();
+    const key = `${depot}___${hangTau}`;
+    const teus = Number(r.sizeTeus) || 0;
+    const reason = (r.lyDoHuy || r.lyDoTuChoi || "Không có lý do").trim();
+
+    if (!groupMap.has(key)) {
+      groupMap.set(key, {
+        depot,
+        hangTau,
+        cancelCount: 0,
+        teus: 0,
+        reasonsMap: new Map()
+      });
+    }
+
+    const item = groupMap.get(key);
+    item.cancelCount += 1;
+    item.teus += teus;
+    item.reasonsMap.set(reason, (item.reasonsMap.get(reason) || 0) + 1);
+  });
+
+  // Chuyển Map thành mảng, sắp xếp giảm dần theo số lượng đơn hủy
+  const sortedPairs = Array.from(groupMap.values()).sort((a, b) => b.cancelCount - a.cancelCount);
+
+  // Hiển thị tối đa Top 15 cặp Depot - Hãng tàu có đơn hủy nhiều nhất
+  const topPairs = sortedPairs.slice(0, 15);
+
+  tbody.innerHTML = topPairs.map((pair, idx) => {
+    const pct = ((pair.cancelCount / totalCancelled) * 100).toFixed(1);
+
+    // Lấy Top 3 lý do hủy phổ biến nhất của cặp Depot - Hãng tàu này
+    const sortedReasons = Array.from(pair.reasonsMap.entries())
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 3);
+
+    const reasonsHtml = sortedReasons.map((rs, rIdx) => {
+      const reasonPct = ((rs.count / pair.cancelCount) * 100).toFixed(0);
+      return `<div style="font-size: 12.5px; line-height: 1.5; margin-bottom: 2px;">
+        <span style="color: #475569; font-weight: 500;">- ${rs.reason}:</span> 
+        <strong style="color: #b91c1c;">${rs.count} đơn</strong> 
+        <span style="color: #64748b; font-size: 11px;">(${reasonPct}%)</span>
+      </div>`;
+    }).join("");
+
+    return `
+      <tr>
+        <td class="text-center" style="font-weight: 600; color: #64748b;">${idx + 1}</td>
+        <td><strong style="color: #1d4ed8; font-size: 13.5px;">${pair.depot}</strong></td>
+        <td><strong>${pair.hangTau}</strong></td>
+        <td style="text-align: right;"><strong style="color: #b91c1c; font-size: 14px;">${pair.cancelCount.toLocaleString()}</strong></td>
+        <td style="text-align: right; font-weight: 600;">${pair.teus.toFixed(1)}</td>
+        <td style="text-align: right;"><span style="font-weight: 700; color: #0f172a;">${pct}%</span></td>
+        <td style="padding: 8px 12px;">${reasonsHtml}</td>
+      </tr>
+    `;
+  }).join("");
 }
 
 // Render Bảng Chỉ Số KPI Vận Hành & CSKH
@@ -1492,6 +1575,7 @@ async function exportElementToPng(elementOrId, fileName = "bao_cao_thong_ke.png"
           ".modal-toolbar-actions",
           ".modal-search-box",
           "#btnExportKpiPng",
+          "#btnExportTopDepotLinePng",
           "#btnExportDepotPng",
           "#btnExportReasonsPng",
           ".modal-close-btn",
@@ -1538,6 +1622,15 @@ function initExportPngEvents() {
       const card = document.getElementById("kpiSummaryCard");
       const dateStr = new Date().toISOString().substring(0, 10);
       exportElementToPng(card, `bang_chi_so_kpi_${dateStr}.png`, btnKpiPng);
+    };
+  }
+
+  const btnTopDepotLinePng = document.getElementById("btnExportTopDepotLinePng");
+  if (btnTopDepotLinePng) {
+    btnTopDepotLinePng.onclick = () => {
+      const card = document.getElementById("topDepotLineCancelCard");
+      const dateStr = new Date().toISOString().substring(0, 10);
+      exportElementToPng(card, `top_depot_hang_tau_huy_${dateStr}.png`, btnTopDepotLinePng);
     };
   }
 
