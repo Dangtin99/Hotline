@@ -3053,5 +3053,13 @@ body {
   box-shadow: 0 0 0 2px rgba(14, 116, 144, 0.15);
 }
 
+/* Phân quyền giao diện người dùng (Role-based visibility) */
+html.non-admin-user #navVerificationTable,
+html.non-admin-user #navUpload,
+html.non-admin-user #sidebarHeadingUpload,
+html.non-admin-user [data-admin-only="true"] {
+  display: none !important;
+}
+
 
 

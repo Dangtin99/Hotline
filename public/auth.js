@@ -16,6 +16,22 @@
     window.location.replace("index.html");
     return;
   }
+
+  // Phân quyền sớm từ localStorage để bảo vệ trang và áp dụng class ẩn
+  try {
+    const userStr = localStorage.getItem("gpg_auth_user");
+    if (userStr) {
+      const u = JSON.parse(userStr);
+      if (u && u.role !== "admin") {
+        document.documentElement.classList.add("non-admin-user");
+        const path = window.location.pathname.toLowerCase();
+        if (path.endsWith("upload.html") || path.endsWith("verification-table.html")) {
+          window.location.replace("index.html");
+          return;
+        }
+      }
+    }
+  } catch (e) {}
 })();
 
 // Interceptor tự động gắn Authorization Header cho mọi request fetch() đến /api/
@@ -88,9 +104,32 @@ async function initAuthProfile() {
   }
 }
 
+// Phân quyền giao diện người dùng theo Role (Chỉ Admin mới thấy tab Check đơn & Đăng tải dữ liệu)
+function applyRolePermissions(user) {
+  if (!user) return;
+  const isAdmin = user.role === "admin";
+  if (!isAdmin) {
+    document.documentElement.classList.add("non-admin-user");
+    const targets = document.querySelectorAll("#navVerificationTable, #navUpload, #sidebarHeadingUpload, [data-admin-only='true']");
+    targets.forEach(el => el.style.setProperty("display", "none", "important"));
+
+    const path = window.location.pathname.toLowerCase();
+    if (path.endsWith("upload.html") || path.endsWith("verification-table.html")) {
+      alert("Chức năng này chỉ dành riêng cho tài khoản Quản trị viên (admin). Bạn sẽ được chuyển hướng về Bảng điều khiển.");
+      window.location.replace("index.html");
+    }
+  } else {
+    document.documentElement.classList.remove("non-admin-user");
+    const targets = document.querySelectorAll("#navVerificationTable, #navUpload, #sidebarHeadingUpload, [data-admin-only='true']");
+    targets.forEach(el => el.style.removeProperty("display"));
+  }
+}
+
 // Cập nhật thông tin lên thanh header dạng 1 nút User Chip và Dropdown Menu (Khớp hình mẫu)
 function renderUserProfile(user) {
   if (!user) return;
+  applyRolePermissions(user);
+
   const sidebarUserEl = document.getElementById("sidebarUserName");
   if (sidebarUserEl) sidebarUserEl.textContent = user.fullName || user.username;
 
