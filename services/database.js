@@ -1248,10 +1248,6 @@ function updateOrdersFromCheckData() {
         const checkGate = cleanGate(check.loaiDonHang);
         if (orderGate && checkGate && orderGate !== checkGate) return false;
 
-        // Điều kiện 3: THỜI GIAN: Ngày duyệt check - Ngày hủy đơn cũ > 5 PHÚT
-        const diffMin = diffMinutes(check.ngayDuocDuyet, order.ngayHuyDon);
-        if (diffMin <= 5) return false;
-
         const checkInfo = parseCheckEirAndCont(check);
         const isCheckIn = checkGate === "IN";
 
