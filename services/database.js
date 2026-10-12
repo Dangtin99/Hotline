@@ -1118,38 +1118,148 @@ function updateOrdersFromCheckData() {
     return s.includes("thanh toan thanh cong") || s.includes("thanh cong") || s.includes("da thanh toan") || s.includes("hoan thanh");
   };
 
+  const cleanGate = (val) => {
+    if (!val) return "";
+    const s = String(val).toUpperCase().trim();
+    if (s.includes("OUT")) return "OUT";
+    if (s.includes("IN")) return "IN";
+    return s;
+  };
+
   const usedCheckKeys = new Set();
   const updatedRecords = [];
   let updatedUnpaid = 0;
   let updatedCancelled = 0;
   const nowStr = new Date().toISOString().replace("T", " ").substring(0, 19);
 
-  // 1. Duyệt qua từng đơn hàng trong memoryOrders
+  // 1. Nhóm dữ liệu đơn hàng (memoryOrders) theo từng mã Booking
+  const bookingOrdersMap = new Map();
   memoryOrders.forEach(order => {
-    const orderBooking = clean(order.soBooking);
-    if (!orderBooking) return;
-    const orderInfo = parseOrderEirAndCont(order);
+    const booking = clean(order.soBooking);
+    if (!booking) return;
+    if (!bookingOrdersMap.has(booking)) {
+      bookingOrdersMap.set(booking, []);
+    }
+    bookingOrdersMap.get(booking).push(order);
+  });
 
-    // --- BƯỚC 1: NẾU ĐƠN LÀ ĐƠN HỦY / CHƯA THANH TOÁN -> ƯU TIÊN TÌM LỆNH ĐẶT LẠI MỚI CÒN HIỆU LỰC ---
-    const canRebook = isCancelled(order.trangThaiDonHang) || isUnpaid(order.trangThaiDonHang) || order.isAutoCancelledBy3h;
-    let diffEirIndex = -1;
-    if (canRebook) {
-      const isOrderIn = clean(order.loaiDonHang) === "IN";
-      diffEirIndex = memoryVerificationOrders.findIndex(check => {
+  // 2. Duyệt qua từng mã Booking và thực hiện đối soát 2 Phase (Ưu tiên Chưa thanh toán trước, sau đó đến Đã hủy)
+  for (const [orderBooking, ordersInBooking] of bookingOrdersMap.entries()) {
+    // --- PHASE 1 (ƯU TIÊN 1): XỬ LÝ CÁC ĐƠN CHƯA THANH TOÁN ---
+    ordersInBooking.forEach(order => {
+      const isUnpaidOrder = isUnpaid(order.trangThaiDonHang);
+      if (!isUnpaidOrder) return;
+
+      const orderGate = cleanGate(order.loaiDonHang);
+      const orderInfo = parseOrderEirAndCont(order);
+      const orderStatusNorm = clean(order.trangThaiDonHang);
+
+      const matchedIndex = memoryVerificationOrders.findIndex(check => {
         if (usedCheckKeys.has(check.rowKey)) return false;
         if (clean(check.soBooking) !== orderBooking) return false;
-        // Lệnh đặt lại phải là lệnh còn hiệu lực (không phải là lịch sử các lần hủy cũ)
+
+        // Điều kiện 1: Trạng thái đơn trong đơn hàng PHẢI KHÁC trạng thái trong đơn check
+        const checkStatusNorm = clean(check.trangThaiDonHang);
+        if (orderStatusNorm === checkStatusNorm) return false;
+
+        // Điều kiện 2: BẮT BUỘC TRÙNG LOẠI GATE (IN/OUT)
+        const checkGate = cleanGate(check.loaiDonHang);
+        if (orderGate && checkGate && orderGate !== checkGate) return false;
+
+        // Điều kiện 3: Xét trùng số Container hoặc cùng mã EIR
+        const checkInfo = parseCheckEirAndCont(check);
+        if (isSameCont(orderInfo, checkInfo) || isSameEir(orderInfo, checkInfo)) {
+          return true;
+        }
+        return false;
+      });
+
+      if (matchedIndex !== -1) {
+        const check = memoryVerificationOrders[matchedIndex];
+        const checkInfo = parseCheckEirAndCont(check);
+        usedCheckKeys.add(check.rowKey);
+
+        if (checkInfo.eir) {
+          order.soContainer = checkInfo.cont ? `${checkInfo.eir}-${checkInfo.cont}` : `${checkInfo.eir}-`;
+        } else if (check.soContainer) {
+          order.soContainer = check.soContainer;
+        }
+
+        if (order.isAutoCancelledBy3h) {
+          order.isAutoCancelledBy3h = false;
+        }
+
+        if (check.depot) order.depot = check.depot;
+        if (check.hangTau) order.hangTau = check.hangTau;
+        if (check.ngayHuyDon) order.ngayHuyDon = check.ngayHuyDon;
+        if (check.ngayDuocDuyet) order.ngayDuocDuyet = check.ngayDuocDuyet;
+        if (check.loaiContainer) order.loaiContainer = check.loaiContainer;
+        if (check.loaiDonHang) order.loaiDonHang = check.loaiDonHang;
+        if (check.sizeTeus !== undefined && check.sizeTeus !== null) order.sizeTeus = Number(check.sizeTeus) || 0;
+        if (check.trangThaiDonHang) order.trangThaiDonHang = check.trangThaiDonHang;
+        if (check.trangThaiKichHoat) order.trangThaiKichHoat = check.trangThaiKichHoat;
+        if (check.thoiGianKichHoat) order.thoiGianKichHoat = check.thoiGianKichHoat;
+        if (check.lyDoHuy) order.lyDoHuy = check.lyDoHuy;
+        if (check.lyDoTuChoi) order.lyDoTuChoi = check.lyDoTuChoi;
+        if (check.lyDoHuyCheck) order.lyDoHuyCheck = check.lyDoHuyCheck;
+        if (check.tenTaiXe) order.tenTaiXe = check.tenTaiXe;
+        if (check.sdtTaiXe) order.sdtTaiXe = check.sdtTaiXe;
+        if (check.tenNhaXe) order.tenNhaXe = check.tenNhaXe;
+        if (check.sdtNhaXe) order.sdtNhaXe = check.sdtNhaXe;
+        order.updatedAt = nowStr;
+
+        if (isSuccessPayment(order.trangThaiDonHang)) {
+          order.trangThaiXuLy = "Thanh toán thành công";
+        }
+
+        updatedUnpaid++;
+        updatedRecords.push({
+          rowKey: order.rowKey,
+          stt: order.stt,
+          soBooking: order.soBooking,
+          soContainer: order.soContainer,
+          trangThaiXuLy: order.trangThaiXuLy
+        });
+      }
+    });
+
+    // --- PHASE 2 (ƯU TIÊN 2): XỬ LÝ CÁC ĐƠN ĐÃ HỦY ---
+    ordersInBooking.forEach(order => {
+      const isCancelledOrder = isCancelled(order.trangThaiDonHang) || order.isAutoCancelledBy3h;
+      if (!isCancelledOrder) return;
+
+      const orderGate = cleanGate(order.loaiDonHang);
+      const isOrderIn = orderGate === "IN";
+      const orderInfo = parseOrderEirAndCont(order);
+      const orderStatusNorm = clean(order.trangThaiDonHang);
+
+      const matchedIndex = memoryVerificationOrders.findIndex(check => {
+        if (usedCheckKeys.has(check.rowKey)) return false;
+        if (clean(check.soBooking) !== orderBooking) return false;
+
+        // Điều kiện 1: Trạng thái đơn trong đơn hàng PHẢI KHÁC trạng thái trong đơn check
+        const checkStatusNorm = clean(check.trangThaiDonHang);
+        if (orderStatusNorm === checkStatusNorm) return false;
+
+        // Không lấy các dòng check cũng là đơn hủy cũ
         if (isCancelled(check.trangThaiDonHang)) return false;
 
+        // Điều kiện 2: BẮT BUỘC TRÙNG LOẠI GATE (IN/OUT)
+        const checkGate = cleanGate(check.loaiDonHang);
+        if (orderGate && checkGate && orderGate !== checkGate) return false;
+
+        // Điều kiện 3: THỜI GIAN: Ngày duyệt check - Ngày hủy đơn cũ > 5 PHÚT
+        const diffMin = diffMinutes(check.ngayDuocDuyet, order.ngayHuyDon);
+        if (diffMin <= 5) return false;
+
         const checkInfo = parseCheckEirAndCont(check);
-        const isCheckIn = clean(check.loaiDonHang) === "IN";
+        const isCheckIn = checkGate === "IN";
 
-        // Khác mã EIR (chứng minh tài xế đã tạo đơn EIR mới cho cùng Booking)
-        const isDiffEir = Boolean(checkInfo.eir && orderInfo.eir !== checkInfo.eir);
-        if (!isDiffEir) return false;
+        // Khác mã EIR (lệnh đặt lại mới)
+        const hasDiffEir = Boolean(checkInfo.eir && orderInfo.eir !== checkInfo.eir);
+        if (!hasDiffEir) return false;
 
-        // NGUYÊN TẮC QUAN TRỌNG: ĐỐI VỚI ĐƠN IN (HẠ CONTAINER / NHẬP BÃI)
-        // Bắt buộc phải trùng đúng mã số Container với nhau (cont === cont)
+        // Đối với đơn IN (Hạ bãi): Bắt buộc phải trùng đúng mã số Container
         if (isOrderIn || isCheckIn || (orderInfo.cont && checkInfo.cont)) {
           if (!orderInfo.cont || !checkInfo.cont || orderInfo.cont !== checkInfo.cont) {
             return false;
@@ -1157,137 +1267,74 @@ function updateOrdersFromCheckData() {
           return true;
         }
 
-        // Đối với đơn OUT (Cấp rỗng): nếu cả 2 đều đã gán số cont thì cũng phải trùng cont
+        // Đối với đơn OUT (Cấp rỗng): Nếu cả 2 đều đã gán cont thì phải trùng cont
         if (orderInfo.cont && checkInfo.cont && orderInfo.cont !== checkInfo.cont) {
           return false;
         }
 
         return true;
       });
-    }
 
-    if (diffEirIndex !== -1) {
-      const check = memoryVerificationOrders[diffEirIndex];
-      const checkInfo = parseCheckEirAndCont(check);
-      usedCheckKeys.add(check.rowKey);
+      if (matchedIndex !== -1) {
+        const check = memoryVerificationOrders[matchedIndex];
+        const checkInfo = parseCheckEirAndCont(check);
+        usedCheckKeys.add(check.rowKey);
 
-      // Cập nhật số container mang mã EIR mới từ bảng check đơn
-      if (checkInfo.eir) {
-        order.soContainer = checkInfo.cont ? `${checkInfo.eir}-${checkInfo.cont}` : `${checkInfo.eir}-`;
-      } else if (check.soContainer) {
-        order.soContainer = check.soContainer;
+        if (checkInfo.eir) {
+          order.soContainer = checkInfo.cont ? `${checkInfo.eir}-${checkInfo.cont}` : `${checkInfo.eir}-`;
+        } else if (check.soContainer) {
+          order.soContainer = check.soContainer;
+        }
+
+        if (order.isAutoCancelledBy3h) {
+          order.isAutoCancelledBy3h = false;
+        }
+
+        if (check.depot) order.depot = check.depot;
+        if (check.hangTau) order.hangTau = check.hangTau;
+        if (check.ngayHuyDon) order.ngayHuyDon = check.ngayHuyDon;
+        if (check.ngayDuocDuyet) order.ngayDuocDuyet = check.ngayDuocDuyet;
+        if (check.loaiContainer) order.loaiContainer = check.loaiContainer;
+        if (check.loaiDonHang) order.loaiDonHang = check.loaiDonHang;
+        if (check.sizeTeus !== undefined && check.sizeTeus !== null) order.sizeTeus = Number(check.sizeTeus) || 0;
+        if (check.trangThaiDonHang) order.trangThaiDonHang = check.trangThaiDonHang;
+        if (check.trangThaiKichHoat) order.trangThaiKichHoat = check.trangThaiKichHoat;
+        if (check.thoiGianKichHoat) order.thoiGianKichHoat = check.thoiGianKichHoat;
+        if (check.lyDoHuy) order.lyDoHuy = check.lyDoHuy;
+        if (check.lyDoTuChoi) order.lyDoTuChoi = check.lyDoTuChoi;
+        if (check.lyDoHuyCheck) order.lyDoHuyCheck = check.lyDoHuyCheck;
+        if (check.tenTaiXe) order.tenTaiXe = check.tenTaiXe;
+        if (check.sdtTaiXe) order.sdtTaiXe = check.sdtTaiXe;
+        if (check.tenNhaXe) order.tenNhaXe = check.tenNhaXe;
+        if (check.sdtNhaXe) order.sdtNhaXe = check.sdtNhaXe;
+        order.updatedAt = nowStr;
+
+        const isSucc = isSuccessPayment(order.trangThaiDonHang);
+        const currXuLy = order.trangThaiXuLy ? String(order.trangThaiXuLy).trim() : "";
+
+        if (isSucc) {
+          order.trangThaiXuLy = "Thanh toán thành công";
+        } else if (!currXuLy || currXuLy === "null" || currXuLy === "undefined") {
+          order.trangThaiXuLy = "Tự động đặt lại";
+        } else if (
+          currXuLy === "Đã liên hệ - Đang chờ" || 
+          currXuLy === "Đã liên hệ - Chờ" || 
+          currXuLy === "Đã liên hệ - Chờ đặt lại"
+        ) {
+          order.trangThaiXuLy = "Đã liên hệ - Đã đặt lại";
+        }
+
+        updatedCancelled++;
+        updatedRecords.push({
+          rowKey: order.rowKey,
+          stt: order.stt,
+          soBooking: order.soBooking,
+          soContainer: order.soContainer,
+          trangThaiXuLy: order.trangThaiXuLy
+        });
       }
-
-      if (order.isAutoCancelledBy3h) {
-        order.isAutoCancelledBy3h = false;
-      }
-
-      if (check.depot) order.depot = check.depot;
-      if (check.hangTau) order.hangTau = check.hangTau;
-      if (check.ngayHuyDon) order.ngayHuyDon = check.ngayHuyDon;
-      if (check.ngayDuocDuyet) order.ngayDuocDuyet = check.ngayDuocDuyet;
-      if (check.loaiContainer) order.loaiContainer = check.loaiContainer;
-      if (check.loaiDonHang) order.loaiDonHang = check.loaiDonHang;
-      if (check.sizeTeus !== undefined && check.sizeTeus !== null) order.sizeTeus = Number(check.sizeTeus) || 0;
-      if (check.trangThaiDonHang) order.trangThaiDonHang = check.trangThaiDonHang;
-      if (check.trangThaiKichHoat) order.trangThaiKichHoat = check.trangThaiKichHoat;
-      if (check.thoiGianKichHoat) order.thoiGianKichHoat = check.thoiGianKichHoat;
-      if (check.lyDoHuy) order.lyDoHuy = check.lyDoHuy;
-      if (check.lyDoTuChoi) order.lyDoTuChoi = check.lyDoTuChoi;
-      if (check.lyDoHuyCheck) order.lyDoHuyCheck = check.lyDoHuyCheck;
-      if (check.tenTaiXe) order.tenTaiXe = check.tenTaiXe;
-      if (check.sdtTaiXe) order.sdtTaiXe = check.sdtTaiXe;
-      if (check.tenNhaXe) order.tenNhaXe = check.tenNhaXe;
-      if (check.sdtNhaXe) order.sdtNhaXe = check.sdtNhaXe;
-      order.updatedAt = nowStr;
-
-      const isSucc = isSuccessPayment(order.trangThaiDonHang);
-      const currXuLy = order.trangThaiXuLy ? String(order.trangThaiXuLy).trim() : "";
-
-      if (isSucc) {
-        order.trangThaiXuLy = "Thanh toán thành công";
-      } else if (!currXuLy || currXuLy === "null" || currXuLy === "undefined") {
-        order.trangThaiXuLy = "Tự động đặt lại";
-      } else if (
-        currXuLy === "Đã liên hệ - Đang chờ" || 
-        currXuLy === "Đã liên hệ - Chờ" || 
-        currXuLy === "Đã liên hệ - Chờ đặt lại"
-      ) {
-        order.trangThaiXuLy = "Đã liên hệ - Đã đặt lại";
-      }
-
-      updatedCancelled++;
-      updatedRecords.push({
-        rowKey: order.rowKey,
-        stt: order.stt,
-        soBooking: order.soBooking,
-        soContainer: order.soContainer,
-        trangThaiXuLy: order.trangThaiXuLy
-      });
-      return;
-    }
-
-    // --- BƯỚC 2: TRÙNG SỐ EIR (Cùng mã EIR - Cập nhật trạng thái mới nhất từ bảng check) ---
-    const sameEirIndex = memoryVerificationOrders.findIndex(check => {
-      if (usedCheckKeys.has(check.rowKey)) return false;
-      if (clean(check.soBooking) !== orderBooking) return false;
-      const checkInfo = parseCheckEirAndCont(check);
-      // Trùng mã EIR
-      if (orderInfo.eir && checkInfo.eir && orderInfo.eir === checkInfo.eir) return true;
-      return false;
     });
-
-    if (sameEirIndex !== -1) {
-      const check = memoryVerificationOrders[sameEirIndex];
-      const checkInfo = parseCheckEirAndCont(check);
-      usedCheckKeys.add(check.rowKey);
-
-      // Cập nhật số container mang mã EIR từ bảng check đơn
-      if (checkInfo.eir) {
-        order.soContainer = checkInfo.cont ? `${checkInfo.eir}-${checkInfo.cont}` : `${checkInfo.eir}-`;
-      } else if (check.soContainer) {
-        order.soContainer = check.soContainer;
-      }
-
-      if (order.isAutoCancelledBy3h) {
-        order.isAutoCancelledBy3h = false;
-      }
-
-      if (check.depot) order.depot = check.depot;
-      if (check.hangTau) order.hangTau = check.hangTau;
-      if (check.ngayHuyDon) order.ngayHuyDon = check.ngayHuyDon;
-      if (check.ngayDuocDuyet) order.ngayDuocDuyet = check.ngayDuocDuyet;
-      if (check.loaiContainer) order.loaiContainer = check.loaiContainer;
-      if (check.loaiDonHang) order.loaiDonHang = check.loaiDonHang;
-      if (check.sizeTeus !== undefined && check.sizeTeus !== null) order.sizeTeus = Number(check.sizeTeus) || 0;
-      if (check.trangThaiDonHang) order.trangThaiDonHang = check.trangThaiDonHang;
-      if (check.trangThaiKichHoat) order.trangThaiKichHoat = check.trangThaiKichHoat;
-      if (check.thoiGianKichHoat) order.thoiGianKichHoat = check.thoiGianKichHoat;
-      if (check.lyDoHuy) order.lyDoHuy = check.lyDoHuy;
-      if (check.lyDoTuChoi) order.lyDoTuChoi = check.lyDoTuChoi;
-      if (check.lyDoHuyCheck) order.lyDoHuyCheck = check.lyDoHuyCheck;
-      if (check.tenTaiXe) order.tenTaiXe = check.tenTaiXe;
-      if (check.sdtTaiXe) order.sdtTaiXe = check.sdtTaiXe;
-      if (check.tenNhaXe) order.tenNhaXe = check.tenNhaXe;
-      if (check.sdtNhaXe) order.sdtNhaXe = check.sdtNhaXe;
-      order.updatedAt = nowStr;
-
-      // Nếu Trạng thái đơn sau thay thế = Thanh toán thành công -> cập nhật trạng thái CSKH = Thanh toán thành công
-      if (isSuccessPayment(order.trangThaiDonHang)) {
-        order.trangThaiXuLy = "Thanh toán thành công";
-      }
-
-      updatedUnpaid++;
-      updatedRecords.push({
-        rowKey: order.rowKey,
-        stt: order.stt,
-        soBooking: order.soBooking,
-        soContainer: order.soContainer,
-        trangThaiXuLy: order.trangThaiXuLy
-      });
-      return;
-    }
-  });
+  }
 
   const deletedCount = usedCheckKeys.size;
 
