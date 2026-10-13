@@ -1344,6 +1344,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // Khởi động bộ đếm ngược liên tục mỗi giây trên toàn bộ bảng
   setInterval(tickCountdowns, 1000);
 
+  // Khởi động cơ chế đồng bộ thời gian thực siêu nhẹ 5 giây giữa các người dùng
+  startRealtimeSync();
+
   // Khởi tạo các sự kiện phân trang (Tối đa 200 dòng/trang)
   initPaginationEvents();
 
@@ -1353,6 +1356,117 @@ document.addEventListener("DOMContentLoaded", () => {
   // Kiểm tra liên kết Turso Cloud SQLite
   checkTursoStatus();
 });
+
+// Quản lý đồng bộ thời gian thực siêu nhẹ (5s polling) giữa nhiều người dùng
+let localOperationalVersion = 0;
+let isSyncingOperational = false;
+
+function startRealtimeSync() {
+  // Lấy phiên bản ban đầu sau khi tải trang 1 giây
+  setTimeout(checkAndSyncOperationalUpdates, 1500);
+
+  // Polling định kỳ mỗi 5 giây
+  setInterval(() => {
+    // Chỉ chạy khi tab đang active/hiển thị để tiết kiệm tài nguyên
+    if (document.visibilityState === "visible") {
+      checkAndSyncOperationalUpdates();
+    }
+  }, 5000);
+
+  // Khi người dùng chuyển tab và quay lại, đồng bộ ngay lập tức
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      checkAndSyncOperationalUpdates();
+    }
+  });
+}
+
+async function checkAndSyncOperationalUpdates() {
+  if (isSyncingOperational || !allRecords || allRecords.length === 0) return;
+  try {
+    isSyncingOperational = true;
+    // 1. Kiểm tra version siêu nhẹ (~10 bytes)
+    const resVer = await fetch("/api/orders/operational-version");
+    if (!resVer.ok) return;
+    const dataVer = await resVer.json();
+    const serverVer = dataVer.version;
+
+    if (!localOperationalVersion) {
+      localOperationalVersion = serverVer;
+      return;
+    }
+
+    // Nếu version máy chủ lớn hơn version máy khách -> Đã có người dùng khác vừa cập nhật
+    if (serverVer > localOperationalVersion) {
+      const resUpd = await fetch("/api/orders/operational-updates");
+      if (!resUpd.ok) return;
+      const dataUpd = await resUpd.json();
+      const updates = dataUpd.updates || {};
+
+      applyOperationalUpdatesToUI(updates);
+      localOperationalVersion = serverVer;
+    }
+  } catch (err) {
+    // Không làm phiền người dùng nếu mạng chập chờn
+  } finally {
+    isSyncingOperational = false;
+  }
+}
+
+function applyOperationalUpdatesToUI(updates) {
+  if (!updates || Object.keys(updates).length === 0) return;
+
+  let hasChanged = false;
+  const tbody = document.getElementById("tbodyMainOrders");
+
+  Object.entries(updates).forEach(([rowKey, item]) => {
+    // Tìm tất cả bản ghi tương ứng trong mảng allRecords
+    const matched = allRecords.filter(r => (r.rowKey === rowKey || getRowKey(r) === rowKey));
+    matched.forEach(rec => {
+      const newStatus = item.trangThaiXuLy || "";
+      const newExp = item.giaiTrinh || "";
+      const newPending = Boolean(item.isPending);
+
+      if (rec.trangThaiXuLy !== newStatus || rec.giaiTrinh !== newExp || rec.isPending !== newPending) {
+        rec.trangThaiXuLy = newStatus;
+        rec.giaiTrinh = newExp;
+        rec.isPending = newPending;
+        hasChanged = true;
+
+        // Cập nhật trực tiếp lên dòng DOM nếu đang hiển thị trên trang hiện tại
+        if (tbody) {
+          const tr = tbody.querySelector(`tr[data-rowkey="${rowKey}"]`);
+          if (tr) {
+            // 1. Cập nhật ô Dropdown CSKH
+            const selectElem = tr.querySelector(".select-status");
+            if (selectElem && selectElem.value !== newStatus) {
+              selectElem.value = newStatus;
+              selectElem.setAttribute("data-status", newStatus);
+              selectElem.setAttribute("data-status-order", getCskhStatusOrder(newStatus));
+            }
+
+            // 2. Cập nhật ô Giải Trình
+            const inputElem = tr.querySelector(".input-giaitrinh");
+            if (inputElem && document.activeElement !== inputElem && inputElem.value !== newExp) {
+              inputElem.value = newExp;
+            }
+
+            // 3. Cập nhật ô Đếm Ngược Hạn 3h (Dừng tính giờ ngay lập tức nếu đã xử lý)
+            const cdCell = tr.querySelector(".cell-countdown-3h");
+            if (cdCell) {
+              const isUnpaid = isUnpaidOrder(rec);
+              cdCell.innerHTML = renderCountdownCell(rec.ngayDuocDuyet, isUnpaid, rec.trangThaiXuLy);
+            }
+          }
+        }
+      }
+    });
+  });
+
+  if (hasChanged) {
+    updateTabCounts();
+  }
+}
 
 // Kiểm tra trạng thái liên kết Turso Cloud SQLite
 async function checkTursoStatus() {
@@ -1643,13 +1757,13 @@ async function loadDataset() {
 
     currentDatasetId = uploadId || "sql_all";
     
-    // Nạp trạng thái và giải trình đã lưu trong localStorage và bảo tồn từ CSDL máy chủ
+    // Nạp trạng thái và giải trình: Ưu tiên tuyệt đối dữ liệu từ CSDL Máy Chủ, localStorage chỉ dùng làm fallback
     const savedNotes = getSavedNotes();
     allRecords.forEach(r => {
       const k1 = getRowKey(r);
       const k2 = `${r.stt}_${r.soBooking || ''}_${r.soContainer || ''}`;
       const note = savedNotes[k1] || (k2 ? savedNotes[k2] : null) || {};
-      let st = note.status || r.trangThaiXuLy || "";
+      let st = r.trangThaiXuLy || note.status || "";
       if (st === "Đã liên hệ - Đang chờ" || st === "Đã liên hệ - Chờ") {
         st = "Đã liên hệ - Chờ đặt lại";
       } else if (st === "Không liên hệ được") {
@@ -1660,7 +1774,7 @@ async function loadDataset() {
         st = "Đã liên hệ - Đã đặt lại";
       }
       r.trangThaiXuLy = st;
-      r.giaiTrinh = note.giaiTrinh || r.giaiTrinh || "";
+      r.giaiTrinh = r.giaiTrinh || note.giaiTrinh || "";
     });
 
     // Cập nhật các đơn Chưa thanh toán quá 3h thành Đã hủy

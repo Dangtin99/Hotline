@@ -43,7 +43,9 @@ const {
   setOrderPending,
   batchSetOrdersPending,
   getPendingOrderKeys,
-  generateSqlDumpFile
+  generateSqlDumpFile,
+  getOperationalVersion,
+  getOperationalUpdates
 } = require("./services/database");
 const tursoClient = require("./services/tursoClient");
 const {
@@ -583,10 +585,31 @@ app.post("/api/orders/note", authRequired, async (req, res) => {
       return res.status(400).json({ status: "error", message: "Thiếu rowKey." });
     }
     await updateOrderNoteAsync(rowKey, { status, giaiTrinh });
-    return res.json({ status: "success" });
+    return res.json({ status: "success", version: getOperationalVersion() });
   } catch (err) {
     return res.status(500).json({ status: "error", message: err.message });
   }
+});
+
+/**
+ * API: Kiểm tra phiên bản tác nghiệp (CSKH / Giải trình / Pending) - siêu nhẹ ~10 bytes
+ */
+app.get("/api/orders/operational-version", authRequired, (req, res) => {
+  return res.json({
+    status: "success",
+    version: getOperationalVersion()
+  });
+});
+
+/**
+ * API: Lấy toàn bộ bản đồ trạng thái tác nghiệp mới nhất để đồng bộ thời gian thực giữa các máy
+ */
+app.get("/api/orders/operational-updates", authRequired, (req, res) => {
+  const data = getOperationalUpdates();
+  return res.json({
+    status: "success",
+    ...data
+  });
 });
 
 /**

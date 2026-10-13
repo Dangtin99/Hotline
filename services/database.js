@@ -170,6 +170,16 @@ try {
 
 // Quản lý bộ nhớ đệm và dữ liệu đồng bộ
 let memoryOrders = [];
+let operationalVersion = Date.now();
+
+function bumpOperationalVersion() {
+  operationalVersion = Date.now();
+  return operationalVersion;
+}
+
+function getOperationalVersion() {
+  return operationalVersion;
+}
 
 // Hàm tạo khóa duy nhất để nhận diện đơn hàng không bị trùng lặp
 function generateOrderKey(r) {
@@ -522,6 +532,7 @@ function updateOrderNote(rowKey, noteData = {}) {
     tursoClient.updateOrderNoteInTurso(rowKey, noteData).catch(() => {});
   }
 
+  bumpOperationalVersion();
   return true;
 }
 
@@ -560,7 +571,51 @@ function setOrderPending(rowKey, isPending = true) {
   });
 
   persistStore({ generateDump: false, syncFullToTurso: false });
+  bumpOperationalVersion();
   return true;
+}
+
+/**
+ * Lấy toàn bộ bản đồ trạng thái tác nghiệp (CSKH status, explanation, pending) để đồng bộ nhanh
+ */
+function getOperationalUpdates() {
+  const updates = {};
+  if (sqliteEngine) {
+    try {
+      const rows = sqliteEngine.prepare("SELECT row_key, is_pending, cskh_status, explanation, updated_at FROM order_operational_state").all();
+      rows.forEach(r => {
+        if (r.row_key) {
+          updates[r.row_key] = {
+            trangThaiXuLy: r.cskh_status || "",
+            giaiTrinh: r.explanation || "",
+            isPending: r.is_pending === 1,
+            updatedAt: r.updated_at || ""
+          };
+        }
+      });
+      return {
+        version: operationalVersion,
+        updates
+      };
+    } catch (e) {}
+  }
+
+  // Fallback từ memoryOrders
+  memoryOrders.forEach(o => {
+    if (o.rowKey && (o.trangThaiXuLy || o.giaiTrinh || o.isPending)) {
+      updates[o.rowKey] = {
+        trangThaiXuLy: o.trangThaiXuLy || "",
+        giaiTrinh: o.giaiTrinh || "",
+        isPending: Boolean(o.isPending),
+        updatedAt: o.updatedAt || ""
+      };
+    }
+  });
+
+  return {
+    version: operationalVersion,
+    updates
+  };
 }
 
 /**
@@ -1933,5 +1988,7 @@ module.exports = {
   insertManualOrderAsync,
   setOrderPending,
   batchSetOrdersPending,
-  getPendingOrderKeys
+  getPendingOrderKeys,
+  getOperationalVersion,
+  getOperationalUpdates
 };

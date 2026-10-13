@@ -73,7 +73,73 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Load data based on URL parameter or fallback to latest history/sample
   loadDashboardData();
+
+  // Khởi động cơ chế đồng bộ thời gian thực siêu nhẹ 5 giây giữa các người dùng
+  startRealtimeDashboardSync();
 });
+
+// Quản lý đồng bộ thời gian thực siêu nhẹ (5s polling) cho dashboard tổng quan
+let localDashboardOperationalVersion = 0;
+let isSyncingDashboardOperational = false;
+
+function startRealtimeDashboardSync() {
+  setTimeout(checkAndSyncDashboardUpdates, 2000);
+
+  setInterval(() => {
+    if (document.visibilityState === "visible") {
+      checkAndSyncDashboardUpdates();
+    }
+  }, 5000);
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      checkAndSyncDashboardUpdates();
+    }
+  });
+}
+
+async function checkAndSyncDashboardUpdates() {
+  if (isSyncingDashboardOperational || !currentRecords || currentRecords.length === 0) return;
+  try {
+    isSyncingDashboardOperational = true;
+    const resVer = await fetch("/api/orders/operational-version");
+    if (!resVer.ok) return;
+    const dataVer = await resVer.json();
+    const serverVer = dataVer.version;
+
+    if (!localDashboardOperationalVersion) {
+      localDashboardOperationalVersion = serverVer;
+      return;
+    }
+
+    if (serverVer > localDashboardOperationalVersion) {
+      const resUpd = await fetch("/api/orders/operational-updates");
+      if (!resUpd.ok) return;
+      const dataUpd = await resUpd.json();
+      const updates = dataUpd.updates || {};
+
+      let hasChanged = false;
+      Object.entries(updates).forEach(([rowKey, item]) => {
+        const matched = currentRecords.filter(r => (r.rowKey === rowKey || (r.stt && rowKey.includes(r.stt))));
+        matched.forEach(rec => {
+          if (rec.trangThaiXuLy !== item.trangThaiXuLy || rec.giaiTrinh !== item.giaiTrinh) {
+            rec.trangThaiXuLy = item.trangThaiXuLy || "";
+            rec.giaiTrinh = item.giaiTrinh || "";
+            hasChanged = true;
+          }
+        });
+      });
+
+      if (hasChanged) {
+        applyDashboardFilters();
+      }
+      localDashboardOperationalVersion = serverVer;
+    }
+  } catch (e) {
+  } finally {
+    isSyncingDashboardOperational = false;
+  }
+}
 
 function showAlert(msg, isError = true) {
   alertBox.hidden = false;
