@@ -715,17 +715,21 @@ window.onStatusSelectChange = function(selectElem) {
     body: JSON.stringify({ rowKey, status: newStatus })
   }).catch(() => {});
 
-  if (targetRec) {
-    // Cập nhật tức thì ô Hạn Hủy Đơn trên dòng này
-    const tr = selectElem.closest("tr");
-    if (tr) {
-      const cdCell = tr.querySelector(".cell-countdown-3h");
-      if (cdCell) {
-        const isUnpaidOrExpired = isUnpaidOrder(targetRec) || targetRec.isAutoCancelledBy3h;
-        const isCancelled = isCancelledOrder(targetRec);
-        cdCell.innerHTML = renderCountdownCell(targetRec.ngayDuocDuyet, isUnpaidOrExpired, targetRec.trangThaiXuLy, isCancelled);
+  // Cập nhật tức thì ô Hạn Hủy Đơn trên tất cả các dòng hiển thị tương ứng
+  const tbody = document.getElementById("tbodyMainOrders");
+  if (tbody) {
+    matchedRecs.forEach(rec => {
+      const k = rec.rowKey || getRowKey(rec);
+      const rowTr = tbody.querySelector(`tr[data-rowkey="${k}"]`);
+      if (rowTr) {
+        const cdCell = rowTr.querySelector(".cell-countdown-3h");
+        if (cdCell) {
+          const isUnpaidOrExpired = isUnpaidOrder(rec) || rec.isAutoCancelledBy3h;
+          const isCancelled = isCancelledOrder(rec);
+          cdCell.innerHTML = renderCountdownCell(rec.ngayDuocDuyet, isUnpaidOrExpired, rec.trangThaiXuLy, isCancelled);
+        }
       }
-    }
+    });
   }
 };
 

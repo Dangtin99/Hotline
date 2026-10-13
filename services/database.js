@@ -602,7 +602,7 @@ function getOperationalUpdates() {
 
   // Fallback từ memoryOrders
   memoryOrders.forEach(o => {
-    if (o.rowKey && (o.trangThaiXuLy || o.giaiTrinh || o.isPending)) {
+    if (o.rowKey) {
       updates[o.rowKey] = {
         trangThaiXuLy: o.trangThaiXuLy || "",
         giaiTrinh: o.giaiTrinh || "",
