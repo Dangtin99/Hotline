@@ -1022,18 +1022,12 @@ document.addEventListener("DOMContentLoaded", () => {
           <input type="text" id="manual_soBooking" class="manual-row-input" placeholder="Số booking" style="font-weight: 700;" title="Nhập số booking">
         </td>
         <td>
-          <input type="text" id="manual_ngayHuyDon" class="manual-row-input" placeholder="YYYY-MM-DD HH:mm:ss" title="Ngày hủy đơn">
+          <input type="text" id="manual_soEir" class="manual-row-input" placeholder="Số EIR (vd: EIR3398...)" title="Nhập số EIR">
         </td>
-        <td>
-          <input type="text" id="manual_ngayDuocDuyet" class="manual-row-input" placeholder="YYYY-MM-DD HH:mm:ss" title="Ngày được duyệt">
-        </td>
-        <td class="text-center" style="color: #64748b; font-size: 11.5px; font-style: italic; vertical-align: middle;">Tự động (3h)</td>
         <td>
           <input type="text" id="manual_soContainer" class="manual-row-input" placeholder="Số cont (vd: TCKU...)" title="Nhập số container">
         </td>
-        <td>
-          <input type="text" id="manual_soEir" class="manual-row-input" placeholder="Số EIR (vd: EIR3398...)" title="Nhập số EIR">
-        </td>
+        <td class="text-center" style="color: #64748b; font-size: 11.5px; font-style: italic; vertical-align: middle;">Tự động (3h)</td>
         <td>
           <select id="manual_trangThaiDonHang" class="manual-row-select" title="Trạng thái đơn hàng">
             <option value="Chưa thanh toán" ${defaultStatus === "Chưa thanh toán" ? "selected" : ""}>Chưa thanh toán</option>
@@ -1045,6 +1039,12 @@ document.addEventListener("DOMContentLoaded", () => {
             <option value="Đang hoàn tiền">Đang hoàn tiền</option>
             <option value="Xếp tài">Xếp tài</option>
           </select>
+        </td>
+        <td>
+          <input type="text" id="manual_ngayHuyDon" class="manual-row-input" placeholder="YYYY-MM-DD HH:mm:ss" title="Ngày hủy đơn">
+        </td>
+        <td>
+          <input type="text" id="manual_ngayDuocDuyet" class="manual-row-input" placeholder="YYYY-MM-DD HH:mm:ss" title="Ngày được duyệt">
         </td>
         <td>
           <select id="manual_trangThaiKichHoat" class="manual-row-select" title="Trạng thái kích hoạt">
@@ -2041,12 +2041,12 @@ function renderTable(records) {
         <td><strong style="color: var(--blue-primary);">${r.depot}</strong></td>
         <td><strong>${r.hangTau}</strong></td>
         <td><code>${r.soBooking || "-"}</code></td>
+        <td><code>${contEir.soEir}</code></td>
+        <td><code>${contEir.soContainer}</code></td>
+        <td class="text-center cell-countdown-3h" style="padding: 6px 8px;">${countdownHtml}</td>
+        <td class="cell-order-status"><span class="badge ${statusClass}">${r.trangThaiDonHang}</span></td>
         <td style="font-size: 12.5px;">${formatDateDisplay(r.ngayHuyDon)}</td>
         <td style="font-size: 12.5px; color: var(--text-muted);">${formatDateDisplay(r.ngayDuocDuyet)}</td>
-        <td class="text-center cell-countdown-3h" style="padding: 6px 8px;">${countdownHtml}</td>
-        <td><code>${contEir.soContainer}</code></td>
-        <td><code>${contEir.soEir}</code></td>
-        <td class="cell-order-status"><span class="badge ${statusClass}">${r.trangThaiDonHang}</span></td>
         <td>${actBadge}</td>
         <td style="font-size: 12.5px; color: var(--text-muted);">${formatDateDisplay(r.thoiGianKichHoat)}</td>
         <td style="max-width: 280px; white-space: normal; line-height: 1.4;">${r.lyDoHuy || "-"}</td>
@@ -2253,8 +2253,8 @@ function exportFilteredToCsv() {
   }
 
   const headers = [
-    "STT", "Depot", "Hãng tàu", "Số booking", "Ngày hủy đơn", "Ngày được duyệt", "Hạn hủy đơn (3h)",
-    "Số container", "Số EIR", "Trạng thái đơn hàng", "Trạng thái kích hoạt",
+    "STT", "Depot", "Hãng tàu", "Số booking", "Số EIR", "Số container", "Hạn hủy đơn (3h)",
+    "Trạng thái đơn hàng", "Ngày hủy đơn", "Ngày được duyệt", "Trạng thái kích hoạt",
     "Thời gian kích hoạt", "Lý do hủy", "Loại container", "Loại đơn hàng (IN/OUT)",
     "SizeTEUS", "Tên tài xế", "Số điện thoại tài xế", "Tên nhà xe", "Số điện thoại nhà xe", "Lý do từ chối",
     "Trạng thái", "Giải trình"
@@ -2279,12 +2279,12 @@ function exportFilteredToCsv() {
       `"${r.depot || ""}"`,
       `"${r.hangTau || ""}"`,
       `"${r.soBooking || ""}"`,
+      `"${(contEir.soEir === "-" ? "" : contEir.soEir).replace(/"/g, '""')}"`,
+      `"${(contEir.soContainer === "-" ? "" : contEir.soContainer).replace(/"/g, '""')}"`,
+      `"${warnText}"`,
+      `"${r.trangThaiDonHang || ""}"`,
       `"${r.ngayHuyDon || ""}"`,
       `"${r.ngayDuocDuyet || ""}"`,
-      `"${warnText}"`,
-      `"${(contEir.soContainer === "-" ? "" : contEir.soContainer).replace(/"/g, '""')}"`,
-      `"${(contEir.soEir === "-" ? "" : contEir.soEir).replace(/"/g, '""')}"`,
-      `"${r.trangThaiDonHang || ""}"`,
       `"${r.trangThaiKichHoat || ""}"`,
       `"${r.thoiGianKichHoat || ""}"`,
       `"${(r.lyDoHuy || "").replace(/"/g, '""')}"`,
