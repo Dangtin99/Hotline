@@ -713,7 +713,7 @@ app.get("/api/orders/paged", authRequired, async (req, res) => {
 
     // 1. Lọc theo tab
     if (tab === "unpaid") {
-      allRecords = allRecords.filter(r => (r.trangThaiDonHang || "").toLowerCase().includes("chưa thanh toán") || (r.trangThaiDonHang || "").toLowerCase().includes("chua thanh toan") || r.isAutoCancelledBy3h);
+      allRecords = allRecords.filter(r => (r.trangThaiDonHang || "").toLowerCase().includes("chưa thanh toán") || (r.trangThaiDonHang || "").toLowerCase().includes("chua thanh toan"));
     } else if (tab === "cancelled") {
       allRecords = allRecords.filter(r => (r.trangThaiDonHang || "").toLowerCase().includes("hủy") || (r.trangThaiDonHang || "").toLowerCase().includes("huy"));
     } else if (tab === "pending") {

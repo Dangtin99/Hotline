@@ -182,14 +182,13 @@ function isCancelledStatus(val) {
 // Kiểm tra xem đơn hàng có trạng thái Đã Hủy hay không
 function isCancelledOrder(r) {
   if (!r) return false;
-  if (r.isAutoCancelledBy3h) return true;
   if (!r.trangThaiDonHang) return false;
   return isCancelledStatus(r.trangThaiDonHang);
 }
 
-// Kiểm tra xem đơn hàng có bị tự động hủy do quá hạn 3h hay không
+// Kiểm tra xem đơn hàng có bị tự động hủy do quá hạn 3h hay không (Đã vô hiệu hóa tự động hủy)
 function isAutoCancelledBy3h(r) {
-  return Boolean(r && r.isAutoCancelledBy3h);
+  return false;
 }
 
 function parseApprovalTimestamp(dateStr) {
@@ -341,29 +340,15 @@ function isProcessed3hStatus(trangThaiXuLy) {
   return false;
 }
 
-// Cập nhật tự động: Đối với các đơn hàng chưa thanh toán, nếu hạn hủy đơn (3h) quá thời hạn thì cập nhật Trạng thái đơn = Đã hủy
+// Cập nhật: Không tự động chuyển đơn chưa thanh toán thành Đã hủy sau 3h
 function applyExpired3hCancellation(records) {
   if (!Array.isArray(records)) return records;
-  const now = Date.now();
-  const THREE_HOURS = 3 * 3600 * 1000;
-
   records.forEach(r => {
-    const isUnpaid = isUnpaidStatus(r.trangThaiDonHang) || r.isAutoCancelledBy3h;
-    if (isUnpaid) {
-      if (isProcessed3hStatus(r.trangThaiXuLy)) {
-        if (r.isAutoCancelledBy3h) {
-          r.isAutoCancelledBy3h = false;
-        }
-        return;
+    if (r.isAutoCancelledBy3h) {
+      if (r.originalTrangThaiDonHang) {
+        r.trangThaiDonHang = r.originalTrangThaiDonHang;
       }
-      const appTime = parseApprovalTimestamp(r.ngayDuocDuyet);
-      if (appTime && (now - appTime >= THREE_HOURS)) {
-        if (!r.originalTrangThaiDonHang) {
-          r.originalTrangThaiDonHang = r.trangThaiDonHang;
-        }
-        r.trangThaiDonHang = "Đã hủy";
-        r.isAutoCancelledBy3h = true;
-      }
+      r.isAutoCancelledBy3h = false;
     }
   });
   return records;

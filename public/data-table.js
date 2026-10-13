@@ -352,29 +352,15 @@ function formatRemainingTime(remMs) {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-// Cập nhật tự động: Đối với các đơn hàng chưa thanh toán, nếu hạn hủy đơn (3h) quá thời hạn thì cập nhật Trạng thái đơn = Đã hủy
+// Cập nhật: Không tự động chuyển đơn chưa thanh toán thành Đã hủy sau 3h
 function applyExpired3hCancellation(records) {
   if (!Array.isArray(records)) return records;
-  const now = Date.now();
-  const THREE_HOURS = 3 * 3600 * 1000;
-
   records.forEach(r => {
-    const isUnpaid = isUnpaidStatus(r.trangThaiDonHang) || r.isAutoCancelledBy3h;
-    if (isUnpaid) {
-      if (isProcessed3hStatus(r.trangThaiXuLy)) {
-        if (r.isAutoCancelledBy3h) {
-          r.isAutoCancelledBy3h = false;
-        }
-        return;
+    if (r.isAutoCancelledBy3h) {
+      if (r.originalTrangThaiDonHang) {
+        r.trangThaiDonHang = r.originalTrangThaiDonHang;
       }
-      const appTime = parseApprovalTimestamp(r.ngayDuocDuyet);
-      if (appTime && (now - appTime >= THREE_HOURS)) {
-        if (!r.originalTrangThaiDonHang) {
-          r.originalTrangThaiDonHang = r.trangThaiDonHang;
-        }
-        r.trangThaiDonHang = "Đã hủy";
-        r.isAutoCancelledBy3h = true;
-      }
+      r.isAutoCancelledBy3h = false;
     }
   });
   return records;
@@ -433,9 +419,9 @@ function renderCountdownCell(ngayDuocDuyet, isUnpaidOrExpired, trangThaiXuLy) {
 
   if (elapsedMs >= THREE_HOURS) {
     return `
-      <div class="countdown-badge badge-countdown-expired" title="Đã quá 3 giờ từ khi duyệt (${ngayDuocDuyet}). Quy tắc: Tự động hủy!">
+      <div class="countdown-badge badge-countdown-expired" title="Đã quá 3 giờ từ khi duyệt (${ngayDuocDuyet}).">
         <span class="cd-pulse-dot expired"></span>
-        <span>Quá 3h (Đã hủy)</span>
+        <span>Quá 3h</span>
       </div>
     `;
   } else if (elapsedMs >= TWO_HOURS) {
@@ -487,28 +473,8 @@ function tickCountdowns() {
       const badge = timer.closest(".countdown-badge");
       if (badge) {
         badge.className = "countdown-badge badge-countdown-expired";
-        badge.title = "Đã quá 3 giờ từ khi duyệt. Quy tắc: Tự động hủy!";
-        badge.innerHTML = `<span class="cd-pulse-dot expired"></span><span>Quá 3h (Đã hủy)</span>`;
-      }
-      const tr = timer.closest("tr");
-      if (tr) {
-        const rowKey = tr.getAttribute("data-rowkey");
-        const rec = allRecords.find(r => getRowKey(r) === rowKey);
-        if (rec && (isUnpaidStatus(rec.trangThaiDonHang) || rec.isAutoCancelledBy3h) && !isProcessed3hStatus(rec.trangThaiXuLy)) {
-          if (!rec.originalTrangThaiDonHang) {
-            rec.originalTrangThaiDonHang = rec.trangThaiDonHang;
-          }
-          if (rec.trangThaiDonHang !== "Đã hủy") {
-            rec.trangThaiDonHang = "Đã hủy";
-            rec.isAutoCancelledBy3h = true;
-            const statusBadge = tr.querySelector(".cell-order-status .badge");
-            if (statusBadge) {
-              statusBadge.className = "badge badge-danger";
-              statusBadge.textContent = "Đã hủy";
-            }
-            updateTabCounts();
-          }
-        }
+        badge.title = "Đã quá 3 giờ từ khi duyệt.";
+        badge.innerHTML = `<span class="cd-pulse-dot expired"></span><span>Quá 3h</span>`;
       }
     } else {
       timer.textContent = formatRemainingTime(remainingMs);
@@ -1771,11 +1737,7 @@ function applyFilters() {
   filteredRecords = allRecords.filter(r => {
     // 0. Phân loại theo Tab (Tất Cả Đơn, Chỉ Đơn Chưa Thanh Toán, Chỉ Đơn Hủy, hoặc Chờ Xử Lý)
     if (currentTab === "unpaid") {
-      if (warning3hVal === "expired") {
-        if (!isUnpaidOrder(r) && !r.isAutoCancelledBy3h) return false;
-      } else {
-        if (!isUnpaidOrder(r)) return false;
-      }
+      if (!isUnpaidOrder(r)) return false;
     } else if (currentTab === "cancelled") {
       if (!isCancelledOrder(r)) return false;
     } else if (currentTab === "pending") {
@@ -1826,13 +1788,9 @@ function applyFilters() {
     if (allStatusValues.length > 0) {
       if (selectedStatuses.length === 0) return false; // Không chọn trạng thái nào
       if (selectedStatuses.length < allStatusValues.length) {
-        if (currentTab === "unpaid" && warning3hVal === "expired" && r.isAutoCancelledBy3h) {
-          // Bỏ qua lọc trạng thái khi người dùng chủ động chọn Hạn 3h = Quá 3h (Đã hủy) trong tab Chưa thanh toán
-        } else {
-          const itemStatus = normalizeStr(r.trangThaiDonHang).toLowerCase();
-          const hasMatch = selectedStatuses.some(s => normalizeStr(s).toLowerCase() === itemStatus);
-          if (!hasMatch) return false;
-        }
+        const itemStatus = normalizeStr(r.trangThaiDonHang).toLowerCase();
+        const hasMatch = selectedStatuses.some(s => normalizeStr(s).toLowerCase() === itemStatus);
+        if (!hasMatch) return false;
       }
     }
 

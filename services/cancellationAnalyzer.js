@@ -111,30 +111,17 @@ function isUnpaidStatus(val) {
 }
 
 /**
- * Cập nhật tự động: Đối với các đơn hàng chưa thanh toán, nếu hạn hủy đơn (3h) quá thời hạn thì cập nhật Trạng thái đơn = Đã hủy
+ * Cập nhật tự động: Không tự ý thay đổi trạng thái đơn Chưa thanh toán sang Đã hủy sau 3h
  */
 function applyExpired3hCancellation(records) {
   if (!Array.isArray(records)) return records;
-  const now = Date.now();
-  const THREE_HOURS = 3 * 3600 * 1000;
-
   records.forEach(r => {
-    const isUnpaid = isUnpaidStatus(r.trangThaiDonHang) || r.isAutoCancelledBy3h;
-    if (isUnpaid) {
-      if (isProcessed3hStatus(r.trangThaiXuLy)) {
-        if (r.isAutoCancelledBy3h) {
-          r.isAutoCancelledBy3h = false;
-        }
-        return;
+    // Khôi phục lại trạng thái ban đầu nếu đơn trước đó từng bị đánh dấu auto-cancel
+    if (r.isAutoCancelledBy3h) {
+      if (r.originalTrangThaiDonHang) {
+        r.trangThaiDonHang = r.originalTrangThaiDonHang;
       }
-      const appTime = parseApprovalTimestamp(r.ngayDuocDuyet);
-      if (appTime && (now - appTime >= THREE_HOURS)) {
-        if (!r.originalTrangThaiDonHang) {
-          r.originalTrangThaiDonHang = r.trangThaiDonHang;
-        }
-        r.trangThaiDonHang = "Đã hủy";
-        r.isAutoCancelledBy3h = true;
-      }
+      r.isAutoCancelledBy3h = false;
     }
   });
   return records;
