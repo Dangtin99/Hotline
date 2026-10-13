@@ -1366,7 +1366,7 @@ function updateOrdersFromCheckData() {
         if (isSucc) {
           order.trangThaiXuLy = "Thanh toán thành công";
         } else if (!currXuLy || currXuLy === "null" || currXuLy === "undefined") {
-          order.trangThaiXuLy = "Tự động đặt lại";
+          order.trangThaiXuLy = "Đặt lại thành công";
         } else if (
           currXuLy === "Đã liên hệ - Đang chờ" || 
           currXuLy === "Đã liên hệ - Chờ" || 

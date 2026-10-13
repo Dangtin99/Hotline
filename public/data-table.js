@@ -105,7 +105,7 @@ const CSKH_STATUS_CONFIG = [
   { order: 5, val: "Đã liên hệ - Không đặt lại", label: "Đã liên hệ - Không đặt lại", bg: "#fee2e2", color: "#991b1b" },
   { order: 6, val: "Không liên hệ được - Chờ thanh toán", label: "Không liên hệ được - Chờ thanh toán", bg: "#fef3c7", color: "#92400e" },
   { order: 7, val: "Không liên hệ được - Hủy", label: "Không liên hệ được - Hủy", bg: "#fee2e2", color: "#b91c1c" },
-  { order: 8, val: "Tự động đặt lại", label: "Tự động đặt lại", bg: "#f1f5f9", color: "#334155" }
+  { order: 8, val: "Đặt lại thành công", label: "Đặt lại thành công", bg: "#f1f5f9", color: "#334155" }
 ].sort((a, b) => a.order - b.order);
 
 // Hàm tra cứu thứ tự sắp xếp của trạng thái CSKH trong mã nguồn
@@ -119,6 +119,7 @@ function getCskhStatusOrder(statusVal) {
   }
   const item = CSKH_STATUS_CONFIG.find(s => s.val === str);
   if (item) return item.order;
+  if (str === "Tự động đặt lại") return 8;
   if (str === "Không liên hệ được") return 6;
   if (str === "Đã liên hệ - Đang chờ" || str === "Đã liên hệ - Chờ") return 2;
   if (str === "Không liên hệ được - hủy") return 7;
@@ -134,7 +135,7 @@ function isProcessed3hStatus(trangThaiXuLy) {
 
 // Lấy danh mục trạng thái CSKH phân loại theo từng tab:
 // - Tab Đơn chưa thanh toán: hiển thị các trạng thái 1, 3, 6, 8
-// - Tab Đơn hàng hủy: hiển thị các trạng thái 1, 2, 4, 5, 7, 8 (Thanh toán thành công, Đã liên hệ - Chờ đặt lại, Đã liên hệ - Đã đặt lại, Đã liên hệ - Không đặt lại, Không liên hệ được - Hủy, Tự động đặt lại)
+// - Tab Đơn hàng hủy: hiển thị các trạng thái 1, 2, 4, 5, 7, 8 (Thanh toán thành công, Đã liên hệ - Chờ đặt lại, Đã liên hệ - Đã đặt lại, Đã liên hệ - Không đặt lại, Không liên hệ được - Hủy, Đặt lại thành công)
 // - Tab Tất cả đơn hàng: hiển thị tất cả các trạng thái (1 -> 8)
 function getTabCskhStatusOptions(tabName) {
   if (tabName === "unpaid") {
@@ -1078,7 +1079,7 @@ document.addEventListener("DOMContentLoaded", () => {
             <option value="Đã liên hệ - Không đặt lại">Đã liên hệ - Không đặt lại</option>
             <option value="Không liên hệ được - Chờ thanh toán">Không liên hệ được - Chờ thanh toán</option>
             <option value="Không liên hệ được - Hủy">Không liên hệ được - Hủy</option>
-            <option value="Tự động đặt lại">Tự động đặt lại</option>
+            <option value="Đặt lại thành công">Đặt lại thành công</option>
           </select>
         </td>
         <td>

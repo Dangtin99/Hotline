@@ -1497,7 +1497,8 @@ function extractKpiSummaryMetrics(list = []) {
   }).length;
 
   const countAutoReset = list.filter(r => {
-    return normalizeStr(r.trangThaiXuLy || "").trim() === "Tự động đặt lại";
+    const val = normalizeStr(r.trangThaiXuLy || "").trim();
+    return val === "Đặt lại thành công" || val === "Tự động đặt lại";
   }).length;
 
   const countUncontacted = list.filter(r => {
@@ -1698,11 +1699,11 @@ function renderKpiSummaryTable(records, totalMasterCount, comparisonInfo = null)
     },
     {
       stt: 5,
-      title: "Tự động đặt lại",
+      title: "Đặt lại thành công",
       count: curM.countAutoReset,
       pct: calcPct(curM.countAutoReset),
       compareHtml: formatCountDiff(curM.countAutoReset, prevM ? prevM.countAutoReset : 0, hasComp, false),
-      note: "Trạng thái xử lý: Tự động đặt lại",
+      note: "Trạng thái xử lý: Đặt lại thành công",
       badgeClass: "badge-secondary",
       isHighlight: false
     },
