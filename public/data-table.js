@@ -61,11 +61,15 @@ const btnUpdateData = document.getElementById("btnUpdateData");
 const btnDeduplicateData = document.getElementById("btnDeduplicateData");
 const btnAddManualRow = document.getElementById("btnAddManualRow");
 const thColPending = document.getElementById("thColPending");
+const thColPendingRemove = document.getElementById("thColPendingRemove");
 
-// Hàm ẩn/hiện cột header Chuyển Chờ - chỉ hiển thị ở tab Đơn Hủy
+// Hàm ẩn/hiện cột header Chuyển Chờ (tab Đơn Hủy) và cột Xóa (tab Chờ Xử Lý)
 function updatePendingColumnHeader() {
   if (thColPending) {
     thColPending.style.display = currentTab === "cancelled" ? "" : "none";
+  }
+  if (thColPendingRemove) {
+    thColPendingRemove.style.display = currentTab === "pending" ? "" : "none";
   }
 }
 
@@ -847,28 +851,68 @@ document.addEventListener("DOMContentLoaded", () => {
     };
   }
 
-  // Lắng nghe sự kiện click nút Chuyển Chờ trên từng dòng trong bảng (chỉ có tại Tab Đơn Hủy)
+  // Lắng nghe sự kiện click nút Chuyển Chờ và nút Xóa trên từng dòng trong bảng
   if (tbodyFullData) {
     tbodyFullData.addEventListener("click", (e) => {
-      const btn = e.target.closest(".btn-row-move-pending");
-      if (!btn) return;
-      const rowId = decodeURIComponent(btn.getAttribute("data-rowid") || "");
-      const rowKey = btn.getAttribute("data-rowkey") || rowId;
-      if (!rowId) return;
-      if (!pendingRows.includes(rowId)) {
-        pendingRows.push(rowId);
-        sessionStorage.setItem("gpg_pending_rows", JSON.stringify(pendingRows));
-      }
-      // Đồng bộ trạng thái Pending bền vững lên máy chủ Cơ sở dữ liệu
-      fetch("/api/orders/pending", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rowKey: rowKey, isPending: true })
-      }).catch(() => {});
+      // 1. Thao tác Chuyển Chờ (Tab Đơn Hủy)
+      const btnMove = e.target.closest(".btn-row-move-pending");
+      if (btnMove) {
+        const rowId = decodeURIComponent(btnMove.getAttribute("data-rowid") || "");
+        const rowKey = btnMove.getAttribute("data-rowkey") || rowId;
+        if (!rowId) return;
+        if (!pendingRows.includes(rowId)) {
+          pendingRows.push(rowId);
+          sessionStorage.setItem("gpg_pending_rows", JSON.stringify(pendingRows));
+        }
+        // Cập nhật thuộc tính trên bản ghi bộ nhớ
+        allRecords.forEach(r => {
+          if (r.rowKey === rowKey || getRowKey(r) === rowKey) {
+            r.isPending = true;
+          }
+        });
+        // Đồng bộ trạng thái Pending bền vững lên máy chủ Cơ sở dữ liệu
+        fetch("/api/orders/pending", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rowKey: rowKey, isPending: true })
+        }).catch(() => {});
 
-      updateTabCounts();
-      showAlert("Đã chuyển đơn vào danh sách Chờ Xử Lý.", false);
-      applyFilters();
+        updateTabCounts();
+        showAlert("Đã chuyển đơn vào danh sách Chờ Xử Lý.", false);
+        applyFilters();
+        return;
+      }
+
+      // 2. Thao tác Xóa (Tab Chờ Xử Lý - Xóa hiển thị của dòng dữ liệu đó)
+      const btnRemove = e.target.closest(".btn-row-remove-pending");
+      if (btnRemove) {
+        const rowId = decodeURIComponent(btnRemove.getAttribute("data-rowid") || "");
+        const rowKey = btnRemove.getAttribute("data-rowkey") || rowId;
+        if (!rowId) return;
+
+        // Loại bỏ khỏi danh sách pendingRows
+        pendingRows = pendingRows.filter(id => id !== rowId);
+        sessionStorage.setItem("gpg_pending_rows", JSON.stringify(pendingRows));
+
+        // Cập nhật cờ isPending trên bản ghi bộ nhớ
+        allRecords.forEach(r => {
+          if (r.rowKey === rowKey || getRowKey(r) === rowKey) {
+            r.isPending = false;
+          }
+        });
+
+        // Đồng bộ bỏ trạng thái Pending về máy chủ Cơ sở dữ liệu
+        fetch("/api/orders/pending", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rowKey: rowKey, isPending: false })
+        }).catch(() => {});
+
+        updateTabCounts();
+        showAlert("Đã xóa đơn khỏi danh sách Chờ Xử Lý.", false);
+        applyFilters();
+        return;
+      }
     });
   }
 
@@ -2033,6 +2077,11 @@ function renderTable(records) {
     totalRowsBadge.className = "badge badge-danger";
     totalRowsBadge.style.fontSize = "13px";
     totalRowsBadge.style.padding = "6px 14px";
+  } else if (currentTab === "pending") {
+    totalRowsBadge.textContent = `Hiển thị: ${pagedRecords.length} / ${records.length} đơn chờ xử lý (Tổng toàn bộ: ${allRecords.length})`;
+    totalRowsBadge.className = "badge badge-warning";
+    totalRowsBadge.style.fontSize = "13px";
+    totalRowsBadge.style.padding = "6px 14px";
   } else {
     totalRowsBadge.textContent = `Hiển thị: ${pagedRecords.length} / ${records.length} đơn hàng (Tổng toàn bộ: ${allRecords.length})`;
     totalRowsBadge.className = "badge badge-info";
@@ -2040,7 +2089,7 @@ function renderTable(records) {
     totalRowsBadge.style.padding = "6px 14px";
   }
 
-  const colSpanCount = currentTab === "cancelled" ? 24 : 23;
+  const colSpanCount = (currentTab === "cancelled" || currentTab === "pending") ? 24 : 23;
 
   if (!pagedRecords || pagedRecords.length === 0) {
     tbodyFullData.innerHTML = `
@@ -2164,6 +2213,13 @@ function renderTable(records) {
         ` : ""}
         <td class="text-center" style="padding: 6px 10px;">${statusSelectHtml}</td>
         <td style="padding: 6px 10px;">${expInputHtml}</td>
+        ${currentTab === "pending" ? `
+          <td class="col-pending-remove-action text-center" style="padding: 6px 8px; vertical-align: middle;">
+            <button type="button" class="btn btn-danger btn-sm btn-row-remove-pending" data-rowid="${encodeURIComponent(rId)}" data-rowkey="${rowKey}" style="background: #dc2626; color: #ffffff; border: none; padding: 4px 10px; font-size: 12px; font-weight: 600; border-radius: 4px; cursor: pointer; white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.05);" title="Xóa đơn khỏi tab Chờ Xử Lý">
+              Xóa
+            </button>
+          </td>
+        ` : ""}
       </tr>
     `;
   }).join("");
