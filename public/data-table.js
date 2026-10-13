@@ -1019,15 +1019,15 @@ document.addEventListener("DOMContentLoaded", () => {
           <input type="text" id="manual_hangTau" class="manual-row-input" placeholder="Hãng tàu (CMA, YML...)" title="Nhập hãng tàu">
         </td>
         <td>
+          <input type="text" id="manual_soBooking" class="manual-row-input" placeholder="Số booking" style="font-weight: 700;" title="Nhập số booking">
+        </td>
+        <td>
           <input type="text" id="manual_ngayHuyDon" class="manual-row-input" placeholder="YYYY-MM-DD HH:mm:ss" title="Ngày hủy đơn">
         </td>
         <td>
           <input type="text" id="manual_ngayDuocDuyet" class="manual-row-input" placeholder="YYYY-MM-DD HH:mm:ss" title="Ngày được duyệt">
         </td>
         <td class="text-center" style="color: #64748b; font-size: 11.5px; font-style: italic; vertical-align: middle;">Tự động (3h)</td>
-        <td>
-          <input type="text" id="manual_soBooking" class="manual-row-input" placeholder="Số booking" style="font-weight: 700;" title="Nhập số booking">
-        </td>
         <td>
           <input type="text" id="manual_soContainer" class="manual-row-input" placeholder="Số cont (vd: TCKU...)" title="Nhập số container">
         </td>
@@ -1967,7 +1967,8 @@ function renderTable(records) {
   // - Tab Tất cả đơn hàng: hiển thị tất cả các trạng thái (1 -> 8)
   const baseStatusOptions = getTabCskhStatusOptions(currentTab);
 
-  tbodyFullData.innerHTML = pagedRecords.map(r => {
+  tbodyFullData.innerHTML = pagedRecords.map((r, index) => {
+    const rowStt = startIndex + index + 1;
     // Trạng thái đơn hàng gốc
     let statusClass = "badge-info";
     if (r.trangThaiDonHang === "Đã hủy") statusClass = "badge-danger";
@@ -2036,13 +2037,13 @@ function renderTable(records) {
 
     return `
       <tr data-rowkey="${rowKey}">
-        <td class="text-center" style="font-weight: 600; color: var(--text-muted);">${r.stt}</td>
+        <td class="text-center" style="font-weight: 600; color: var(--text-muted);">${rowStt}</td>
         <td><strong style="color: var(--blue-primary);">${r.depot}</strong></td>
         <td><strong>${r.hangTau}</strong></td>
+        <td><code>${r.soBooking || "-"}</code></td>
         <td style="font-size: 12.5px;">${formatDateDisplay(r.ngayHuyDon)}</td>
         <td style="font-size: 12.5px; color: var(--text-muted);">${formatDateDisplay(r.ngayDuocDuyet)}</td>
         <td class="text-center cell-countdown-3h" style="padding: 6px 8px;">${countdownHtml}</td>
-        <td><code>${r.soBooking || "-"}</code></td>
         <td><code>${contEir.soContainer}</code></td>
         <td><code>${contEir.soEir}</code></td>
         <td class="cell-order-status"><span class="badge ${statusClass}">${r.trangThaiDonHang}</span></td>
@@ -2252,8 +2253,8 @@ function exportFilteredToCsv() {
   }
 
   const headers = [
-    "STT", "Depot", "Hãng tàu", "Ngày hủy đơn", "Ngày được duyệt", "Hạn hủy đơn (3h)",
-    "Số booking", "Số container", "Số EIR", "Trạng thái đơn hàng", "Trạng thái kích hoạt",
+    "STT", "Depot", "Hãng tàu", "Số booking", "Ngày hủy đơn", "Ngày được duyệt", "Hạn hủy đơn (3h)",
+    "Số container", "Số EIR", "Trạng thái đơn hàng", "Trạng thái kích hoạt",
     "Thời gian kích hoạt", "Lý do hủy", "Loại container", "Loại đơn hàng (IN/OUT)",
     "SizeTEUS", "Tên tài xế", "Số điện thoại tài xế", "Tên nhà xe", "Số điện thoại nhà xe", "Lý do từ chối",
     "Trạng thái", "Giải trình"
@@ -2261,7 +2262,7 @@ function exportFilteredToCsv() {
 
   const csvRows = [headers.join(",")];
 
-  filteredRecords.forEach(r => {
+  filteredRecords.forEach((r, idx) => {
     const isUnpaidOrExpired = isUnpaidOrder(r) || r.isAutoCancelledBy3h;
     const warnLevel = getWarning3hLevel(r.ngayDuocDuyet, isUnpaidOrExpired, r.trangThaiXuLy);
     let warnText = "-";
@@ -2274,13 +2275,13 @@ function exportFilteredToCsv() {
     const contEir = parseContainerAndEir(r.soContainer);
 
     const row = [
-      `"${r.stt || ""}"`,
+      `"${idx + 1}"`,
       `"${r.depot || ""}"`,
       `"${r.hangTau || ""}"`,
+      `"${r.soBooking || ""}"`,
       `"${r.ngayHuyDon || ""}"`,
       `"${r.ngayDuocDuyet || ""}"`,
       `"${warnText}"`,
-      `"${r.soBooking || ""}"`,
       `"${(contEir.soContainer === "-" ? "" : contEir.soContainer).replace(/"/g, '""')}"`,
       `"${(contEir.soEir === "-" ? "" : contEir.soEir).replace(/"/g, '""')}"`,
       `"${r.trangThaiDonHang || ""}"`,
