@@ -420,7 +420,11 @@ function applyExpired3hCancellation(records) {
   return records;
 }
 
-function getWarning3hLevel(ngayDuocDuyet, isUnpaidOrExpired, trangThaiXuLy) {
+function getWarning3hLevel(ngayDuocDuyet, isUnpaidOrExpired, trangThaiXuLy, isCancelled = false) {
+  // Quy tắc mới: Với đơn hủy, khi có cập nhật bất kỳ trạng thái xử lý nào -> Cập nhật là "Đã xử lý"
+  if (isCancelled && trangThaiXuLy && String(trangThaiXuLy).trim()) {
+    return "processed";
+  }
   if (isProcessed3hStatus(trangThaiXuLy)) {
     return "processed";
   }
@@ -821,7 +825,7 @@ function matchesCommonDashboardFilters(r, lineVal, dirVal, hourVal, warning3hVal
 
   // 6. 3h Warning level
   if (warning3hVal) {
-    const level = getWarning3hLevel(r.ngayDuocDuyet, isUnpaidOrder(r) || r.isAutoCancelledBy3h, r.trangThaiXuLy);
+    const level = getWarning3hLevel(r.ngayDuocDuyet, isUnpaidOrder(r) || r.isAutoCancelledBy3h, r.trangThaiXuLy, isCancelledOrder(r));
     if (level !== warning3hVal) return false;
   }
 

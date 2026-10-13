@@ -367,12 +367,16 @@ function applyExpired3hCancellation(records) {
 }
 
 // Phân loại cấp độ cảnh báo 3 giờ: 'safe' | 'yellow' | 'red' | 'expired' | 'processed' | null
-function getWarning3hLevel(ngayDuocDuyet, isUnpaidOrExpired, trangThaiXuLy) {
-  if (!isUnpaidOrExpired) return null;
-  // Quy tắc: Chỉ khi là đơn chưa thanh toán VÀ Trạng Thái = 1, 3, 6 -> Tự động cập nhật "Đã xử lý"
+function getWarning3hLevel(ngayDuocDuyet, isUnpaidOrExpired, trangThaiXuLy, isCancelled = false) {
+  // Quy tắc mới: Với đơn hủy, khi có cập nhật bất kỳ trạng thái xử lý nào -> Cập nhật là "Đã xử lý"
+  if (isCancelled && trangThaiXuLy && String(trangThaiXuLy).trim()) {
+    return "processed";
+  }
+  // Với đơn chưa thanh toán: Nếu trạng thái CSKH thuộc nhóm 1, 3, 6 (hoặc đã xử lý) -> Cập nhật "Đã xử lý"
   if (isProcessed3hStatus(trangThaiXuLy)) {
     return "processed";
   }
+  if (!isUnpaidOrExpired) return null;
   if (!ngayDuocDuyet) return null;
   const appTime = parseApprovalTimestamp(ngayDuocDuyet);
   if (!appTime) return null;
@@ -389,18 +393,27 @@ function getWarning3hLevel(ngayDuocDuyet, isUnpaidOrExpired, trangThaiXuLy) {
 }
 
 // Tạo HTML hiển thị huy hiệu đếm ngược cảnh báo 3 giờ
-function renderCountdownCell(ngayDuocDuyet, isUnpaidOrExpired, trangThaiXuLy) {
-  if (!isUnpaidOrExpired) {
-    return `<span style="color: var(--text-muted); font-size: 12px;">-</span>`;
-  }
-  // Quy tắc: Chỉ khi là đơn chưa thanh toán VÀ Trạng Thái = 1, 3, 6 -> Tự động cập nhật huy hiệu ĐÃ XỬ LÝ
-  if (isProcessed3hStatus(trangThaiXuLy)) {
+function renderCountdownCell(ngayDuocDuyet, isUnpaidOrExpired, trangThaiXuLy, isCancelled = false) {
+  // Quy tắc mới: Với đơn hủy, khi thực hiện cập nhật trạng thái thì hạn hủy đơn (3h) hiển thị là ĐÃ XỬ LÝ
+  if (isCancelled && trangThaiXuLy && String(trangThaiXuLy).trim()) {
     return `
-      <div class="countdown-badge badge-countdown-processed" title="Đơn đã được xử lý CSKH (Trạng thái 1, 3, 6): ${trangThaiXuLy}">
+      <div class="countdown-badge badge-countdown-processed" title="Đơn hủy đã được cập nhật trạng thái xử lý: ${trangThaiXuLy}">
         <span class="cd-pulse-dot processed"></span>
         <span>Đã xử lý</span>
       </div>
     `;
+  }
+  // Quy tắc: Chỉ khi là đơn chưa thanh toán VÀ Trạng Thái = 1, 3, 6 -> Tự động cập nhật huy hiệu ĐÃ XỬ LÝ
+  if (isProcessed3hStatus(trangThaiXuLy)) {
+    return `
+      <div class="countdown-badge badge-countdown-processed" title="Đơn đã được xử lý CSKH: ${trangThaiXuLy}">
+        <span class="cd-pulse-dot processed"></span>
+        <span>Đã xử lý</span>
+      </div>
+    `;
+  }
+  if (!isUnpaidOrExpired) {
+    return `<span style="color: var(--text-muted); font-size: 12px;">-</span>`;
   }
   if (!ngayDuocDuyet) {
     return `<span style="color: var(--text-muted); font-size: 12px;">Chưa duyệt</span>`;
@@ -708,7 +721,8 @@ window.onStatusSelectChange = function(selectElem) {
       const cdCell = tr.querySelector(".cell-countdown-3h");
       if (cdCell) {
         const isUnpaidOrExpired = isUnpaidOrder(targetRec) || targetRec.isAutoCancelledBy3h;
-        cdCell.innerHTML = renderCountdownCell(targetRec.ngayDuocDuyet, isUnpaidOrExpired, targetRec.trangThaiXuLy);
+        const isCancelled = isCancelledOrder(targetRec);
+        cdCell.innerHTML = renderCountdownCell(targetRec.ngayDuocDuyet, isUnpaidOrExpired, targetRec.trangThaiXuLy, isCancelled);
       }
     }
   }
@@ -1455,7 +1469,8 @@ function applyOperationalUpdatesToUI(updates) {
             const cdCell = tr.querySelector(".cell-countdown-3h");
             if (cdCell) {
               const isUnpaid = isUnpaidOrder(rec);
-              cdCell.innerHTML = renderCountdownCell(rec.ngayDuocDuyet, isUnpaid, rec.trangThaiXuLy);
+              const isCancelled = isCancelledOrder(rec);
+              cdCell.innerHTML = renderCountdownCell(rec.ngayDuocDuyet, isUnpaid, rec.trangThaiXuLy, isCancelled);
             }
           }
         }
@@ -1917,7 +1932,7 @@ function applyFilters() {
 
     // 6. Dropdown lọc Cảnh Báo Đếm Ngược 3 Giờ (Safe, Yellow, Red, Expired, Processed)
     if (warning3hVal) {
-      const level = getWarning3hLevel(r.ngayDuocDuyet, isUnpaidOrder(r) || r.isAutoCancelledBy3h, r.trangThaiXuLy);
+      const level = getWarning3hLevel(r.ngayDuocDuyet, isUnpaidOrder(r) || r.isAutoCancelledBy3h, r.trangThaiXuLy, isCancelledOrder(r));
       if (level !== warning3hVal) return false;
     }
 
@@ -2100,7 +2115,8 @@ function renderTable(records) {
 
     // Cột Đếm Ngược Hạn Hủy 3 Giờ
     const isUnpaidOrExpired = isUnpaidOrder(r) || r.isAutoCancelledBy3h;
-    const countdownHtml = renderCountdownCell(r.ngayDuocDuyet, isUnpaidOrExpired, r.trangThaiXuLy);
+    const isCancelled = isCancelledOrder(r);
+    const countdownHtml = renderCountdownCell(r.ngayDuocDuyet, isUnpaidOrExpired, r.trangThaiXuLy, isCancelled);
 
     // Tách số Container và số EIR (trước dấu '-' là EIR, sau dấu '-' là Container)
     const contEir = parseContainerAndEir(r.soContainer);
@@ -2336,7 +2352,7 @@ function exportFilteredToCsv() {
 
   filteredRecords.forEach((r, idx) => {
     const isUnpaidOrExpired = isUnpaidOrder(r) || r.isAutoCancelledBy3h;
-    const warnLevel = getWarning3hLevel(r.ngayDuocDuyet, isUnpaidOrExpired, r.trangThaiXuLy);
+    const warnLevel = getWarning3hLevel(r.ngayDuocDuyet, isUnpaidOrExpired, r.trangThaiXuLy, isCancelledOrder(r));
     let warnText = "-";
     if (warnLevel === "processed") warnText = "Đã xử lý";
     else if (warnLevel === "expired") warnText = "Quá 3h (Tự động hủy)";
