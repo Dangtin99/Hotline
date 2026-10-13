@@ -1994,7 +1994,7 @@ function initExportPngEvents() {
   }
 }
 
-// Xuất ảnh PNG toàn bộ Dashboard (loại trừ Bảng thống kê chi tiết đơn, Bảng Depot, Bảng Lý do hủy và Mục Bất thường)
+// Xuất ảnh PNG toàn bộ Dashboard tổng hợp các bảng báo cáo (không in biểu đồ Cơ Cấu Lý Do Hủy Đơn, loại trừ bảng chi tiết đơn và mục bất thường)
 async function exportDashboardOverviewPng(triggerBtn = null) {
   const el = document.getElementById("dashboardContent");
   if (!el) {
@@ -2058,15 +2058,22 @@ async function exportDashboardOverviewPng(triggerBtn = null) {
           }
         });
 
-        // 2. Ẩn 4 cấu phần theo yêu cầu người dùng:
-        // - Bảng Thống Kê Chi Tiết Toàn Bộ Đơn Hàng (#matrixDetailSection)
-        // - Thống Kê Chi Tiết Theo Depot (#depotTableCard)
-        // - Top Lý Do Hủy & Phản Hồi Từ Chối Điều Độ (#reasonsTableCard)
-        // - Chi Tiết Bất Thường Cần Lưu Ý (.anomalies-section)
+        // 2. Cấu hình hiển thị theo yêu cầu:
+        // - Ẩn biểu đồ Cơ Cấu Lý Do Hủy Đơn (.charts-grid)
+        // - Ẩn Thống Kê Chi Tiết Theo Depot (#depotTableCard)
+        // - Ẩn Top Lý Do Hủy & Phản Hồi Từ Chối Điều Độ (#reasonsTableCard)
+        // - Ẩn Bảng Thống Kê Chi Tiết Toàn Bộ Đơn Hàng (#matrixDetailSection)
+        // - Ẩn Chi Tiết Bất Thường Cần Lưu Ý (.anomalies-section)
+        // - CÁC BẢNG ĐƯỢC IN:
+        //   + 4 Thẻ KPI Tổng Quan (.kpi-grid)
+        //   + Bảng Chỉ Số KPI Vận Hành & CSKH (#kpiSummaryCard)
+        //   + Bảng Ma Trận Phân Bố Số Lượng Đơn (#matrixCard)
+        //   + Bảng Top 3 Depot & Hãng Tàu (#topDepotLineCancelCard)
         const exclusions = [
-          "#matrixDetailSection",
+          ".charts-grid",
           "#depotTableCard",
           "#reasonsTableCard",
+          "#matrixDetailSection",
           ".anomalies-section"
         ];
         exclusions.forEach((sel) => {
@@ -2075,11 +2082,16 @@ async function exportDashboardOverviewPng(triggerBtn = null) {
           });
         });
 
-        // Ẩn bảng tables-grid nếu cả hai thẻ con đều đã bị ẩn
+        // Định dạng các khối bảng dashboard thành dạng 1 cột toàn chiều rộng (full-width) để hiển thị rõ ràng
         clonedDoc.querySelectorAll(".tables-grid").forEach((grid) => {
           const visibleChildren = Array.from(grid.children).filter(c => c.style.display !== "none");
           if (visibleChildren.length === 0) {
             grid.style.setProperty("display", "none", "important");
+          } else {
+            grid.style.display = "flex";
+            grid.style.flexDirection = "column";
+            grid.style.gap = "20px";
+            grid.style.width = "100%";
           }
         });
 
