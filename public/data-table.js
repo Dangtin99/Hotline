@@ -1939,7 +1939,18 @@ const loadTableData = loadDataset;
 
 // Điền các option cho bộ lọc
 function populateFilterDropdowns(records) {
-  const depots = [...new Set(records.map(r => r.depot).filter(Boolean))].sort();
+  let depots = [...new Set(records.map(r => r.depot).filter(Boolean))].sort();
+  try {
+    const userStr = localStorage.getItem("gpg_auth_user");
+    if (userStr) {
+      const u = JSON.parse(userStr);
+      if (u && u.role !== "admin" && Array.isArray(u.assignedDepots) && !u.assignedDepots.includes("ALL")) {
+        const allowed = new Set(u.assignedDepots.map(d => String(d).trim().toUpperCase()));
+        depots = depots.filter(d => allowed.has(String(d).trim().toUpperCase()));
+      }
+    }
+  } catch (e) {}
+
   initDepotMultiSelect(depots);
 
   const lines = [...new Set(records.map(r => r.hangTau).filter(Boolean))].sort();

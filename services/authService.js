@@ -29,13 +29,30 @@ try {
       password_hash TEXT NOT NULL,
       salt TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'user',
+      assigned_depots TEXT NOT NULL DEFAULT 'ALL',
       is_active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
   `);
+  try {
+    sqliteEngine.exec("ALTER TABLE users ADD COLUMN assigned_depots TEXT NOT NULL DEFAULT 'ALL';");
+  } catch (e) {}
 } catch (e) {
   sqliteEngine = null;
+}
+
+// Hàm chuẩn hóa danh sách Depot trực thuộc
+function parseDepots(val) {
+  if (Array.isArray(val)) {
+    const cleaned = val.map(d => String(d).trim().toUpperCase()).filter(Boolean);
+    return cleaned.length > 0 ? cleaned : ["ALL"];
+  }
+  if (typeof val === "string") {
+    const parts = val.split(",").map(d => d.trim().toUpperCase()).filter(Boolean);
+    return parts.length > 0 ? parts : ["ALL"];
+  }
+  return ["ALL"];
 }
 
 // Hàm mã hóa mật khẩu an toàn với PBKDF2 và muối (Salt)
@@ -43,13 +60,14 @@ function hashPassword(password, salt) {
   return crypto.pbkdf2Sync(password, salt, 1000, 64, "sha512").toString("hex");
 }
 
-// 7 Tài khoản chuẩn theo yêu cầu của hệ thống
+// 7 Tài khoản chuẩn theo yêu cầu của hệ thống kèm phân quyền Depot trực thuộc
 const SEED_ACCOUNTS = [
   {
     fullName: "ADMIN",
     username: "admin",
     password: "123456789@",
     role: "admin",
+    assignedDepots: ["ALL"],
     isActive: 1
   },
   {
@@ -57,6 +75,7 @@ const SEED_ACCOUNTS = [
     username: "user01",
     password: "123456789@",
     role: "user",
+    assignedDepots: ["BSD", "SLD"],
     isActive: 1
   },
   {
@@ -64,6 +83,7 @@ const SEED_ACCOUNTS = [
     username: "user02",
     password: "123456789@",
     role: "user",
+    assignedDepots: ["THT", "PMCM"],
     isActive: 1
   },
   {
@@ -71,6 +91,7 @@ const SEED_ACCOUNTS = [
     username: "user03",
     password: "123456789@",
     role: "user",
+    assignedDepots: ["AIC", "ETD"],
     isActive: 1
   },
   {
@@ -78,6 +99,7 @@ const SEED_ACCOUNTS = [
     username: "user04",
     password: "123456789@",
     role: "user",
+    assignedDepots: ["SCD", "GKP"],
     isActive: 1
   },
   {
@@ -85,6 +107,7 @@ const SEED_ACCOUNTS = [
     username: "user05",
     password: "123456789@",
     role: "user",
+    assignedDepots: ["EPD"],
     isActive: 1
   },
   {
@@ -92,6 +115,7 @@ const SEED_ACCOUNTS = [
     username: "user06",
     password: "123456789@",
     role: "user",
+    assignedDepots: ["ALL"],
     isActive: 1
   }
 ];
@@ -104,6 +128,7 @@ function seedDefaultUsers() {
   for (const acc of SEED_ACCOUNTS) {
     const salt = crypto.randomBytes(16).toString("hex");
     const passwordHash = hashPassword(acc.password, salt);
+    const depots = parseDepots(acc.assignedDepots);
     users.push({
       id: acc.username,
       fullName: acc.fullName,
@@ -111,6 +136,7 @@ function seedDefaultUsers() {
       passwordHash,
       salt,
       role: acc.role,
+      assignedDepots: depots,
       isActive: 1,
       createdAt: now,
       updatedAt: now
@@ -119,16 +145,17 @@ function seedDefaultUsers() {
     if (sqliteEngine) {
       try {
         const stmt = sqliteEngine.prepare(`
-          INSERT INTO users (full_name, username, password_hash, salt, role, is_active, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO users (full_name, username, password_hash, salt, role, assigned_depots, is_active, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(username) DO UPDATE SET
             full_name = excluded.full_name,
             password_hash = excluded.password_hash,
             salt = excluded.salt,
             role = excluded.role,
+            assigned_depots = excluded.assigned_depots,
             updated_at = excluded.updated_at;
         `);
-        stmt.run(acc.fullName, acc.username, passwordHash, salt, acc.role, 1, now, now);
+        stmt.run(acc.fullName, acc.username, passwordHash, salt, acc.role, depots.join(","), 1, now, now);
       } catch (err) {
         console.warn("Lỗi seed SQLite user:", err.message);
       }
@@ -151,17 +178,21 @@ function loadUsers() {
       const stmt = sqliteEngine.prepare("SELECT * FROM users ORDER BY id ASC");
       const rows = stmt.all();
       if (rows && rows.length > 0) {
-        return rows.map(r => ({
-          id: String(r.id),
-          fullName: r.full_name,
-          username: r.username,
-          passwordHash: r.password_hash,
-          salt: r.salt,
-          role: r.role,
-          isActive: r.is_active === 1,
-          createdAt: r.created_at,
-          updatedAt: r.updated_at
-        }));
+        return rows.map(r => {
+          const fallbackSeed = SEED_ACCOUNTS.find(s => s.username.toLowerCase() === String(r.username).toLowerCase());
+          return {
+            id: String(r.id),
+            fullName: r.full_name,
+            username: r.username,
+            passwordHash: r.password_hash,
+            salt: r.salt,
+            role: r.role,
+            assignedDepots: parseDepots(r.assigned_depots || (fallbackSeed ? fallbackSeed.assignedDepots : ["ALL"])),
+            isActive: r.is_active === 1,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at
+          };
+        });
       }
     } catch (e) {
       console.warn("Lỗi đọc SQLite users, dùng fallback JSON:", e.message);
@@ -173,7 +204,13 @@ function loadUsers() {
       const data = fs.readFileSync(USERS_FILE, "utf8");
       const list = JSON.parse(data);
       if (Array.isArray(list) && list.length > 0) {
-        return list;
+        return list.map(u => {
+          const fallbackSeed = SEED_ACCOUNTS.find(s => s.username.toLowerCase() === String(u.username).toLowerCase());
+          return {
+            ...u,
+            assignedDepots: parseDepots(u.assignedDepots || (fallbackSeed ? fallbackSeed.assignedDepots : ["ALL"]))
+          };
+        });
       }
     }
   } catch (err) {
@@ -187,6 +224,7 @@ function loadUsers() {
 function syncUserToStorage(user) {
   const now = new Date().toISOString().replace("T", " ").substring(0, 19);
   user.updatedAt = now;
+  user.assignedDepots = parseDepots(user.assignedDepots);
 
   if (sqliteEngine) {
     try {
@@ -196,6 +234,7 @@ function syncUserToStorage(user) {
           password_hash = ?,
           salt = ?,
           role = ?,
+          assigned_depots = ?,
           is_active = ?,
           updated_at = ?
         WHERE username = ?
@@ -205,6 +244,7 @@ function syncUserToStorage(user) {
         user.passwordHash,
         user.salt,
         user.role,
+        user.assignedDepots.join(","),
         user.isActive ? 1 : 0,
         now,
         user.username
@@ -245,6 +285,7 @@ function generateToken(user) {
       fullName: user.fullName,
       role: user.role,
       roleLabel: user.role === "admin" ? "Quản trị viên" : "Người dùng",
+      assignedDepots: parseDepots(user.assignedDepots),
       exp: Date.now() + 7 * 24 * 60 * 60 * 1000 // 7 ngày
     })
   ).toString("base64url");
@@ -288,7 +329,8 @@ function verifyToken(token) {
       ...data,
       fullName: currentUser.fullName,
       role: currentUser.role,
-      roleLabel: currentUser.role === "admin" ? "Quản trị viên" : "Người dùng"
+      roleLabel: currentUser.role === "admin" ? "Quản trị viên" : "Người dùng",
+      assignedDepots: parseDepots(currentUser.assignedDepots)
     };
   } catch (e) {
     return null;
@@ -330,7 +372,8 @@ function authenticate(username, password) {
       username: user.username,
       fullName: user.fullName,
       role: user.role,
-      roleLabel: user.role === "admin" ? "Quản trị viên" : "Người dùng"
+      roleLabel: user.role === "admin" ? "Quản trị viên" : "Người dùng",
+      assignedDepots: parseDepots(user.assignedDepots)
     }
   };
 }
@@ -344,10 +387,35 @@ function getAllUsers() {
     username: u.username,
     role: u.role,
     roleLabel: u.role === "admin" ? "Quản trị viên" : "Người dùng",
+    assignedDepots: parseDepots(u.assignedDepots),
     isActive: u.isActive,
     createdAt: u.createdAt,
     updatedAt: u.updatedAt
   }));
+}
+
+// Phân quyền danh sách Depot trực thuộc (Dành cho Admin)
+function updateUserDepots(usernameOrId, depots) {
+  const users = loadUsers();
+  const user = users.find(
+    u => String(u.username).toLowerCase() === String(usernameOrId).toLowerCase() || String(u.id) === String(usernameOrId)
+  );
+
+  if (!user) {
+    throw new Error(`Không tìm thấy người dùng: ${usernameOrId}`);
+  }
+
+  user.assignedDepots = parseDepots(depots);
+  syncUserToStorage(user);
+
+  return {
+    id: user.id,
+    username: user.username,
+    fullName: user.fullName,
+    role: user.role,
+    assignedDepots: user.assignedDepots,
+    isActive: user.isActive
+  };
 }
 
 // Điều chỉnh trạng thái isActive (Dành cho Admin)
@@ -369,6 +437,7 @@ function setUserActive(usernameOrId, isActive) {
     username: user.username,
     fullName: user.fullName,
     role: user.role,
+    assignedDepots: user.assignedDepots,
     isActive: user.isActive
   };
 }
@@ -435,9 +504,11 @@ module.exports = {
   authenticate,
   verifyToken,
   getAllUsers,
+  updateUserDepots,
   setUserActive,
   resetPassword,
   changePassword,
   seedDefaultUsers,
-  hashPassword
+  hashPassword,
+  parseDepots
 };

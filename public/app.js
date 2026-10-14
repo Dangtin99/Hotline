@@ -581,7 +581,19 @@ function initDashboardFilterControls(records) {
   if (!records || records.length === 0) return;
 
   // 1. Depots
-  allDashboardDepots = [...new Set(records.map(r => r.depot).filter(Boolean))].sort();
+  let availableDepots = [...new Set(records.map(r => r.depot).filter(Boolean))].sort();
+  try {
+    const userStr = localStorage.getItem("gpg_auth_user");
+    if (userStr) {
+      const u = JSON.parse(userStr);
+      if (u && u.role !== "admin" && Array.isArray(u.assignedDepots) && !u.assignedDepots.includes("ALL")) {
+        const allowed = new Set(u.assignedDepots.map(d => String(d).trim().toUpperCase()));
+        availableDepots = availableDepots.filter(d => allowed.has(String(d).trim().toUpperCase()));
+      }
+    }
+  } catch (e) {}
+
+  allDashboardDepots = availableDepots;
   selectedDashboardDepots = [...allDashboardDepots];
   if (depotOptionsList) {
     depotOptionsList.innerHTML = allDashboardDepots.map(d => `

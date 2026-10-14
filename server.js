@@ -52,10 +52,22 @@ const {
   authenticate,
   verifyToken,
   getAllUsers,
+  updateUserDepots,
   setUserActive,
   resetPassword,
   changePassword
 } = require("./services/authService");
+
+/**
+ * Hàm lọc danh sách bản ghi theo phân quyền Depot trực thuộc của User
+ */
+function filterRecordsByDepotPermission(records, user) {
+  if (!user || user.role === "admin") return records;
+  const userDepots = Array.isArray(user.assignedDepots) ? user.assignedDepots : ["ALL"];
+  if (userDepots.includes("ALL")) return records;
+  const set = new Set(userDepots.map(d => String(d).trim().toUpperCase()));
+  return (records || []).filter(r => r && r.depot && set.has(String(r.depot).trim().toUpperCase()));
+}
 
 const app = express();
 const PORT = process.env.PORT || 5050;
@@ -407,6 +419,24 @@ app.post("/api/admin/users/:id/reset-password", adminRequired, (req, res) => {
 });
 
 /**
+ * API: Admin phân quyền danh sách Depot trực thuộc cho user
+ */
+app.post("/api/admin/users/:id/depots", adminRequired, (req, res) => {
+  try {
+    const { id } = req.params;
+    const { depots } = req.body || {};
+    const updated = updateUserDepots(id, depots);
+    return res.json({
+      success: true,
+      message: `Đã cập nhật phân quyền Depot cho tài khoản ${updated.username} thành công.`,
+      user: updated
+    });
+  } catch (err) {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+/**
  * API: Kiểm tra cấu trúc file có khớp với form SQL không (Không lưu)
  */
 app.post("/api/validate", authRequired, upload.single("file"), (req, res) => {
@@ -506,7 +536,11 @@ app.post("/api/upload", authRequired, upload.single("file"), async (req, res) =>
 app.get("/api/all-data", authRequired, async (req, res) => {
   try {
     const forceRefresh = req.query.refresh === "1" || req.query.refresh === "true";
-    const allRecords = await getAllRecordsAsync(forceRefresh);
+    let allRecords = await getAllRecordsAsync(forceRefresh);
+
+    // Lọc theo phân quyền Depot trực thuộc của User
+    allRecords = filterRecordsByDepotPermission(allRecords, req.user);
+
     const analytics = aggregateCancellationData(allRecords);
     const stats = getDatabaseStats();
 
@@ -515,7 +549,7 @@ app.get("/api/all-data", authRequired, async (req, res) => {
       isAllData: true,
       fileName: `Toàn bộ CSDL SQL (${stats.fileCount} file đã tải, ${allRecords.length} đơn)`,
       totalRecords: allRecords.length,
-      totalTeus: stats.totalTeus,
+      totalTeus: analytics.kpis?.totalTeus || 0,
       stats,
       records: allRecords,
       data: analytics
@@ -733,6 +767,7 @@ app.get("/api/orders/paged", authRequired, async (req, res) => {
     const search = (req.query.search || "").trim().toLowerCase();
 
     let allRecords = await getAllRecordsAsync();
+    allRecords = filterRecordsByDepotPermission(allRecords, req.user);
 
     // 1. Lọc theo tab
     if (tab === "unpaid") {
@@ -864,12 +899,20 @@ app.get("/api/history/:id", authRequired, async (req, res) => {
       return res.status(404).json({ status: "error", message: "Không tìm thấy dữ liệu đã tải!" });
     }
 
+    let responseData = item.data;
     if (item.data && Array.isArray(item.data.records)) {
-      applyExpired3hCancellation(item.data.records);
+      let records = [...item.data.records];
+      applyExpired3hCancellation(records);
+      if (req.user && req.user.role !== "admin") {
+        records = filterRecordsByDepotPermission(records, req.user);
+        responseData = aggregateCancellationData(records);
+      } else {
+        responseData = { ...item.data, records };
+      }
     }
 
     if (req.query.format === "markdown") {
-      const markdown = generateMarkdownReport(item.data);
+      const markdown = generateMarkdownReport(responseData);
       res.setHeader("Content-Type", "text/markdown; charset=utf-8");
       return res.send(markdown);
     }
@@ -879,7 +922,7 @@ app.get("/api/history/:id", authRequired, async (req, res) => {
       fileName: item.fileName,
       uploadedAt: item.uploadedAt,
       validation: item.validation,
-      data: item.data
+      data: responseData
     });
   } catch (err) {
     return res.status(500).json({ status: "error", message: err.message });
@@ -1007,7 +1050,8 @@ app.get("/api/verification/history", authRequired, async (req, res) => {
 app.get("/api/verification/all-data", authRequired, async (req, res) => {
   try {
     const forceRefresh = req.query.refresh === "1" || req.query.refresh === "true";
-    const allRecords = await getAllVerificationRecordsAsync(forceRefresh);
+    let allRecords = await getAllVerificationRecordsAsync(forceRefresh);
+    allRecords = filterRecordsByDepotPermission(allRecords, req.user);
     const stats = getVerificationDatabaseStats();
 
     return res.json({

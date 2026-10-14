@@ -259,16 +259,17 @@ function ensureAdminUserModal() {
             <table class="modal-data-table" id="adminUsersTable">
               <thead>
                 <tr>
-                  <th style="width: 50px; text-align: center;">STT</th>
+                  <th style="width: 45px; text-align: center;">STT</th>
                   <th>Họ và Tên</th>
                   <th>Tài Khoản</th>
                   <th>Quyền Hạn</th>
+                  <th>Depot Trực Thuộc</th>
                   <th style="text-align: center;">Trạng Thái (isActive)</th>
-                  <th style="text-align: right; width: 230px;">Hành Động</th>
+                  <th style="text-align: right; width: 290px;">Hành Động</th>
                 </tr>
               </thead>
               <tbody id="adminUsersTableBody">
-                <tr><td colspan="6" style="text-align: center; padding: 20px;">Đang tải danh sách tài khoản...</td></tr>
+                <tr><td colspan="7" style="text-align: center; padding: 20px;">Đang tải danh sách tài khoản...</td></tr>
               </tbody>
             </table>
           </div>
@@ -314,7 +315,7 @@ async function loadAdminUsersList() {
   const countLabel = document.getElementById("adminUsersCountLabel");
   if (!tbody) return;
 
-  tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 20px; color: var(--text-muted);">Đang tải dữ liệu...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: var(--text-muted);">Đang tải dữ liệu...</td></tr>`;
 
   try {
     const res = await fetch("/api/admin/users");
@@ -339,6 +340,21 @@ async function loadAdminUsersList() {
 
       const roleBadge = `<span class="user-role-tag ${u.role}">${u.role === "admin" ? "Quản trị viên (admin)" : "Người dùng (user)"}</span>`;
 
+      // Hiển thị danh sách Depot trực thuộc
+      const userDepots = Array.isArray(u.assignedDepots) ? u.assignedDepots : (u.assignedDepots ? String(u.assignedDepots).split(",").map(d => d.trim()).filter(Boolean) : ["ALL"]);
+      let depotBadgeHtml = "";
+      if (u.role === "admin" || userDepots.includes("ALL")) {
+        depotBadgeHtml = `<span style="display: inline-block; background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 11px; border: 1px solid #bae6fd;">Tất cả Depot (ALL)</span>`;
+      } else if (userDepots.length === 0) {
+        depotBadgeHtml = `<span style="display: inline-block; background: #fef2f2; color: #dc2626; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 11px; border: 1px solid #fecaca;">Chưa gán Depot</span>`;
+      } else {
+        depotBadgeHtml = userDepots.map(d => `<span style="display: inline-block; background: #f1f5f9; color: #1e293b; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 11px; margin-right: 4px; margin-bottom: 2px; border: 1px solid #cbd5e1;">${d}</span>`).join("");
+      }
+
+      // Nút phân quyền Depot
+      const depotsJson = JSON.stringify(userDepots).replace(/"/g, '&quot;');
+      const editDepotBtnHtml = `<button type="button" class="btn-table-action" onclick="openAdminDepotModal('${u.username}', '${u.fullName}', ${depotsJson})" title="Phân quyền Depot trực thuộc">Phân quyền Depot</button>`;
+
       // Nút bật/tắt isActive
       let toggleBtnHtml = "";
       if (isCurrentLoggedIn) {
@@ -357,9 +373,11 @@ async function loadAdminUsersList() {
           <td><strong>${u.fullName}</strong></td>
           <td><code style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-weight: 600;">${u.username}</code></td>
           <td>${roleBadge}</td>
+          <td><div style="display: flex; flex-wrap: wrap; gap: 4px; align-items: center; max-width: 230px;">${depotBadgeHtml}</div></td>
           <td style="text-align: center;">${statusBadge}</td>
           <td style="text-align: right;">
             <div style="display: inline-flex; gap: 6px; align-items: center;">
+              ${editDepotBtnHtml}
               ${toggleBtnHtml}
               ${resetBtnHtml}
             </div>
@@ -368,7 +386,7 @@ async function loadAdminUsersList() {
       `;
     }).join("");
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 20px; color: #ef4444;">Lỗi: ${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: #ef4444;">Lỗi: ${err.message}</td></tr>`;
   }
 }
 
@@ -440,9 +458,205 @@ async function handleAdminResetPassword(username, fullName) {
   }
 }
 
+// =========================================================================
+// MODAL PHÂN QUYỀN DEPOT TRỰC THUỘC (DÀNH CHO ADMIN)
+// =========================================================================
+
+const SYSTEM_DEPOTS_LIST = ["BSD", "SLD", "THT", "PMCM", "ETD", "AIC", "SCD", "GKP", "EPD"];
+
+function ensureAdminDepotModal() {
+  let modal = document.getElementById("adminDepotModal");
+  if (modal) return modal;
+
+  modal = document.createElement("div");
+  modal.id = "adminDepotModal";
+  modal.className = "modal-backdrop";
+  modal.hidden = true;
+
+  modal.innerHTML = `
+    <div class="modal-dialog" style="max-width: 520px;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div class="modal-title-group">
+            <div>
+              <div class="modal-title" id="adminDepotModalTitle">Phân Quyền Depot Trực Thuộc</div>
+              <div class="modal-subtitle" id="adminDepotModalSubtitle">Chọn các Depot mà người dùng này được phép xem dữ liệu</div>
+            </div>
+          </div>
+          <button type="button" class="modal-close-btn" id="closeAdminDepotModalBtn" title="Đóng">&times;</button>
+        </div>
+
+        <div style="padding: 16px 24px 0 24px;">
+          <div id="adminDepotNotice" class="auth-notice-box" style="margin-bottom: 12px;"></div>
+          <div style="background: #f8fafc; padding: 10px 14px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 13px; color: #475569; margin-bottom: 14px;">
+            <strong>Nguyên tắc phân quyền:</strong> Nếu chọn <em>Tất cả Depot (ALL)</em>, người dùng sẽ có quyền xem toàn bộ dữ liệu. Nếu chọn các Depot cụ thể, người dùng chỉ xem được các đơn hàng phát sinh tại Depot đó.
+          </div>
+        </div>
+
+        <div class="modal-body" style="padding: 0 24px 16px 24px;">
+          <div style="margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #e2e8f0;">
+            <label style="display: flex; align-items: center; gap: 8px; font-weight: 700; color: #1d4ed8; cursor: pointer; font-size: 13.5px;">
+              <input type="checkbox" id="depotCbAll" style="width: 16px; height: 16px; cursor: pointer;">
+              <span>Tất cả Depot (Toàn quyền ALL)</span>
+            </label>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;" id="depotCheckboxesContainer">
+            ${SYSTEM_DEPOTS_LIST.map(d => `
+              <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: #334155; cursor: pointer; background: #ffffff; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px;">
+                <input type="checkbox" class="depot-item-cb" value="${d}" style="width: 15px; height: 15px; cursor: pointer;">
+                <span>Depot ${d}</span>
+              </label>
+            `).join("")}
+          </div>
+        </div>
+
+        <div class="modal-footer" style="padding: 12px 24px;">
+          <button type="button" class="btn btn-secondary btn-sm" id="cancelAdminDepotModalBtn">Hủy</button>
+          <button type="button" class="btn btn-primary btn-sm" id="saveAdminDepotModalBtn" style="font-weight: 700;">Lưu Phân Quyền</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  const closeBtn = modal.querySelector("#closeAdminDepotModalBtn");
+  const cancelBtn = modal.querySelector("#cancelAdminDepotModalBtn");
+  [closeBtn, cancelBtn].forEach(b => {
+    if (b) b.onclick = () => { modal.hidden = true; };
+  });
+
+  modal.onclick = (e) => {
+    if (e.target === modal) modal.hidden = true;
+  };
+
+  const cbAll = modal.querySelector("#depotCbAll");
+  const itemCbs = modal.querySelectorAll(".depot-item-cb");
+  if (cbAll) {
+    cbAll.onchange = () => {
+      const isChecked = cbAll.checked;
+      itemCbs.forEach(cb => { cb.checked = isChecked; });
+    };
+  }
+
+  itemCbs.forEach(cb => {
+    cb.onchange = () => {
+      const allChecked = Array.from(itemCbs).every(c => c.checked);
+      if (cbAll) cbAll.checked = allChecked;
+    };
+  });
+
+  return modal;
+}
+
+let currentEditingDepotUsername = null;
+
+function openAdminDepotModal(username, fullName, currentDepots) {
+  const modal = ensureAdminDepotModal();
+  currentEditingDepotUsername = username;
+
+  const titleElem = document.getElementById("adminDepotModalTitle");
+  const subElem = document.getElementById("adminDepotModalSubtitle");
+  const notice = document.getElementById("adminDepotNotice");
+  if (titleElem) titleElem.textContent = `Phân Quyền Depot: ${fullName}`;
+  if (subElem) subElem.textContent = `Tài khoản: ${username}`;
+  if (notice) {
+    notice.className = "auth-notice-box";
+    notice.textContent = "";
+  }
+
+  const depotsArr = Array.isArray(currentDepots) ? currentDepots : String(currentDepots || "ALL").split(",").map(d => d.trim().toUpperCase());
+  const isAll = depotsArr.includes("ALL");
+
+  const cbAll = document.getElementById("depotCbAll");
+  if (cbAll) cbAll.checked = isAll;
+
+  const itemCbs = modal.querySelectorAll(".depot-item-cb");
+  itemCbs.forEach(cb => {
+    cb.checked = isAll || depotsArr.includes(cb.value);
+  });
+
+  const saveBtn = document.getElementById("saveAdminDepotModalBtn");
+  if (saveBtn) {
+    saveBtn.onclick = () => handleSaveUserDepots(username);
+  }
+
+  modal.hidden = false;
+}
+
+async function handleSaveUserDepots(username) {
+  const modal = document.getElementById("adminDepotModal");
+  const notice = document.getElementById("adminDepotNotice");
+  const saveBtn = document.getElementById("saveAdminDepotModalBtn");
+  const cbAll = document.getElementById("depotCbAll");
+  const itemCbs = modal.querySelectorAll(".depot-item-cb");
+
+  let selected = [];
+  if (cbAll && cbAll.checked) {
+    selected = ["ALL"];
+  } else {
+    selected = Array.from(itemCbs).filter(c => c.checked).map(c => c.value);
+    if (selected.length === 0) {
+      if (notice) {
+        notice.className = "auth-notice-box error";
+        notice.textContent = "Vui lòng chọn ít nhất 1 Depot hoặc chọn Tất cả Depot (ALL).";
+      }
+      return;
+    }
+  }
+
+  const originalText = saveBtn ? saveBtn.textContent : "Lưu";
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Đang lưu...";
+  }
+
+  try {
+    const res = await fetch(`/api/admin/users/${encodeURIComponent(username)}/depots`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ depots: selected })
+    });
+    const result = await res.json();
+    if (!res.ok || !result.success) {
+      throw new Error(result.message || "Lỗi khi lưu phân quyền Depot.");
+    }
+
+    // Nếu người dùng đang chỉnh sửa chính là tài khoản đang đăng nhập, cập nhật localStorage
+    try {
+      const cur = JSON.parse(localStorage.getItem("gpg_auth_user") || "{}");
+      if (cur && String(cur.username).toLowerCase() === String(username).toLowerCase()) {
+        cur.assignedDepots = result.user?.assignedDepots || selected;
+        localStorage.setItem("gpg_auth_user", JSON.stringify(cur));
+      }
+    } catch (e) {}
+
+    const adminNotice = document.getElementById("adminUserNotice");
+    if (adminNotice) {
+      adminNotice.className = "auth-notice-box success";
+      adminNotice.textContent = result.message || `Đã cập nhật phân quyền Depot cho tài khoản ${username} thành công.`;
+    }
+
+    modal.hidden = true;
+    await loadAdminUsersList();
+  } catch (err) {
+    if (notice) {
+      notice.className = "auth-notice-box error";
+      notice.textContent = err.message;
+    }
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = originalText;
+    }
+  }
+}
+
 window.openAdminUserModal = openAdminUserModal;
 window.handleToggleUserActive = handleToggleUserActive;
 window.handleAdminResetPassword = handleAdminResetPassword;
+window.openAdminDepotModal = openAdminDepotModal;
 
 // =========================================================================
 // MODAL ĐỔI MẬT KHẨU (DÀNH CHO NGƯỜI DÙNG HIỆN TẠI)

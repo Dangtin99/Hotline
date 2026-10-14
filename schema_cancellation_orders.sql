@@ -145,6 +145,7 @@ CREATE TABLE users (
     tai_khoan VARCHAR(100) UNIQUE NOT NULL,                    -- Tài khoản đăng nhập (username)
     mat_khau VARCHAR(255) NOT NULL,                            -- Mật khẩu (password)
     quyen VARCHAR(50) NOT NULL DEFAULT 'user',                 -- Quyền hạn ('admin' hoặc 'user')
+    assigned_depots VARCHAR(255) NOT NULL DEFAULT 'ALL',       -- Danh sách Depot trực thuộc ('ALL' hoặc phân tách bởi dấu phẩy, ví dụ 'BSD,SLD')
     is_active SMALLINT NOT NULL DEFAULT 1,                     -- Trạng thái kích hoạt (1: Active, 0: Inactive)
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -154,26 +155,134 @@ CREATE INDEX idx_users_tai_khoan ON users (tai_khoan);
 CREATE INDEX idx_users_quyen ON users (quyen);
 CREATE INDEX idx_users_is_active ON users (is_active);
 
--- Dữ liệu khởi tạo 7 tài khoản hệ thống chuẩn (Tên | Tài khoản | Mật khẩu | Quyền):
--- 1. ADMIN | admin | 123456789@ | admin
--- 2. Đặng Đức Tín | user01 | 123456789@ | user
--- 3. Võ Ngọc Bảo Châu | user02 | 123456789@ | user
--- 4. Lý Gia Huy | user03 | 123456789@ | user
--- 5. User 04 | user04 | 123456789@ | user
--- 6. User 05 | user05 | 123456789@ | user
--- 7. User 06 | user06 | 123456789@ | user
-INSERT INTO users (ten, tai_khoan, mat_khau, quyen, is_active) VALUES
-('ADMIN', 'admin', '123456789@', 'admin', 1),
-('Đặng Đức Tín', 'user01', '123456789@', 'user', 1),
-('Võ Ngọc Bảo Châu', 'user02', '123456789@', 'user', 1),
-('Lý Gia Huy', 'user03', '123456789@', 'user', 1),
-('User 04', 'user04', '123456789@', 'user', 1),
-('User 05', 'user05', '123456789@', 'user', 1),
-('User 06', 'user06', '123456789@', 'user', 1)
+-- 6. BẢNG LIÊN KẾT PHÂN QUYỀN DEPOT CHO NGƯỜI DÙNG (USER_DEPOTS)
+DROP TABLE IF EXISTS user_depots CASCADE;
+
+CREATE TABLE user_depots (
+    id BIGSERIAL PRIMARY KEY,
+    tai_khoan VARCHAR(100) NOT NULL REFERENCES users(tai_khoan) ON DELETE CASCADE,
+    depot VARCHAR(20) NOT NULL,                                 -- Mã Depot (BSD, SLD, THT, PMCM, ETD, AIC, SCD, GKP, EPD, ALL)
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_user_depots_tai_khoan_depot UNIQUE (tai_khoan, depot)
+);
+
+CREATE INDEX idx_user_depots_lookup ON user_depots(tai_khoan, depot);
+
+-- Dữ liệu khởi tạo 7 tài khoản hệ thống chuẩn kèm phân quyền Depot trực thuộc:
+-- 1. ADMIN | admin | 123456789@ | admin | ALL
+-- 2. Đặng Đức Tín | user01 | 123456789@ | user | BSD,SLD
+-- 3. Võ Ngọc Bảo Châu | user02 | 123456789@ | user | THT,PMCM
+-- 4. Lý Gia Huy | user03 | 123456789@ | user | AIC,ETD
+-- 5. User 04 | user04 | 123456789@ | user | SCD,GKP
+-- 6. User 05 | user05 | 123456789@ | user | EPD
+-- 7. User 06 | user06 | 123456789@ | user | ALL
+INSERT INTO users (ten, tai_khoan, mat_khau, quyen, assigned_depots, is_active) VALUES
+('ADMIN', 'admin', '123456789@', 'admin', 'ALL', 1),
+('Đặng Đức Tín', 'user01', '123456789@', 'user', 'BSD,SLD', 1),
+('Võ Ngọc Bảo Châu', 'user02', '123456789@', 'user', 'THT,PMCM', 1),
+('Lý Gia Huy', 'user03', '123456789@', 'user', 'AIC,ETD', 1),
+('User 04', 'user04', '123456789@', 'user', 'SCD,GKP', 1),
+('User 05', 'user05', '123456789@', 'user', 'EPD', 1),
+('User 06', 'user06', '123456789@', 'user', 'ALL', 1)
 ON CONFLICT (tai_khoan) DO UPDATE SET
     ten = EXCLUDED.ten,
     mat_khau = EXCLUDED.mat_khau,
     quyen = EXCLUDED.quyen,
+    assigned_depots = EXCLUDED.assigned_depots,
     is_active = EXCLUDED.is_active,
     updated_at = CURRENT_TIMESTAMP;
+
+-- Khởi tạo chi tiết phân quyền trong bảng user_depots
+INSERT INTO user_depots (tai_khoan, depot) VALUES
+('admin', 'ALL'),
+('user01', 'BSD'), ('user01', 'SLD'),
+('user02', 'THT'), ('user02', 'PMCM'),
+('user03', 'AIC'), ('user03', 'ETD'),
+('user04', 'SCD'), ('user04', 'GKP'),
+('user05', 'EPD'),
+('user06', 'ALL')
+ON CONFLICT (tai_khoan, depot) DO NOTHING;
+
+-- ==============================================================================
+-- 7. STORED FUNCTION LỌC ĐƠN HÀNG THEO PHÂN QUYỀN DEPOT TRỰC THUỘC
+-- ==============================================================================
+CREATE OR REPLACE FUNCTION sp_get_cancellation_orders_by_user(
+    p_username VARCHAR(100),
+    p_from_date TIMESTAMP WITHOUT TIME ZONE DEFAULT NULL,
+    p_to_date TIMESTAMP WITHOUT TIME ZONE DEFAULT NULL,
+    p_hang_tau VARCHAR(20) DEFAULT NULL,
+    p_trang_thai VARCHAR(50) DEFAULT NULL
+)
+RETURNS TABLE (
+    id BIGINT,
+    stt_file VARCHAR(50),
+    depot VARCHAR(20),
+    hang_tau VARCHAR(20),
+    ngay_huy_don TIMESTAMP WITHOUT TIME ZONE,
+    ngay_duoc_duyet TIMESTAMP WITHOUT TIME ZONE,
+    so_booking VARCHAR(100),
+    so_container VARCHAR(100),
+    loai_container VARCHAR(100),
+    loai_don_hang VARCHAR(10),
+    size_teus NUMERIC(4, 2),
+    trang_thai_don_hang VARCHAR(50),
+    trang_thai_kich_hoat VARCHAR(50),
+    thoi_gian_kich_hoat TIMESTAMP WITHOUT TIME ZONE,
+    ly_do_huy TEXT,
+    ly_do_tu_choi TEXT,
+    ten_tai_xe VARCHAR(150),
+    sdt_tai_xe VARCHAR(50),
+    ten_nha_xe VARCHAR(255),
+    sdt_nha_xe VARCHAR(50),
+    file_nguon VARCHAR(255),
+    created_at TIMESTAMP WITHOUT TIME ZONE,
+    updated_at TIMESTAMP WITHOUT TIME ZONE
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_user_role VARCHAR(50);
+    v_is_all_depots BOOLEAN := FALSE;
+BEGIN
+    -- 1. Xác định quyền hạn và trạng thái kích hoạt của người dùng
+    SELECT quyen INTO v_user_role
+    FROM users
+    WHERE tai_khoan = p_username AND is_active = 1;
+
+    -- Nếu tài khoản không hợp lệ hoặc đã bị khóa -> Không trả về dữ liệu
+    IF v_user_role IS NULL THEN
+        RETURN;
+    END IF;
+
+    -- Nếu là Admin hoặc có gán ALL trong phân quyền depot
+    IF v_user_role = 'admin' THEN
+        v_is_all_depots := TRUE;
+    ELSE
+        IF EXISTS (SELECT 1 FROM user_depots WHERE tai_khoan = p_username AND depot = 'ALL') THEN
+            v_is_all_depots := TRUE;
+        END IF;
+    END IF;
+
+    -- 2. Truy vấn dữ liệu có lọc chặt chẽ theo danh sách Depot được cấp quyền
+    RETURN QUERY
+    SELECT 
+        c.id, c.stt_file, c.depot, c.hang_tau, c.ngay_huy_don, c.ngay_duoc_duyet,
+        c.so_booking, c.so_container, c.loai_container, c.loai_don_hang, c.size_teus,
+        c.trang_thai_don_hang, c.trang_thai_kich_hoat, c.thoi_gian_kich_hoat,
+        c.ly_do_huy, c.ly_do_tu_choi, c.ten_tai_xe, c.sdt_tai_xe,
+        c.ten_nha_xe, c.sdt_nha_xe, c.file_nguon, c.created_at, c.updated_at
+    FROM cancellation_orders c
+    WHERE 
+        -- Điều kiện phân quyền Depot
+        (v_is_all_depots = TRUE OR c.depot IN (
+            SELECT ud.depot FROM user_depots ud WHERE ud.tai_khoan = p_username
+        ))
+        -- Các điều kiện lọc bổ sung (nếu có truyền vào)
+        AND (p_from_date IS NULL OR c.ngay_huy_don >= p_from_date)
+        AND (p_to_date IS NULL OR c.ngay_huy_don <= p_to_date)
+        AND (p_hang_tau IS NULL OR c.hang_tau = p_hang_tau)
+        AND (p_trang_thai IS NULL OR c.trang_thai_don_hang = p_trang_thai)
+    ORDER BY c.ngay_huy_don DESC;
+END;
+$$;
 
