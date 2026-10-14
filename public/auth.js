@@ -259,13 +259,15 @@ function ensureAdminUserModal() {
             <table class="modal-data-table" id="adminUsersTable">
               <thead>
                 <tr>
-                  <th style="width: 45px; text-align: center;">STT</th>
+                  <th style="width: 40px; text-align: center;">
+                    <input type="checkbox" id="adminUserSelectAllCb" title="Chọn tất cả" style="cursor: pointer; width: 15px; height: 15px;">
+                  </th>
+                  <th style="width: 50px; text-align: center;">STT</th>
                   <th>Họ và Tên</th>
                   <th>Tài Khoản</th>
                   <th>Quyền Hạn</th>
-                  <th>Depot Trực Thuộc</th>
                   <th style="text-align: center;">Trạng Thái (isActive)</th>
-                  <th style="text-align: right; width: 290px;">Hành Động</th>
+                  <th style="text-align: right; width: 230px;">Hành Động</th>
                 </tr>
               </thead>
               <tbody id="adminUsersTableBody">
@@ -275,9 +277,12 @@ function ensureAdminUserModal() {
           </div>
         </div>
 
-        <div class="modal-footer">
+        <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; padding: 14px 24px;">
           <div class="modal-footer-count" id="adminUsersCountLabel">Tổng số: 0 tài khoản</div>
-          <button type="button" class="btn btn-secondary btn-sm" id="closeAdminUserModalFooterBtn">Đóng</button>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <button type="button" class="btn btn-primary btn-sm" id="btnAdminFooterDepot" style="font-weight: 700; background: #1d4ed8; color: #ffffff; padding: 6px 14px; border-radius: 6px; border: none; cursor: pointer;" title="Chọn user bằng tickbox và bấm để phân quyền Depot">Phân Quyền Depot</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="closeAdminUserModalFooterBtn">Đóng</button>
+          </div>
         </div>
       </div>
     </div>
@@ -297,6 +302,47 @@ function ensureAdminUserModal() {
     if (e.target === modal) modal.hidden = true;
   };
 
+  // Checkbox chọn tất cả tài khoản
+  const selectAllCb = modal.querySelector("#adminUserSelectAllCb");
+  if (selectAllCb) {
+    selectAllCb.onchange = () => {
+      const isChecked = selectAllCb.checked;
+      const rowCbs = modal.querySelectorAll(".admin-user-row-cb");
+      rowCbs.forEach(cb => { cb.checked = isChecked; });
+    };
+  }
+
+  // Nút Phân Quyền Depot ở dưới chân trang
+  const btnFooterDepot = modal.querySelector("#btnAdminFooterDepot");
+  if (btnFooterDepot) {
+    btnFooterDepot.onclick = () => {
+      const selectedCbs = Array.from(modal.querySelectorAll(".admin-user-row-cb:checked"));
+      const notice = document.getElementById("adminUserNotice");
+      if (selectedCbs.length === 0) {
+        if (notice) {
+          notice.className = "auth-notice-box error";
+          notice.textContent = "Vui lòng tick chọn ít nhất một người dùng để thực hiện phân quyền Depot.";
+        }
+        alert("Vui lòng tick chọn ít nhất một người dùng để thực hiện phân quyền Depot.");
+        return;
+      }
+
+      const selectedUsers = selectedCbs.map(cb => {
+        let depots = ["ALL"];
+        try {
+          depots = JSON.parse(cb.getAttribute("data-depots") || '["ALL"]');
+        } catch (e) {}
+        return {
+          username: cb.value,
+          fullName: cb.getAttribute("data-fullname") || cb.value,
+          depots: depots
+        };
+      });
+
+      openAdminDepotModalForUsers(selectedUsers);
+    };
+  }
+
   return modal;
 }
 
@@ -313,7 +359,13 @@ async function openAdminUserModal() {
 async function loadAdminUsersList() {
   const tbody = document.getElementById("adminUsersTableBody");
   const countLabel = document.getElementById("adminUsersCountLabel");
+  const selectAllCb = document.getElementById("adminUserSelectAllCb");
   if (!tbody) return;
+
+  if (selectAllCb) {
+    selectAllCb.checked = false;
+    selectAllCb.indeterminate = false;
+  }
 
   tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: var(--text-muted);">Đang tải dữ liệu...</td></tr>`;
 
@@ -340,20 +392,9 @@ async function loadAdminUsersList() {
 
       const roleBadge = `<span class="user-role-tag ${u.role}">${u.role === "admin" ? "Quản trị viên (admin)" : "Người dùng (user)"}</span>`;
 
-      // Hiển thị danh sách Depot trực thuộc
+      // Chuẩn bị dữ liệu danh sách Depot để lưu vào data attribute
       const userDepots = Array.isArray(u.assignedDepots) ? u.assignedDepots : (u.assignedDepots ? String(u.assignedDepots).split(",").map(d => d.trim()).filter(Boolean) : ["ALL"]);
-      let depotBadgeHtml = "";
-      if (u.role === "admin" || userDepots.includes("ALL")) {
-        depotBadgeHtml = `<span style="display: inline-block; background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 11px; border: 1px solid #bae6fd;">Tất cả Depot (ALL)</span>`;
-      } else if (userDepots.length === 0) {
-        depotBadgeHtml = `<span style="display: inline-block; background: #fef2f2; color: #dc2626; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 11px; border: 1px solid #fecaca;">Chưa gán Depot</span>`;
-      } else {
-        depotBadgeHtml = userDepots.map(d => `<span style="display: inline-block; background: #f1f5f9; color: #1e293b; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 11px; margin-right: 4px; margin-bottom: 2px; border: 1px solid #cbd5e1;">${d}</span>`).join("");
-      }
-
-      // Nút phân quyền Depot
       const depotsJson = JSON.stringify(userDepots).replace(/"/g, '&quot;');
-      const editDepotBtnHtml = `<button type="button" class="btn-table-action" onclick="openAdminDepotModal('${u.username}', '${u.fullName}', ${depotsJson})" title="Phân quyền Depot trực thuộc">Phân quyền Depot</button>`;
 
       // Nút bật/tắt isActive
       let toggleBtnHtml = "";
@@ -369,15 +410,16 @@ async function loadAdminUsersList() {
 
       return `
         <tr>
+          <td style="text-align: center;">
+            <input type="checkbox" class="admin-user-row-cb" value="${u.username}" data-fullname="${u.fullName}" data-depots="${depotsJson}" style="cursor: pointer; width: 15px; height: 15px;">
+          </td>
           <td style="text-align: center; font-weight: 600; color: #64748b;">${idx + 1}</td>
           <td><strong>${u.fullName}</strong></td>
           <td><code style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-weight: 600;">${u.username}</code></td>
           <td>${roleBadge}</td>
-          <td><div style="display: flex; flex-wrap: wrap; gap: 4px; align-items: center; max-width: 230px;">${depotBadgeHtml}</div></td>
           <td style="text-align: center;">${statusBadge}</td>
           <td style="text-align: right;">
             <div style="display: inline-flex; gap: 6px; align-items: center;">
-              ${editDepotBtnHtml}
               ${toggleBtnHtml}
               ${resetBtnHtml}
             </div>
@@ -385,6 +427,18 @@ async function loadAdminUsersList() {
         </tr>
       `;
     }).join("");
+
+    // Lắng nghe sự kiện tick từng checkbox hàng để cập nhật trạng thái checkbox chọn tất cả
+    const rowCbs = tbody.querySelectorAll(".admin-user-row-cb");
+    rowCbs.forEach(cb => {
+      cb.onchange = () => {
+        if (selectAllCb) {
+          const checkedCount = Array.from(rowCbs).filter(c => c.checked).length;
+          selectAllCb.checked = checkedCount === rowCbs.length && rowCbs.length > 0;
+          selectAllCb.indeterminate = checkedCount > 0 && checkedCount < rowCbs.length;
+        }
+      };
+    });
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: #ef4444;">Lỗi: ${err.message}</td></tr>`;
   }
@@ -550,42 +604,61 @@ function ensureAdminDepotModal() {
   return modal;
 }
 
-let currentEditingDepotUsername = null;
+let currentSelectedUsersForDepots = [];
 
-function openAdminDepotModal(username, fullName, currentDepots) {
+function openAdminDepotModalForUsers(selectedUsers) {
   const modal = ensureAdminDepotModal();
-  currentEditingDepotUsername = username;
+  currentSelectedUsersForDepots = selectedUsers;
 
   const titleElem = document.getElementById("adminDepotModalTitle");
   const subElem = document.getElementById("adminDepotModalSubtitle");
   const notice = document.getElementById("adminDepotNotice");
-  if (titleElem) titleElem.textContent = `Phân Quyền Depot: ${fullName}`;
-  if (subElem) subElem.textContent = `Tài khoản: ${username}`;
+
   if (notice) {
     notice.className = "auth-notice-box";
     notice.textContent = "";
   }
 
-  const depotsArr = Array.isArray(currentDepots) ? currentDepots : String(currentDepots || "ALL").split(",").map(d => d.trim().toUpperCase());
-  const isAll = depotsArr.includes("ALL");
+  let precheckDepots = [];
+  if (selectedUsers.length === 1) {
+    const single = selectedUsers[0];
+    if (titleElem) titleElem.textContent = `Phân Quyền Depot: ${single.fullName}`;
+    if (subElem) subElem.textContent = `Tài khoản: ${single.username}`;
+    precheckDepots = Array.isArray(single.depots) ? single.depots : ["ALL"];
+  } else {
+    if (titleElem) titleElem.textContent = `Phân Quyền Depot: ${selectedUsers.length} tài khoản đã chọn`;
+    if (subElem) subElem.textContent = `Áp dụng cho: ${selectedUsers.map(u => u.fullName).join(", ")}`;
+    precheckDepots = Array.isArray(selectedUsers[0].depots) ? selectedUsers[0].depots : ["ALL"];
+  }
 
+  const isAll = precheckDepots.includes("ALL");
   const cbAll = document.getElementById("depotCbAll");
   if (cbAll) cbAll.checked = isAll;
 
   const itemCbs = modal.querySelectorAll(".depot-item-cb");
   itemCbs.forEach(cb => {
-    cb.checked = isAll || depotsArr.includes(cb.value);
+    cb.checked = isAll || precheckDepots.includes(cb.value);
   });
 
   const saveBtn = document.getElementById("saveAdminDepotModalBtn");
   if (saveBtn) {
-    saveBtn.onclick = () => handleSaveUserDepots(username);
+    saveBtn.onclick = () => handleSaveUsersDepots(selectedUsers);
   }
 
   modal.hidden = false;
 }
 
-async function handleSaveUserDepots(username) {
+// Hàm tương thích khi gọi từ nơi khác
+function openAdminDepotModal(username, fullName, currentDepots) {
+  const depotsArr = Array.isArray(currentDepots) ? currentDepots : String(currentDepots || "ALL").split(",").map(d => d.trim().toUpperCase());
+  openAdminDepotModalForUsers([{
+    username,
+    fullName,
+    depots: depotsArr
+  }]);
+}
+
+async function handleSaveUsersDepots(selectedUsers) {
   const modal = document.getElementById("adminDepotModal");
   const notice = document.getElementById("adminDepotNotice");
   const saveBtn = document.getElementById("saveAdminDepotModalBtn");
@@ -613,21 +686,23 @@ async function handleSaveUserDepots(username) {
   }
 
   try {
-    const res = await fetch(`/api/admin/users/${encodeURIComponent(username)}/depots`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ depots: selected })
-    });
-    const result = await res.json();
-    if (!res.ok || !result.success) {
-      throw new Error(result.message || "Lỗi khi lưu phân quyền Depot.");
+    for (const u of selectedUsers) {
+      const res = await fetch(`/api/admin/users/${encodeURIComponent(u.username)}/depots`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ depots: selected })
+      });
+      const result = await res.json();
+      if (!res.ok || !result.success) {
+        throw new Error(result.message || `Lỗi khi lưu phân quyền cho tài khoản ${u.username}.`);
+      }
     }
 
-    // Nếu người dùng đang chỉnh sửa chính là tài khoản đang đăng nhập, cập nhật localStorage
+    // Nếu người dùng đang chỉnh sửa có tài khoản đang đăng nhập, cập nhật localStorage
     try {
       const cur = JSON.parse(localStorage.getItem("gpg_auth_user") || "{}");
-      if (cur && String(cur.username).toLowerCase() === String(username).toLowerCase()) {
-        cur.assignedDepots = result.user?.assignedDepots || selected;
+      if (cur && selectedUsers.some(u => String(u.username).toLowerCase() === String(cur.username).toLowerCase())) {
+        cur.assignedDepots = selected;
         localStorage.setItem("gpg_auth_user", JSON.stringify(cur));
       }
     } catch (e) {}
@@ -635,7 +710,8 @@ async function handleSaveUserDepots(username) {
     const adminNotice = document.getElementById("adminUserNotice");
     if (adminNotice) {
       adminNotice.className = "auth-notice-box success";
-      adminNotice.textContent = result.message || `Đã cập nhật phân quyền Depot cho tài khoản ${username} thành công.`;
+      const userListStr = selectedUsers.map(u => u.username).join(", ");
+      adminNotice.textContent = `Đã cập nhật phân quyền Depot thành công cho ${selectedUsers.length} tài khoản (${userListStr}).`;
     }
 
     modal.hidden = true;
@@ -657,6 +733,7 @@ window.openAdminUserModal = openAdminUserModal;
 window.handleToggleUserActive = handleToggleUserActive;
 window.handleAdminResetPassword = handleAdminResetPassword;
 window.openAdminDepotModal = openAdminDepotModal;
+window.openAdminDepotModalForUsers = openAdminDepotModalForUsers;
 
 // =========================================================================
 // MODAL ĐỔI MẬT KHẨU (DÀNH CHO NGƯỜI DÙNG HIỆN TẠI)
