@@ -16,6 +16,13 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+let tursoClient = null;
+try {
+  tursoClient = require("./tursoClient");
+} catch (e) {}
+
+let memoryUsersCache = null;
+
 // Kết nối SQLite tích hợp của Node.js
 let sqliteEngine = null;
 try {
@@ -171,14 +178,18 @@ function seedDefaultUsers() {
   return users;
 }
 
-// Đọc danh sách tài khoản từ SQLite (ưu tiên) hoặc File JSON
+// Đọc danh sách tài khoản từ Memory Cache, SQLite hoặc File JSON
 function loadUsers() {
+  if (memoryUsersCache && Array.isArray(memoryUsersCache) && memoryUsersCache.length > 0) {
+    return memoryUsersCache;
+  }
+
   if (sqliteEngine) {
     try {
       const stmt = sqliteEngine.prepare("SELECT * FROM users ORDER BY id ASC");
       const rows = stmt.all();
       if (rows && rows.length > 0) {
-        return rows.map(r => {
+        const users = rows.map(r => {
           const fallbackSeed = SEED_ACCOUNTS.find(s => s.username.toLowerCase() === String(r.username).toLowerCase());
           return {
             id: String(r.id),
@@ -193,6 +204,8 @@ function loadUsers() {
             updatedAt: r.updated_at
           };
         });
+        memoryUsersCache = users;
+        return users;
       }
     } catch (e) {
       console.warn("Lỗi đọc SQLite users, dùng fallback JSON:", e.message);
@@ -204,28 +217,38 @@ function loadUsers() {
       const data = fs.readFileSync(USERS_FILE, "utf8");
       const list = JSON.parse(data);
       if (Array.isArray(list) && list.length > 0) {
-        return list.map(u => {
+        const users = list.map(u => {
           const fallbackSeed = SEED_ACCOUNTS.find(s => s.username.toLowerCase() === String(u.username).toLowerCase());
           return {
             ...u,
             assignedDepots: parseDepots(u.assignedDepots || (fallbackSeed ? fallbackSeed.assignedDepots : ["ALL"]))
           };
         });
+        memoryUsersCache = users;
+        return users;
       }
     }
   } catch (err) {
     console.warn("Lỗi đọc users.json:", err.message);
   }
 
-  return seedDefaultUsers();
+  const seeded = seedDefaultUsers();
+  memoryUsersCache = seeded;
+  return seeded;
 }
 
-// Lưu danh sách tài khoản đồng bộ sang JSON và SQLite
+// Lưu danh sách tài khoản đồng bộ sang JSON, SQLite và Turso Cloud
 function syncUserToStorage(user) {
   const now = new Date().toISOString().replace("T", " ").substring(0, 19);
   user.updatedAt = now;
   user.assignedDepots = parseDepots(user.assignedDepots);
 
+  // 1. Cập nhật Memory Cache tức thời
+  if (memoryUsersCache && Array.isArray(memoryUsersCache)) {
+    memoryUsersCache = memoryUsersCache.map(u => (u.username.toLowerCase() === user.username.toLowerCase() ? { ...u, ...user } : u));
+  }
+
+  // 2. Cập nhật SQLite Local
   if (sqliteEngine) {
     try {
       const stmt = sqliteEngine.prepare(`
@@ -254,24 +277,43 @@ function syncUserToStorage(user) {
     }
   }
 
-  // Cập nhật File JSON
+  // 3. Cập nhật File JSON
   try {
-    const all = loadUsers().map(u => (u.username === user.username ? { ...u, ...user } : u));
+    const all = loadUsers().map(u => (u.username.toLowerCase() === user.username.toLowerCase() ? { ...u, ...user } : u));
     fs.writeFileSync(USERS_FILE, JSON.stringify(all, null, 2), "utf8");
   } catch (err) {
     console.error("Lỗi đồng bộ users.json:", err.message);
   }
+
+  // 4. Đồng bộ vĩnh viễn lên Turso Cloud
+  if (tursoClient && tursoClient.isTursoAvailable()) {
+    tursoClient.syncUserToTurso(user).catch(err => {
+      console.warn("[Turso] Lỗi đồng bộ user lên Turso:", err.message);
+    });
+  }
 }
 
-// Khởi tạo các tài khoản mẫu nếu chưa có
+// Khởi tạo các tài khoản mẫu và kéo quyền mới nhất từ Turso Cloud
 (function initUsers() {
   const users = loadUsers();
-  // Kiểm tra nếu chưa đủ các tài khoản chuẩn thì thực hiện seed lại
   const userUsernames = users.map(u => u.username.toLowerCase());
   const needsSeed = SEED_ACCOUNTS.some(acc => !userUsernames.includes(acc.username.toLowerCase()));
   if (needsSeed || users.length === 0) {
     console.log(`Khởi tạo ${SEED_ACCOUNTS.length} tài khoản hệ thống chuẩn...`);
     seedDefaultUsers();
+  }
+
+  // Khởi tạo bảng users và đồng bộ từ Turso Cloud ngầm
+  if (tursoClient && tursoClient.isTursoAvailable()) {
+    (async () => {
+      try {
+        await tursoClient.initTursoUsersTable();
+        const tursoUsers = await tursoClient.getAllUsersFromTurso();
+        if (Array.isArray(tursoUsers) && tursoUsers.length > 0) {
+          memoryUsersCache = tursoUsers;
+        }
+      } catch (e) {}
+    })();
   }
 })();
 

@@ -804,6 +804,102 @@ async function getTursoRowCount() {
   }
 }
 
+/**
+ * Khởi tạo bảng users trong Turso nếu chưa có
+ */
+async function initTursoUsersTable() {
+  const client = getTursoClient();
+  if (!client) return;
+  try {
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        full_name TEXT NOT NULL,
+        username TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        salt TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'user',
+        assigned_depots TEXT NOT NULL DEFAULT 'ALL',
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+    try {
+      await client.execute("ALTER TABLE users ADD COLUMN assigned_depots TEXT NOT NULL DEFAULT 'ALL';");
+    } catch (e) {}
+  } catch (e) {
+    console.warn("[Turso] Không thể khởi tạo bảng users:", e.message);
+  }
+}
+
+/**
+ * Lấy danh sách users từ Turso Cloud
+ */
+async function getAllUsersFromTurso() {
+  const client = getTursoClient();
+  if (!client) return null;
+  try {
+    const res = await client.execute("SELECT * FROM users ORDER BY id ASC;");
+    return res.rows.map(r => ({
+      id: String(r.id),
+      fullName: r.full_name,
+      username: r.username,
+      passwordHash: r.password_hash,
+      salt: r.salt,
+      role: r.role,
+      assignedDepots: String(r.assigned_depots || "ALL").split(",").map(d => d.trim().toUpperCase()).filter(Boolean),
+      isActive: Number(r.is_active) === 1,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
+    }));
+  } catch (e) {
+    console.warn("[Turso] Lỗi đọc users từ Turso:", e.message);
+    return null;
+  }
+}
+
+/**
+ * Đồng bộ hoặc cập nhật thông tin user lên Turso Cloud
+ */
+async function syncUserToTurso(user) {
+  const client = getTursoClient();
+  if (!client) return;
+  try {
+    const depotsStr = Array.isArray(user.assignedDepots)
+      ? user.assignedDepots.join(",")
+      : String(user.assignedDepots || "ALL");
+
+    await client.execute({
+      sql: `
+        INSERT INTO users (full_name, username, password_hash, salt, role, assigned_depots, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(username) DO UPDATE SET
+          full_name = excluded.full_name,
+          password_hash = excluded.password_hash,
+          salt = excluded.salt,
+          role = excluded.role,
+          assigned_depots = excluded.assigned_depots,
+          is_active = excluded.is_active,
+          updated_at = excluded.updated_at;
+      `,
+      args: [
+        user.fullName,
+        user.username,
+        user.passwordHash,
+        user.salt,
+        user.role,
+        depotsStr,
+        user.isActive ? 1 : 0,
+        user.createdAt || new Date().toISOString().replace("T", " ").substring(0, 19),
+        user.updatedAt || new Date().toISOString().replace("T", " ").substring(0, 19)
+      ]
+    });
+  } catch (e) {
+    console.warn(`[Turso] Lỗi đồng bộ user ${user.username} lên Turso:`, e.message);
+  }
+}
+
 module.exports = {
   getTursoClient,
   isTursoAvailable,
@@ -829,5 +925,8 @@ module.exports = {
   deleteVerificationHistoryItemFromTurso,
   getTursoRowCount,
   syncPendingStateToTurso,
-  getAllOperationalStatesFromTurso
+  getAllOperationalStatesFromTurso,
+  initTursoUsersTable,
+  getAllUsersFromTurso,
+  syncUserToTurso
 };

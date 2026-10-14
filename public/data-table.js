@@ -243,11 +243,20 @@ function updateDepotButtonLabel() {
   const count = selectedDepots.length;
   const total = allDepotValues.length;
 
+  let isRestricted = false;
+  try {
+    const u = JSON.parse(localStorage.getItem("gpg_auth_user") || "{}");
+    if (u && u.role !== "admin") {
+      const d = Array.isArray(u.assignedDepots) ? u.assignedDepots : String(u.assignedDepots || "").split(",").map(x => x.trim().toUpperCase()).filter(Boolean);
+      if (d.length > 0 && !d.includes("ALL")) isRestricted = true;
+    }
+  } catch (e) {}
+
   if (count === 0) {
     depotSelectedLabel.textContent = "Chưa chọn Depot";
     depotDropdownBtn.classList.remove("has-selection");
   } else if (count === total) {
-    depotSelectedLabel.textContent = "Depot (Tất cả)";
+    depotSelectedLabel.textContent = isRestricted ? `Depot phân quyền (${count})` : "Depot (Tất cả)";
     depotDropdownBtn.classList.remove("has-selection");
   } else if (count === 1) {
     depotSelectedLabel.textContent = `Depot: ${selectedDepots[0]}`;
@@ -1944,8 +1953,14 @@ function populateFilterDropdowns(records) {
     const userStr = localStorage.getItem("gpg_auth_user");
     if (userStr) {
       const u = JSON.parse(userStr);
-      if (u && u.role !== "admin" && Array.isArray(u.assignedDepots) && !u.assignedDepots.includes("ALL")) {
-        const allowed = new Set(u.assignedDepots.map(d => String(d).trim().toUpperCase()));
+      let userDepots = [];
+      if (Array.isArray(u.assignedDepots)) {
+        userDepots = u.assignedDepots.map(d => String(d).trim().toUpperCase()).filter(Boolean);
+      } else if (typeof u.assignedDepots === "string") {
+        userDepots = u.assignedDepots.split(",").map(d => String(d).trim().toUpperCase()).filter(Boolean);
+      }
+      if (u && u.role !== "admin" && userDepots.length > 0 && !userDepots.includes("ALL")) {
+        const allowed = new Set(userDepots);
         depots = depots.filter(d => allowed.has(String(d).trim().toUpperCase()));
       }
     }

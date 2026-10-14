@@ -55,7 +55,8 @@ const {
   updateUserDepots,
   setUserActive,
   resetPassword,
-  changePassword
+  changePassword,
+  parseDepots
 } = require("./services/authService");
 
 /**
@@ -63,10 +64,14 @@ const {
  */
 function filterRecordsByDepotPermission(records, user) {
   if (!user || user.role === "admin") return records;
-  const userDepots = Array.isArray(user.assignedDepots) ? user.assignedDepots : ["ALL"];
+  const userDepots = parseDepots(user.assignedDepots);
   if (userDepots.includes("ALL")) return records;
   const set = new Set(userDepots.map(d => String(d).trim().toUpperCase()));
-  return (records || []).filter(r => r && r.depot && set.has(String(r.depot).trim().toUpperCase()));
+  return (records || []).filter(r => {
+    if (!r) return false;
+    const dep = r.depot || r.Depot;
+    return dep && set.has(String(dep).trim().toUpperCase());
+  });
 }
 
 const app = express();
@@ -1155,18 +1160,24 @@ app.get("/api/sample", authRequired, (req, res) => {
   try {
     const history = loadHistory();
     if (history.length > 0) {
+      let data = history[0].data;
+      if (data && Array.isArray(data.records)) {
+        let recs = filterRecordsByDepotPermission(data.records, req.user);
+        data = aggregateCancellationData(recs);
+      }
       return res.json({
         status: "success",
         fileName: history[0].fileName,
         uploadedAt: history[0].uploadedAt,
-        data: history[0].data
+        data
       });
     }
 
     const sampleFilePath = path.join(__dirname, "sample-data", "mau_bao_cao_don_huy.csv");
     if (fs.existsSync(sampleFilePath)) {
       const content = fs.readFileSync(sampleFilePath, "utf8");
-      const records = parseCancellationFile(content);
+      let records = parseCancellationFile(content);
+      records = filterRecordsByDepotPermission(records, req.user);
       const analytics = aggregateCancellationData(records);
       return res.json({
         status: "success",

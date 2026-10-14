@@ -95,8 +95,19 @@ async function initAuthProfile() {
     if (res.ok) {
       const data = await res.json();
       if (data.user) {
+        const prevDepots = cachedUser ? JSON.stringify(cachedUser.assignedDepots || []) : "";
+        const nextDepots = JSON.stringify(data.user.assignedDepots || []);
         localStorage.setItem("gpg_auth_user", JSON.stringify(data.user));
         renderUserProfile(data.user);
+
+        // Nếu quyền Depot đã thay đổi so với cache cũ -> Kích hoạt tải lại dữ liệu tức thời
+        if (cachedUser && prevDepots !== nextDepots) {
+          if (typeof loadDashboardData === "function") {
+            loadDashboardData();
+          } else if (typeof loadTableData === "function") {
+            loadTableData();
+          }
+        }
       }
     }
   } catch (err) {
