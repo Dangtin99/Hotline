@@ -161,7 +161,7 @@ DROP TABLE IF EXISTS user_depots CASCADE;
 CREATE TABLE user_depots (
     id BIGSERIAL PRIMARY KEY,
     tai_khoan VARCHAR(100) NOT NULL REFERENCES users(tai_khoan) ON DELETE CASCADE,
-    depot VARCHAR(20) NOT NULL,                                 -- Mã Depot (BSD, SLD, THT, PMCM, ETD, AIC, SCD, GKP, EPD, ALL)
+    depot VARCHAR(20) NOT NULL,                                 -- Mã Depot (BSD, SLD, THT, PMCM, ETD, AIC, SCD, GKP, EPD, EAD, RCS, ALL)
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_user_depots_tai_khoan_depot UNIQUE (tai_khoan, depot)
 );
