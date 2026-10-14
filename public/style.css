@@ -3159,6 +3159,69 @@ body {
   box-shadow: 0 0 0 2px rgba(14, 116, 144, 0.15);
 }
 
+/* =====================================================
+   THANH PHÂN TRANG BẢNG CHI TIẾT TRÊN DASHBOARD
+   ===================================================== */
+.inline-pagination-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 18px;
+  background: #f8fafc;
+  border-top: 1px solid var(--border-light);
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.inline-pagination-bar .pagination-info {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.inline-pagination-bar .pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.inline-pagination-bar .pagination-size-label {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.inline-pagination-bar .pagination-size-select {
+  padding: 4px 8px;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  font-size: 13px;
+  background: #ffffff;
+  color: var(--text-main);
+  cursor: pointer;
+  outline: none;
+}
+
+.inline-pagination-bar .pagination-size-select:focus {
+  border-color: var(--blue-primary);
+}
+
+.inline-pagination-bar .pagination-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inline-pagination-bar .pagination-current-page {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  padding: 0 6px;
+  user-select: none;
+}
+
 /* Phân quyền giao diện người dùng (Role-based visibility) */
 html.non-admin-user #navVerificationTable,
 html.non-admin-user #navUpload,

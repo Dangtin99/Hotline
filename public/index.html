@@ -533,6 +533,28 @@
               </tbody>
             </table>
           </div>
+
+          <!-- Thanh Phân Trang Bảng Chi Tiết (No-Icon, Chuẩn GEMINI.md) -->
+          <div class="inline-pagination-bar" id="inlinePaginationBar">
+            <div class="pagination-info" id="inlinePaginationInfo">
+              Đang hiển thị 0 - 0 trong tổng số 0 đơn
+            </div>
+            <div class="pagination-controls">
+              <label class="pagination-size-label" for="inlinePageSizeSelect">Hiển thị:</label>
+              <select id="inlinePageSizeSelect" class="pagination-size-select">
+                <option value="50" selected>50 dòng/trang</option>
+                <option value="100">100 dòng/trang</option>
+                <option value="200">200 dòng/trang</option>
+              </select>
+              <div class="pagination-btn-group">
+                <button type="button" class="btn btn-outline btn-sm btn-page-nav" id="btnInlinePageFirst" title="Về trang đầu">[Đầu]</button>
+                <button type="button" class="btn btn-outline btn-sm btn-page-nav" id="btnInlinePagePrev" title="Trang trước">[Trước]</button>
+                <span class="pagination-current-page" id="inlinePaginationCurrentPage">Trang 1 / 1</span>
+                <button type="button" class="btn btn-outline btn-sm btn-page-nav" id="btnInlinePageNext" title="Trang tiếp theo">[Tiếp]</button>
+                <button type="button" class="btn btn-outline btn-sm btn-page-nav" id="btnInlinePageLast" title="Đến trang cuối">[Cuối]</button>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 

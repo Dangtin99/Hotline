@@ -47,7 +47,10 @@ const {
   getOperationalVersion,
   getOperationalUpdates,
   formatVietnamDateTime,
-  formatToVietnamParts
+  formatToVietnamParts,
+  getDashboardDataAsync,
+  getLatestDateAsync,
+  getVietnamTodayYmd
 } = require("./services/database");
 const tursoClient = require("./services/tursoClient");
 const {
@@ -560,6 +563,72 @@ app.get("/api/all-data", authRequired, async (req, res) => {
       stats,
       records: allRecords,
       data: analytics
+    });
+  } catch (err) {
+    return res.status(500).json({ status: "error", message: err.message });
+  }
+});
+
+/**
+ * API: Lấy dữ liệu phục vụ Báo Cáo Tổng Quan (Dashboard) có phân trang & lọc phạm vi ngày tối ưu
+ */
+app.get("/api/dashboard-data", authRequired, async (req, res) => {
+  try {
+    const {
+      dateType = "ngayHuy",
+      dateFrom,
+      dateTo,
+      hourFrom = "00:00",
+      hourTo = "23:59"
+    } = req.query;
+
+    const result = await getDashboardDataAsync({
+      dateType,
+      dateFrom,
+      dateTo,
+      hourFrom,
+      hourTo
+    });
+
+    let currentRecords = result.currentRecords || [];
+    let previousRecords = result.previousRecords || [];
+
+    // Lọc theo phân quyền Depot trực thuộc của User
+    currentRecords = filterRecordsByDepotPermission(currentRecords, req.user);
+    previousRecords = filterRecordsByDepotPermission(previousRecords, req.user);
+
+    // Tính toán phân tích chỉ số cho kỳ hiện tại
+    const analytics = aggregateCancellationData(currentRecords);
+
+    return res.json({
+      status: "success",
+      filter: result.filter,
+      latestDate: result.latestDate,
+      today: result.today,
+      totalRecords: currentRecords.length,
+      totalPrevious: previousRecords.length,
+      currentRecords,
+      previousRecords,
+      data: analytics
+    });
+  } catch (err) {
+    console.error("Lỗi khi nạp dữ liệu dashboard:", err);
+    return res.status(500).json({ status: "error", message: err.message });
+  }
+});
+
+/**
+ * API: Lấy ngày có dữ liệu đơn gần nhất trong CSDL
+ */
+app.get("/api/dashboard-latest-date", authRequired, async (req, res) => {
+  try {
+    const dateType = req.query.dateType || "ngayHuy";
+    const latestDate = await getLatestDateAsync(dateType);
+    const today = getVietnamTodayYmd();
+    return res.json({
+      status: "success",
+      latestDate,
+      today
     });
   } catch (err) {
     return res.status(500).json({ status: "error", message: err.message });

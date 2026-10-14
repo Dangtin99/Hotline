@@ -156,6 +156,99 @@ function clearAlert() {
   alertBox.textContent = "";
 }
 
+// Nạp dữ liệu Dashboard theo khoảng ngày tối ưu (Tránh quá tải CSDL)
+function getVietnamTodayYmd() {
+  const now = new Date();
+  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+  const vnTime = new Date(utc + (7 * 3600000));
+  const y = vnTime.getFullYear();
+  const m = String(vnTime.getMonth() + 1).padStart(2, "0");
+  const d = String(vnTime.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+async function fetchDashboardDataByRange(dateFrom, dateTo, dateType = "ngayHuy", hourFrom = "00:00", hourTo = "23:59") {
+  clearAlert();
+  if (currentDatasetName) {
+    currentDatasetName.textContent = `Đang nạp dữ liệu ${dateFrom === dateTo ? dateFrom : dateFrom + ' -> ' + dateTo}...`;
+  }
+
+  try {
+    const query = new URLSearchParams({
+      dateType,
+      dateFrom,
+      dateTo,
+      hourFrom: hourFrom || "00:00",
+      hourTo: hourTo || "23:59"
+    });
+
+    const res = await fetch(`/api/dashboard-data?${query.toString()}`);
+    const contentType = res.headers.get("content-type") || "";
+
+    // Fallback an toàn: Nếu server chưa có /api/dashboard-data (404), tự động chuyển sang nạp qua /api/all-data
+    if (res.status === 404 || !contentType.includes("application/json")) {
+      console.warn("[Dashboard] Endpoint /api/dashboard-data chưa sẵn sàng hoặc trả về HTML, tự động fallback sang /api/all-data");
+      const resAll = await fetch("/api/all-data");
+      if (resAll.ok) {
+        const resultAll = await resAll.json();
+        if (resultAll.status === "success") {
+          currentRecords = resultAll.records || (resultAll.data && resultAll.data.records) || [];
+          applyExpired3hCancellation(currentRecords);
+          renderDashboard(resultAll.data, currentRecords);
+          return;
+        }
+      }
+      throw new Error("Không thể kết nối API máy chủ. Vui lòng kiểm tra lại dịch vụ Node.js.");
+    }
+
+    const result = await res.json();
+
+    if (!res.ok || result.status !== "success") {
+      throw new Error(result.message || "Không thể nạp dữ liệu dashboard từ máy chủ.");
+    }
+
+    // Nếu ngày hôm nay chưa có đơn phát sinh mà CSDL có ngày mới nhất gần đó, tự động fallback để người dùng không bị thấy trang trống
+    const todayYmd = getVietnamTodayYmd();
+    if (result.totalRecords === 0 && dateFrom === todayYmd && dateTo === todayYmd && result.latestDate && result.latestDate !== todayYmd) {
+      console.log(`[Dashboard] Ngày hôm nay (${todayYmd}) chưa có đơn, chuyển sang ngày gần nhất: ${result.latestDate}`);
+      if (filterDateFrom) filterDateFrom.value = result.latestDate;
+      if (filterDateTo) filterDateTo.value = result.latestDate;
+      return fetchDashboardDataByRange(result.latestDate, result.latestDate, dateType, hourFrom, hourTo);
+    }
+
+    currentRecords = result.currentRecords || [];
+    masterDashboardRecords = [...currentRecords, ...(result.previousRecords || [])];
+
+    // Đồng bộ trạng thái xử lý CSKH từ local cache
+    const savedNotes = getSavedNotes();
+    masterDashboardRecords.forEach(r => {
+      const k = `${r.stt}_${r.soBooking || ''}_${r.soContainer || ''}`;
+      const note = savedNotes[k] || {};
+      let st = r.trangThaiXuLy || note.status || "";
+      r.trangThaiXuLy = normalizeCskhStatus(st, isUnpaidOrder(r));
+      if (note.giaiTrinh && !r.giaiTrinh) r.giaiTrinh = note.giaiTrinh;
+    });
+
+    currentComparisonInfo = {
+      hasComparison: true,
+      ...result.filter,
+      previousRecords: result.previousRecords || []
+    };
+
+    const dateLabel = dateFrom === dateTo ? `Ngày ${dateFrom}` : `${dateFrom} -> ${dateTo}`;
+    if (currentDatasetName) {
+      currentDatasetName.innerHTML = `<strong>Dữ liệu ${dateLabel}</strong> <span style="font-size: 13px; font-weight: normal; color: var(--text-muted);">(${result.totalRecords} đơn, so sánh với ${result.totalPrevious} đơn kỳ trước)</span>`;
+    }
+
+    initDashboardFilterControls(masterDashboardRecords);
+    renderDashboardViews(result.data, currentRecords, currentComparisonInfo);
+    clearAlert();
+  } catch (err) {
+    console.error("Lỗi fetchDashboardDataByRange:", err);
+    showAlert(err.message || "Lỗi khi nạp dữ liệu dashboard.");
+  }
+}
+
 // Nạp dữ liệu Dashboard
 async function loadDashboardData() {
   clearAlert();
@@ -184,28 +277,33 @@ async function loadDashboardData() {
       applyExpired3hCancellation(currentRecords);
       renderDashboard(result.data, currentRecords);
     } else {
-      currentDatasetId = "sql_all";
-      // 2. Mặc định: Nạp toàn bộ dữ liệu tích lũy từ CSDL SQL (Tất cả file đã tải)
-      const resAll = await fetch("/api/all-data");
-      const resultAll = await resAll.json();
-
-      if (resAll.ok && resultAll.status === "success" && resultAll.totalRecords > 0) {
-        currentDatasetName.innerHTML = `<strong>Toàn bộ CSDL SQL</strong> <span style="font-size: 13px; font-weight: normal; color: var(--text-muted);">(${resultAll.totalRecords} đơn tích lũy từ ${resultAll.stats?.fileCount || 1} file đã tải)</span>`;
-        currentRecords = resultAll.records || (resultAll.data && resultAll.data.records) || [];
-        applyExpired3hCancellation(currentRecords);
-        renderDashboard(resultAll.data, currentRecords);
-        return;
+      currentDatasetId = "sql_range";
+      // 2. Mặc định: Luôn lọc ngày hiện tại (Hôm nay, GMT+7) khi người dùng vào hệ thống
+      const todayYmd = getVietnamTodayYmd();
+      if (filterDateFrom) {
+        filterDateFrom.value = todayYmd;
+        filterDateFrom.removeAttribute("max");
+      }
+      if (filterDateTo) {
+        filterDateTo.value = todayYmd;
+        filterDateTo.removeAttribute("min");
+      }
+      if (filterDateFrom && filterDateTo) {
+        filterDateTo.min = todayYmd;
+        filterDateFrom.max = todayYmd;
       }
 
-      // Fallback nếu CSDL trống: nạp mẫu
-      const resSample = await fetch("/api/sample");
-      const resultSample = await resSample.json();
-      if (resSample.ok && resultSample.status === "success") {
-        currentDatasetName.textContent = `Dữ liệu mẫu 67 đơn hủy thực tế`;
-        currentRecords = (resultSample.data && resultSample.data.records) || [];
-        applyExpired3hCancellation(currentRecords);
-        renderDashboard(resultSample.data, currentRecords);
-      }
+      // Đánh dấu nút "Hôm nay" active
+      document.querySelectorAll(".btn-quick-range").forEach(b => {
+        if (b.getAttribute("data-preset") === "today") {
+          b.classList.add("active");
+        } else {
+          b.classList.remove("active");
+        }
+      });
+
+      const dateTypeVal = filterDateType ? filterDateType.value : "ngayHuy";
+      await fetchDashboardDataByRange(todayYmd, todayYmd, dateTypeVal);
     }
   } catch (err) {
     showAlert(err.message || "Lỗi khi nạp dữ liệu dashboard.");
@@ -767,7 +865,17 @@ function initDashboardFilterControls(records) {
       };
     }
 
-    if (filterDateType) filterDateType.onchange = applyDashboardFilters;
+    if (filterDateType) {
+      filterDateType.onchange = () => {
+        const fromVal = filterDateFrom ? filterDateFrom.value : getVietnamTodayYmd();
+        const toVal = filterDateTo ? filterDateTo.value : getVietnamTodayYmd();
+        const dtVal = filterDateType.value;
+        const hFrom = filterHourFrom ? filterHourFrom.value : "";
+        const hTo = filterHourTo ? filterHourTo.value : "";
+        fetchDashboardDataByRange(fromVal, toVal, dtVal, hFrom, hTo);
+      };
+    }
+
     if (filterDateFrom) {
       filterDateFrom.onchange = () => {
         if (filterDateFrom.value) {
@@ -780,9 +888,19 @@ function initDashboardFilterControls(records) {
         } else if (filterDateTo) {
           filterDateTo.removeAttribute("min");
         }
-        applyDashboardFilters();
+
+        document.querySelectorAll(".btn-quick-range").forEach(b => b.classList.remove("active"));
+        if (filterDateFrom.value && filterDateTo && filterDateTo.value) {
+          const dtVal = filterDateType ? filterDateType.value : "ngayHuy";
+          const hFrom = filterHourFrom ? filterHourFrom.value : "";
+          const hTo = filterHourTo ? filterHourTo.value : "";
+          fetchDashboardDataByRange(filterDateFrom.value, filterDateTo.value, dtVal, hFrom, hTo);
+        } else {
+          applyDashboardFilters();
+        }
       };
     }
+
     if (filterDateTo) {
       filterDateTo.onchange = () => {
         if (filterDateTo.value) {
@@ -795,24 +913,42 @@ function initDashboardFilterControls(records) {
         } else if (filterDateFrom) {
           filterDateFrom.removeAttribute("max");
         }
-        applyDashboardFilters();
+
+        document.querySelectorAll(".btn-quick-range").forEach(b => b.classList.remove("active"));
+        if (filterDateTo.value && filterDateFrom && filterDateFrom.value) {
+          const dtVal = filterDateType ? filterDateType.value : "ngayHuy";
+          const hFrom = filterHourFrom ? filterHourFrom.value : "";
+          const hTo = filterHourTo ? filterHourTo.value : "";
+          fetchDashboardDataByRange(filterDateFrom.value, filterDateTo.value, dtVal, hFrom, hTo);
+        } else {
+          applyDashboardFilters();
+        }
       };
     }
+
     if (btnClearDateFilter) {
       btnClearDateFilter.onclick = () => {
+        const todayYmd = getVietnamTodayYmd();
         if (filterDateFrom) {
-          filterDateFrom.value = "";
+          filterDateFrom.value = todayYmd;
           filterDateFrom.removeAttribute("max");
         }
         if (filterDateTo) {
-          filterDateTo.value = "";
+          filterDateTo.value = todayYmd;
           filterDateTo.removeAttribute("min");
         }
         if (filterHourFrom) filterHourFrom.value = "";
         if (filterHourTo) filterHourTo.value = "";
         btnClearDateFilter.style.display = "none";
         if (dashboardDateFilterGroup) dashboardDateFilterGroup.classList.remove("has-selection");
-        applyDashboardFilters();
+
+        document.querySelectorAll(".btn-quick-range").forEach(b => {
+          if (b.getAttribute("data-preset") === "today") b.classList.add("active");
+          else b.classList.remove("active");
+        });
+
+        const dtVal = filterDateType ? filterDateType.value : "ngayHuy";
+        fetchDashboardDataByRange(todayYmd, todayYmd, dtVal);
       };
     }
 
@@ -845,13 +981,11 @@ function initQuickDateRangeControls() {
   const quickBtns = document.querySelectorAll(".btn-quick-range");
   quickBtns.forEach(btn => {
     btn.onclick = () => {
-      if (!masterDashboardRecords || masterDashboardRecords.length === 0) return;
       const days = parseInt(btn.getAttribute("data-days") || "1", 10);
       const preset = btn.getAttribute("data-preset");
 
-      const dateTypeVal = filterDateType ? filterDateType.value : "ngayHuy";
-      const maxDateStr = getLatestRecordDate(masterDashboardRecords, dateTypeVal);
-      const baseDate = new Date(maxDateStr + "T00:00:00");
+      const todayYmd = getVietnamTodayYmd();
+      const baseDate = new Date(todayYmd + "T00:00:00");
 
       let targetToDate = new Date(baseDate.getTime());
       let targetFromDate = new Date(baseDate.getTime());
@@ -870,12 +1004,15 @@ function initQuickDateRangeControls() {
         return `${y}-${m}-${day}`;
       };
 
+      const fromVal = formatYMD(targetFromDate);
+      const toVal = formatYMD(targetToDate);
+
       if (filterDateFrom) {
-        filterDateFrom.value = formatYMD(targetFromDate);
+        filterDateFrom.value = fromVal;
         filterDateFrom.removeAttribute("max");
       }
       if (filterDateTo) {
-        filterDateTo.value = formatYMD(targetToDate);
+        filterDateTo.value = toVal;
         filterDateTo.removeAttribute("min");
       }
 
@@ -890,7 +1027,8 @@ function initQuickDateRangeControls() {
       quickBtns.forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
 
-      applyDashboardFilters();
+      const dateTypeVal = filterDateType ? filterDateType.value : "ngayHuy";
+      fetchDashboardDataByRange(fromVal, toVal, dateTypeVal);
     };
   });
 }
@@ -2921,6 +3059,9 @@ let currentInlineRecords = [];
 let currentInlineFiltered = [];
 let currentInlineLine = "ALL";
 let currentInlineDepot = "ALL";
+let inlineCurrentPage = 1;
+let inlinePageSize = 50;
+let inlinePaginationInitialized = false;
 
 // Xử lý khi click vào ô bất kỳ trên Ma Trận
 window.onMatrixCellClick = function(line, depot, elem, status = "ALL") {
@@ -2965,11 +3106,63 @@ function initInlineDetailControls() {
   const searchInput = document.getElementById("inlineDetailSearch");
   const btnReset = document.getElementById("btnResetInlineFilter");
   const btnExportCsv = document.getElementById("btnExportInlineCsv");
+  const pageSizeSelect = document.getElementById("inlinePageSizeSelect");
+  const btnFirst = document.getElementById("btnInlinePageFirst");
+  const btnPrev = document.getElementById("btnInlinePagePrev");
+  const btnNext = document.getElementById("btnInlinePageNext");
+  const btnLast = document.getElementById("btnInlinePageLast");
+
+  if (!inlinePaginationInitialized) {
+    inlinePaginationInitialized = true;
+
+    if (pageSizeSelect) {
+      pageSizeSelect.onchange = (e) => {
+        inlinePageSize = parseInt(e.target.value, 10) || 50;
+        inlineCurrentPage = 1;
+        populateInlineDetailRows(currentInlineFiltered);
+      };
+    }
+
+    if (btnFirst) {
+      btnFirst.onclick = () => {
+        inlineCurrentPage = 1;
+        populateInlineDetailRows(currentInlineFiltered);
+      };
+    }
+
+    if (btnPrev) {
+      btnPrev.onclick = () => {
+        if (inlineCurrentPage > 1) {
+          inlineCurrentPage--;
+          populateInlineDetailRows(currentInlineFiltered);
+        }
+      };
+    }
+
+    if (btnNext) {
+      btnNext.onclick = () => {
+        const totalPages = Math.max(1, Math.ceil(currentInlineFiltered.length / inlinePageSize));
+        if (inlineCurrentPage < totalPages) {
+          inlineCurrentPage++;
+          populateInlineDetailRows(currentInlineFiltered);
+        }
+      };
+    }
+
+    if (btnLast) {
+      btnLast.onclick = () => {
+        const totalPages = Math.max(1, Math.ceil(currentInlineFiltered.length / inlinePageSize));
+        inlineCurrentPage = totalPages;
+        populateInlineDetailRows(currentInlineFiltered);
+      };
+    }
+  }
 
   if (searchInput) {
     searchInput.value = "";
     searchInput.oninput = (e) => {
       const q = e.target.value.toLowerCase().trim();
+      inlineCurrentPage = 1;
       if (!q) {
         currentInlineFiltered = [...currentInlineRecords];
       } else {
@@ -2996,6 +3189,7 @@ function initInlineDetailControls() {
       document.querySelectorAll(".matrix-cell-clickable").forEach(el => el.classList.remove("matrix-cell-selected"));
       currentInlineLine = "ALL";
       currentInlineDepot = "ALL";
+      inlineCurrentPage = 1;
       
       let base = currentRecords;
       if (currentMatrixStatus !== "ALL") {
@@ -3049,6 +3243,7 @@ function initInlineDetailControls() {
 function renderInlineDetailTable(records, line = "ALL", depot = "ALL", customTitle = null, customSubtitle = null) {
   currentInlineRecords = [...records];
   currentInlineFiltered = [...records];
+  inlineCurrentPage = 1;
 
   const titleEl = document.getElementById("inlineDetailTitle");
   const subtitleEl = document.getElementById("inlineDetailSubtitle");
@@ -3104,22 +3299,56 @@ function renderInlineDetailTable(records, line = "ALL", depot = "ALL", customTit
   populateInlineDetailRows(currentInlineFiltered);
 }
 
-// Điền các dòng vào tbody của bảng chi tiết inline
+// Điền các dòng vào tbody của bảng chi tiết inline (Phân trang mượt mà)
 function populateInlineDetailRows(records) {
   const tbody = document.getElementById("tbodyInlineDetail");
   const countBadgeEl = document.getElementById("inlineDetailCountBadge");
+  const pageInfoEl = document.getElementById("inlinePaginationInfo");
+  const curPageEl = document.getElementById("inlinePaginationCurrentPage");
+  const btnFirst = document.getElementById("btnInlinePageFirst");
+  const btnPrev = document.getElementById("btnInlinePagePrev");
+  const btnNext = document.getElementById("btnInlinePageNext");
+  const btnLast = document.getElementById("btnInlinePageLast");
+
   if (!tbody) return;
 
+  const totalCount = records ? records.length : 0;
   if (countBadgeEl) {
-    countBadgeEl.textContent = `Hiển thị: ${records.length} / ${currentInlineRecords.length} đơn`;
+    countBadgeEl.textContent = `Hiển thị: ${totalCount} / ${currentInlineRecords.length} đơn`;
   }
 
-  if (records.length === 0) {
+  if (totalCount === 0) {
     tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4" style="color: var(--text-muted); font-size: 14px;">Không tìm thấy đơn hàng nào phù hợp với điều kiện hoặc từ khóa tìm kiếm.</td></tr>`;
+    if (pageInfoEl) pageInfoEl.textContent = "Đang hiển thị 0 - 0 trong tổng số 0 đơn";
+    if (curPageEl) curPageEl.textContent = "Trang 1 / 1";
+    if (btnFirst) btnFirst.disabled = true;
+    if (btnPrev) btnPrev.disabled = true;
+    if (btnNext) btnNext.disabled = true;
+    if (btnLast) btnLast.disabled = true;
     return;
   }
 
-  tbody.innerHTML = records.map((r, idx) => {
+  const totalPages = Math.max(1, Math.ceil(totalCount / inlinePageSize));
+  if (inlineCurrentPage > totalPages) inlineCurrentPage = totalPages;
+  if (inlineCurrentPage < 1) inlineCurrentPage = 1;
+
+  const startIdx = (inlineCurrentPage - 1) * inlinePageSize;
+  const endIdx = Math.min(startIdx + inlinePageSize, totalCount);
+  const pageRecords = records.slice(startIdx, endIdx);
+
+  if (pageInfoEl) {
+    pageInfoEl.textContent = `Đang hiển thị ${startIdx + 1} - ${endIdx} trong tổng số ${totalCount} đơn`;
+  }
+  if (curPageEl) {
+    curPageEl.textContent = `Trang ${inlineCurrentPage} / ${totalPages}`;
+  }
+  if (btnFirst) btnFirst.disabled = (inlineCurrentPage <= 1);
+  if (btnPrev) btnPrev.disabled = (inlineCurrentPage <= 1);
+  if (btnNext) btnNext.disabled = (inlineCurrentPage >= totalPages);
+  if (btnLast) btnLast.disabled = (inlineCurrentPage >= totalPages);
+
+  tbody.innerHTML = pageRecords.map((r, pIdx) => {
+    const globalIdx = startIdx + pIdx;
     // Badges cho chiều cont (IN/OUT)
     const dir = normalizeStr(r.loaiDonHang).toUpperCase();
     const dirBadge = dir === "OUT" 
@@ -3146,7 +3375,7 @@ function populateInlineDetailRows(records) {
 
     return `
       <tr>
-        <td>${idx + 1}</td>
+        <td>${globalIdx + 1}</td>
         <td><strong style="color: var(--blue-primary);">${r.depot || "-"}</strong></td>
         <td><strong>${r.hangTau || "-"}</strong></td>
         <td><code>${r.soBooking || "-"}</code></td>

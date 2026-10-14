@@ -128,6 +128,8 @@ try {
     CREATE INDEX IF NOT EXISTS idx_depot ON cancellation_orders(depot);
     CREATE INDEX IF NOT EXISTS idx_hang_tau ON cancellation_orders(hang_tau);
     CREATE INDEX IF NOT EXISTS idx_trang_thai ON cancellation_orders(trang_thai_don_hang);
+    CREATE INDEX IF NOT EXISTS idx_cancellation_ngay_huy ON cancellation_orders(ngay_huy_don);
+    CREATE INDEX IF NOT EXISTS idx_cancellation_ngay_duyet ON cancellation_orders(ngay_duoc_duyet);
 
     CREATE TABLE IF NOT EXISTS eir_cancellation_orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2003,6 +2005,238 @@ async function insertManualOrderAsync(orderData) {
   return res;
 }
 
+// =========================================================================
+// CÁC HÀM TRUY VẤN DỮ LIỆU DASHBOARD PHÂN TRANG & TỐI ƯU HIỆU NĂNG
+// =========================================================================
+
+function extractDateOnly(dateStr) {
+  if (!dateStr) return null;
+  const str = String(dateStr).trim();
+  const mYmd = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (mYmd) return `${mYmd[1]}-${mYmd[2].padStart(2, "0")}-${mYmd[3].padStart(2, "0")}`;
+  const mDmy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (mDmy) return `${mDmy[3]}-${mDmy[2].padStart(2, "0")}-${mDmy[1].padStart(2, "0")}`;
+  return null;
+}
+
+function extractTimeOnly(dateStr) {
+  if (!dateStr) return "00:00";
+  const str = String(dateStr).trim();
+  const match = str.match(/(?:^|\s|T)(\d{1,2}):(\d{2})/);
+  if (match) {
+    return `${match[1].padStart(2, "0")}:${match[2]}`;
+  }
+  return "00:00";
+}
+
+function getVietnamTodayYmd() {
+  const now = new Date();
+  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+  const vnTime = new Date(utc + (7 * 3600000));
+  const y = vnTime.getFullYear();
+  const m = String(vnTime.getMonth() + 1).padStart(2, "0");
+  const d = String(vnTime.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function computeComparisonDateRange(fromStr, toStr) {
+  const dFrom = new Date(fromStr + "T00:00:00Z");
+  const dTo = new Date(toStr + "T00:00:00Z");
+  const diffDays = Math.max(1, Math.round((dTo - dFrom) / (24 * 3600 * 1000)) + 1);
+
+  const prevToTime = dFrom.getTime() - (24 * 3600 * 1000);
+  const prevFromTime = prevToTime - ((diffDays - 1) * 24 * 3600 * 1000);
+  const prevDFrom = new Date(prevFromTime);
+  const prevDTo = new Date(prevToTime);
+
+  const formatYmd = d => {
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(d.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
+  return {
+    diffDays,
+    prevFrom: formatYmd(prevDFrom),
+    prevTo: formatYmd(prevDTo)
+  };
+}
+
+async function getLatestDateAsync(dateType = "ngayHuy") {
+  const dateColumn = dateType === "ngayDuyet" ? "ngay_duoc_duyet" : "ngay_huy_don";
+  if (tursoClient && tursoClient.isTursoAvailable()) {
+    try {
+      const d = await tursoClient.getLatestDateFromTurso(dateColumn);
+      if (d) return d;
+    } catch (e) {}
+  }
+
+  // Fallback memory
+  let maxD = "";
+  const prop = dateType === "ngayDuyet" ? "ngayDuocDuyet" : "ngayHuyDon";
+  memoryOrders.forEach(o => {
+    const raw = o[prop];
+    const d = extractDateOnly(raw);
+    if (d && (!maxD || d > maxD)) maxD = d;
+  });
+  return maxD || getVietnamTodayYmd();
+}
+
+async function getDashboardDataAsync(params = {}) {
+  const {
+    dateType = "ngayHuy",
+    dateFrom: reqDateFrom,
+    dateTo: reqDateTo,
+    hourFrom = "00:00",
+    hourTo = "23:59"
+  } = params;
+
+  const dateColumn = dateType === "ngayDuyet" ? "ngay_duoc_duyet" : "ngay_huy_don";
+  const dateProp = dateType === "ngayDuyet" ? "ngayDuocDuyet" : "ngayHuyDon";
+
+  const latestDate = await getLatestDateAsync(dateType);
+  const todayYmd = getVietnamTodayYmd();
+
+  let dateFrom = reqDateFrom;
+  let dateTo = reqDateTo;
+
+  if (!dateFrom || !dateTo) {
+    dateFrom = todayYmd;
+    dateTo = todayYmd;
+  }
+
+  const { diffDays, prevFrom, prevTo } = computeComparisonDateRange(dateFrom, dateTo);
+
+  // Khoảng bao phủ cả kỳ liền trước và kỳ hiện tại để lấy trong 1 query duy nhất
+  const fullStart = `${prevFrom} 00:00:00`;
+  const fullEnd = `${dateTo} 23:59:59`;
+
+  let rawOrders = [];
+  let opMap = {};
+
+  if (tursoClient && tursoClient.isTursoAvailable()) {
+    try {
+      const [tursoOrders, tursoOps] = await Promise.all([
+        tursoClient.getOrdersByDateRangeFromTurso(dateColumn, fullStart, fullEnd),
+        tursoClient.getAllOperationalStatesFromTurso()
+      ]);
+      rawOrders = tursoOrders || [];
+      opMap = tursoOps || {};
+    } catch (e) {
+      console.warn("[Turso] Lỗi query date range, fallback local store:", e.message);
+    }
+  }
+
+  // Fallback SQLite hoặc memory nếu Turso không trả về hoặc bị lỗi
+  if (rawOrders.length === 0 && memoryOrders.length === 0) {
+    loadAllFromStore();
+  }
+  if (rawOrders.length === 0) {
+    if (sqliteEngine) {
+      try {
+        const rows = sqliteEngine.prepare(
+          `SELECT * FROM cancellation_orders WHERE ${dateColumn} >= ? AND ${dateColumn} <= ? ORDER BY ${dateColumn} DESC`
+        ).all(fullStart, fullEnd);
+        rawOrders = rows.map(r => ({
+          rowKey: r.row_key,
+          uploadId: r.upload_id,
+          fileName: r.file_name,
+          stt: r.stt,
+          depot: r.depot,
+          hangTau: r.hang_tau,
+          ngayHuyDon: r.ngay_huy_don,
+          ngayDuocDuyet: r.ngay_duoc_duyet,
+          soBooking: r.so_booking,
+          soContainer: r.so_container,
+          trangThaiDonHang: r.trang_thai_don_hang,
+          trangThaiKichHoat: r.trang_thai_kich_hoat,
+          thoiGianKichHoat: r.thoi_gian_kich_hoat,
+          lyDoHuy: r.ly_do_huy,
+          loaiContainer: r.loai_container,
+          loaiDonHang: r.loai_don_hang,
+          sizeTeus: r.size_teus,
+          tenTaiXe: r.ten_tai_xe,
+          sdtTaiXe: r.sdt_tai_xe,
+          tenNhaXe: r.ten_nha_xe,
+          sdtNhaXe: r.sdt_nha_xe,
+          lyDoTuChoi: r.ly_do_tu_choi,
+          trangThaiXuLy: r.trang_thai_xu_ly,
+          giaiTrinh: r.giai_trinh,
+          createdAt: r.created_at
+        }));
+      } catch (e) {}
+    }
+    if (rawOrders.length === 0) {
+      rawOrders = memoryOrders.filter(o => {
+        const d = o[dateProp];
+        return d && d >= fullStart && d <= fullEnd;
+      });
+    }
+  }
+
+  // Map trạng thái CSKH / pending
+  const orders = rawOrders.map(o => {
+    const op = opMap[o.rowKey];
+    return {
+      ...o,
+      isPending: op ? op.isPending : Boolean(o.isPending),
+      trangThaiXuLy: (op && op.cskhStatus) ? op.cskhStatus : (o.trangThaiXuLy || ""),
+      giaiTrinh: (op && op.explanation) ? op.explanation : (o.giaiTrinh || "")
+    };
+  });
+
+  applyExpired3hCancellation(orders);
+
+  // Phân chia thành currentRecords và previousRecords
+  const currentRecords = [];
+  const previousRecords = [];
+
+  const hStart = hourFrom || "00:00";
+  const hEnd = hourTo || "23:59";
+
+  orders.forEach(o => {
+    const rawVal = o[dateProp];
+    const itemDate = extractDateOnly(rawVal);
+    if (!itemDate) return;
+    const itemTime = extractTimeOnly(rawVal);
+
+    if (itemDate >= dateFrom && itemDate <= dateTo) {
+      if (itemTime >= hStart && itemTime <= hEnd) {
+        currentRecords.push(o);
+      }
+    } else if (itemDate >= prevFrom && itemDate <= prevTo) {
+      if (itemTime >= hStart && itemTime <= hEnd) {
+        previousRecords.push(o);
+      }
+    }
+  });
+
+  // Đánh số lại stt 1..N cho currentRecords
+  currentRecords.forEach((o, idx) => {
+    o.stt = String(idx + 1);
+  });
+
+  return {
+    success: true,
+    filter: {
+      dateType,
+      dateFrom,
+      dateTo,
+      hourFrom: hStart,
+      hourTo: hEnd,
+      prevFrom,
+      prevTo,
+      diffDays
+    },
+    latestDate,
+    today: todayYmd,
+    currentRecords,
+    previousRecords,
+    totalRecords: currentRecords.length
+  };
+}
+
 // Khởi chạy nạp dữ liệu kiểm tra đơn từ store
 loadVerificationFromStore();
 
@@ -2011,6 +2245,8 @@ module.exports = {
   insertRecordsAsync,
   getAllRecords,
   getAllRecordsAsync,
+  getDashboardDataAsync,
+  getLatestDateAsync,
   updateOrderNote,
   updateOrderNoteAsync,
   getDatabaseStats,
@@ -2043,5 +2279,6 @@ module.exports = {
   getOperationalVersion,
   getOperationalUpdates,
   formatVietnamDateTime,
-  formatToVietnamParts
+  formatToVietnamParts,
+  getVietnamTodayYmd
 };

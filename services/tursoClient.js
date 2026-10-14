@@ -221,6 +221,8 @@ async function initTursoSchema() {
       CREATE INDEX IF NOT EXISTS idx_turso_cancel_line ON cancellation_orders(hang_tau);
       CREATE INDEX IF NOT EXISTS idx_turso_cancel_status ON cancellation_orders(trang_thai_don_hang);
       CREATE INDEX IF NOT EXISTS idx_turso_cancel_depot_date ON cancellation_orders(depot, ngay_huy_don DESC);
+      CREATE INDEX IF NOT EXISTS idx_turso_cancel_ngay_huy ON cancellation_orders(ngay_huy_don);
+      CREATE INDEX IF NOT EXISTS idx_turso_cancel_ngay_duyet ON cancellation_orders(ngay_duoc_duyet);
       CREATE INDEX IF NOT EXISTS idx_turso_cancel_book_cont ON cancellation_orders(so_booking, so_container);
       CREATE INDEX IF NOT EXISTS idx_turso_eir_depot ON eir_cancellation_orders(depot);
       CREATE INDEX IF NOT EXISTS idx_turso_eir_booking_cont ON eir_cancellation_orders(so_booking, so_container);
@@ -247,6 +249,39 @@ async function initTursoSchema() {
   }
 }
 
+function mapTursoOrderRow(r) {
+  return {
+    rowKey: r.row_key,
+    uploadId: r.upload_id,
+    fileName: r.file_name,
+    stt: r.stt,
+    depot: r.depot,
+    hangTau: r.hang_tau,
+    ngayHuyDon: r.ngay_huy_don,
+    ngayDuocDuyet: r.ngay_duoc_duyet,
+    soBooking: r.so_booking,
+    soContainer: r.so_container,
+    trangThaiDonHang: r.trang_thai_don_hang,
+    trangThaiKichHoat: r.trang_thai_kich_hoat,
+    thoiGianKichHoat: r.thoi_gian_kich_hoat,
+    lyDoHuy: r.ly_do_huy,
+    loaiContainer: r.loai_container,
+    loaiDonHang: r.loai_don_hang,
+    sizeTeus: Number(r.size_teus) || 0,
+    tenTaiXe: r.ten_tai_xe,
+    sdtTaiXe: r.sdt_tai_xe,
+    tenNhaXe: r.ten_nha_xe,
+    sdtNhaXe: r.sdt_nha_xe,
+    lyDoTuChoi: r.ly_do_tu_choi,
+    trangThaiXuLy: r.trang_thai_xu_ly,
+    giaiTrinh: r.giai_trinh,
+    originalTrangThaiDonHang: r.original_trang_thai,
+    isAutoCancelledBy3h: r.is_auto_cancelled_3h === 1,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at
+  };
+}
+
 /**
  * Lấy toàn bộ đơn hủy từ Turso Cloud SQLite
  */
@@ -257,38 +292,68 @@ async function getAllOrdersFromTurso() {
   try {
     await initTursoSchema();
     const res = await client.execute("SELECT * FROM cancellation_orders ORDER BY id ASC;");
-    return res.rows.map(r => ({
-      rowKey: r.row_key,
-      uploadId: r.upload_id,
-      fileName: r.file_name,
-      stt: r.stt,
-      depot: r.depot,
-      hangTau: r.hang_tau,
-      ngayHuyDon: r.ngay_huy_don,
-      ngayDuocDuyet: r.ngay_duoc_duyet,
-      soBooking: r.so_booking,
-      soContainer: r.so_container,
-      trangThaiDonHang: r.trang_thai_don_hang,
-      trangThaiKichHoat: r.trang_thai_kich_hoat,
-      thoiGianKichHoat: r.thoi_gian_kich_hoat,
-      lyDoHuy: r.ly_do_huy,
-      loaiContainer: r.loai_container,
-      loaiDonHang: r.loai_don_hang,
-      sizeTeus: Number(r.size_teus) || 0,
-      tenTaiXe: r.ten_tai_xe,
-      sdtTaiXe: r.sdt_tai_xe,
-      tenNhaXe: r.ten_nha_xe,
-      sdtNhaXe: r.sdt_nha_xe,
-      lyDoTuChoi: r.ly_do_tu_choi,
-      trangThaiXuLy: r.trang_thai_xu_ly,
-      giaiTrinh: r.giai_trinh,
-      originalTrangThaiDonHang: r.original_trang_thai,
-      isAutoCancelledBy3h: r.is_auto_cancelled_3h === 1,
-      createdAt: r.created_at,
-      updatedAt: r.updated_at
-    }));
+    return res.rows.map(mapTursoOrderRow);
   } catch (err) {
     console.error("[Turso] Lỗi khi lấy cancellation_orders:", err.message);
+    return null;
+  }
+}
+
+/**
+ * Lấy danh sách đơn hàng theo khoảng ngày từ Turso Cloud SQLite
+ */
+async function getOrdersByDateRangeFromTurso(arg1, arg2, arg3) {
+  const client = getTursoClient();
+  if (!client) return null;
+
+  try {
+    await initTursoSchema();
+    let dateCol = "ngay_huy_don";
+    let fromDateTime = "";
+    let toDateTime = "";
+
+    if (arg1 && typeof arg1 === "object") {
+      const dt = arg1.dateType || arg1.dateCol || "ngayHuy";
+      dateCol = (dt === "ngayDuyet" || dt === "ngay_duoc_duyet") ? "ngay_duoc_duyet" : "ngay_huy_don";
+      fromDateTime = String(arg1.fromDateTime || arg1.dateFrom || "").trim();
+      toDateTime = String(arg1.toDateTime || arg1.dateTo || "").trim();
+    } else {
+      const dt = String(arg1 || "ngayHuy");
+      dateCol = (dt === "ngayDuyet" || dt === "ngay_duoc_duyet") ? "ngay_duoc_duyet" : "ngay_huy_don";
+      fromDateTime = String(arg2 || "").trim();
+      toDateTime = String(arg3 || "").trim();
+    }
+
+    if (!fromDateTime || !toDateTime) {
+      console.warn("[Turso] Thiếu khoảng ngày query:", { fromDateTime, toDateTime });
+      return [];
+    }
+
+    const res = await client.execute({
+      sql: `SELECT * FROM cancellation_orders WHERE ${dateCol} >= ? AND ${dateCol} <= ? ORDER BY ${dateCol} ASC, id ASC;`,
+      args: [fromDateTime, toDateTime]
+    });
+    return res.rows.map(mapTursoOrderRow);
+  } catch (err) {
+    console.error("[Turso] Lỗi getOrdersByDateRangeFromTurso:", err.message);
+    return null;
+  }
+}
+
+/**
+ * Lấy ngày gần nhất có dữ liệu trong Turso Cloud SQLite
+ */
+async function getLatestDateFromTurso(dateType = "ngayHuy") {
+  const client = getTursoClient();
+  if (!client) return null;
+  try {
+    await initTursoSchema();
+    const dateCol = dateType === "ngayDuyet" ? "ngay_duoc_duyet" : "ngay_huy_don";
+    const res = await client.execute(`SELECT MAX(${dateCol}) as max_date FROM cancellation_orders WHERE ${dateCol} IS NOT NULL AND ${dateCol} != '';`);
+    const val = res.rows[0]?.max_date;
+    if (val) return String(val).substring(0, 10);
+    return null;
+  } catch (err) {
     return null;
   }
 }
@@ -928,5 +993,7 @@ module.exports = {
   getAllOperationalStatesFromTurso,
   initTursoUsersTable,
   getAllUsersFromTurso,
-  syncUserToTurso
+  syncUserToTurso,
+  getOrdersByDateRangeFromTurso,
+  getLatestDateFromTurso
 };
