@@ -48,6 +48,8 @@ const filterContactStatus = document.getElementById("filterContactStatus");
 const filterDateType = document.getElementById("filterDateType");
 const filterDateFrom = document.getElementById("filterDateFrom");
 const filterDateTo = document.getElementById("filterDateTo");
+const filterHourFrom = document.getElementById("filterHourFrom");
+const filterHourTo = document.getElementById("filterHourTo");
 const btnClearDateFilter = document.getElementById("btnClearDateFilter");
 const dashboardDateFilterGroup = document.getElementById("dashboardDateFilterGroup");
 const btnResetFilter = document.getElementById("btnResetFilter");
@@ -284,6 +286,45 @@ function extractHour(dateStr) {
   const d = new Date(str);
   if (!isNaN(d.getTime())) {
     return d.getHours();
+  }
+  return null;
+}
+
+// Chuẩn hóa và trích xuất chuỗi ngày giờ YYYY-MM-DD HH:mm:ss
+function extractDateTime(dateStr) {
+  if (!dateStr || dateStr === "-" || dateStr === "null" || dateStr === "undefined") return null;
+  const str = String(dateStr).trim().replace("T", " ");
+  // Format YYYY-MM-DD HH:mm:ss
+  const mYmd = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (mYmd) {
+    const y = mYmd[1];
+    const m = mYmd[2].padStart(2, "0");
+    const d = mYmd[3].padStart(2, "0");
+    const h = (mYmd[4] !== undefined ? mYmd[4] : "00").padStart(2, "0");
+    const min = (mYmd[5] !== undefined ? mYmd[5] : "00").padStart(2, "0");
+    const s = (mYmd[6] !== undefined ? mYmd[6] : "00").padStart(2, "0");
+    return `${y}-${m}-${d} ${h}:${min}:${s}`;
+  }
+  // Format DD/MM/YYYY HH:mm:ss
+  const mDmy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (mDmy) {
+    const y = mDmy[3];
+    const m = mDmy[2].padStart(2, "0");
+    const d = mDmy[1].padStart(2, "0");
+    const h = (mDmy[4] !== undefined ? mDmy[4] : "00").padStart(2, "0");
+    const min = (mDmy[5] !== undefined ? mDmy[5] : "00").padStart(2, "0");
+    const s = (mDmy[6] !== undefined ? mDmy[6] : "00").padStart(2, "0");
+    return `${y}-${m}-${d} ${h}:${min}:${s}`;
+  }
+  const dObj = new Date(str);
+  if (!isNaN(dObj.getTime())) {
+    const y = dObj.getFullYear();
+    const m = String(dObj.getMonth() + 1).padStart(2, "0");
+    const day = String(dObj.getDate()).padStart(2, "0");
+    const h = String(dObj.getHours()).padStart(2, "0");
+    const min = String(dObj.getMinutes()).padStart(2, "0");
+    const s = String(dObj.getSeconds()).padStart(2, "0");
+    return `${y}-${m}-${day} ${h}:${min}:${s}`;
   }
   return null;
 }
@@ -716,12 +757,22 @@ function initDashboardFilterControls(records) {
           filterDateTo.value = "";
           filterDateTo.removeAttribute("min");
         }
+        if (filterHourFrom) filterHourFrom.value = "";
+        if (filterHourTo) filterHourTo.value = "";
         btnClearDateFilter.style.display = "none";
         if (dashboardDateFilterGroup) dashboardDateFilterGroup.classList.remove("has-selection");
         applyDashboardFilters();
       };
     }
 
+    if (filterHourFrom) {
+      filterHourFrom.onchange = applyDashboardFilters;
+      filterHourFrom.oninput = applyDashboardFilters;
+    }
+    if (filterHourTo) {
+      filterHourTo.onchange = applyDashboardFilters;
+      filterHourTo.oninput = applyDashboardFilters;
+    }
     if (filterLine) filterLine.onchange = applyDashboardFilters;
     if (filterDirection) filterDirection.onchange = applyDashboardFilters;
     if (filterApprovedHour) filterApprovedHour.onchange = applyDashboardFilters;
@@ -781,6 +832,9 @@ function initQuickDateRangeControls() {
         filterDateTo.min = filterDateFrom.value;
         filterDateFrom.max = filterDateTo.value;
       }
+
+      if (filterHourFrom) filterHourFrom.value = "";
+      if (filterHourTo) filterHourTo.value = "";
 
       quickBtns.forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
@@ -865,15 +919,17 @@ function applyDashboardFilters() {
   const dateTypeVal = filterDateType ? filterDateType.value : "ngayHuy";
   const dateFromVal = filterDateFrom ? filterDateFrom.value : "";
   const dateToVal = filterDateTo ? filterDateTo.value : "";
+  const hourFromVal = filterHourFrom ? filterHourFrom.value : "";
+  const hourToVal = filterHourTo ? filterHourTo.value : "";
   const searchInputEl = document.getElementById("dashboardSearchInput");
   const searchVal = searchInputEl ? searchInputEl.value.toLowerCase().trim() : "";
 
   // Cập nhật trạng thái hiển thị của nút xóa ngày và highlight viền
   if (btnClearDateFilter) {
-    btnClearDateFilter.style.display = (dateFromVal || dateToVal) ? "inline-flex" : "none";
+    btnClearDateFilter.style.display = (dateFromVal || dateToVal || hourFromVal || hourToVal) ? "inline-flex" : "none";
   }
   if (dashboardDateFilterGroup) {
-    if (dateFromVal || dateToVal) {
+    if (dateFromVal || dateToVal || hourFromVal || hourToVal) {
       dashboardDateFilterGroup.classList.add("has-selection");
     } else {
       dashboardDateFilterGroup.classList.remove("has-selection");
@@ -881,13 +937,35 @@ function applyDashboardFilters() {
   }
 
   const filtered = masterDashboardRecords.filter(r => {
-    // 0. Bộ lọc Theo Ngày (Ngày Hủy Đơn hoặc Ngày Được Duyệt)
-    if (dateFromVal || dateToVal) {
+    // 0. Bộ lọc Theo Ngày & Giờ (Ngày Hủy Đơn hoặc Ngày Được Duyệt)
+    if (dateFromVal || dateToVal || hourFromVal || hourToVal) {
       const rawDate = dateTypeVal === "ngayDuyet" ? r.ngayDuocDuyet : r.ngayHuyDon;
-      const recDate = extractDateOnly(rawDate);
-      if (!recDate) return false;
-      if (dateFromVal && recDate < dateFromVal) return false;
-      if (dateToVal && recDate > dateToVal) return false;
+      const recDateTime = extractDateTime(rawDate);
+      if (!recDateTime) return false;
+
+      if (dateFromVal || dateToVal) {
+        if (dateFromVal) {
+          const fromTime = hourFromVal ? `${hourFromVal}:00` : "00:00:00";
+          const fromDateTime = `${dateFromVal} ${fromTime}`;
+          if (recDateTime < fromDateTime) return false;
+        }
+        if (dateToVal) {
+          const toTime = hourToVal ? `${hourToVal}:59` : "23:59:59";
+          const toDateTime = `${dateToVal} ${toTime}`;
+          if (recDateTime > toDateTime) return false;
+        }
+      } else {
+        // Chỉ chọn giờ & phút mà không chọn ngày
+        const recTime = recDateTime.substring(11, 19);
+        if (hourFromVal) {
+          const fromTime = `${hourFromVal}:00`;
+          if (recTime < fromTime) return false;
+        }
+        if (hourToVal) {
+          const toTime = `${hourToVal}:59`;
+          if (recTime > toTime) return false;
+        }
+      }
     }
 
     return matchesCommonDashboardFilters(r, lineVal, dirVal, hourVal, warning3hVal, contactStatusVal, searchVal);
@@ -899,9 +977,15 @@ function applyDashboardFilters() {
   if (compRange) {
     previousRecords = masterDashboardRecords.filter(r => {
       const rawDate = dateTypeVal === "ngayDuyet" ? r.ngayDuocDuyet : r.ngayHuyDon;
-      const recDate = extractDateOnly(rawDate);
-      if (!recDate) return false;
-      if (recDate < compRange.prevFrom || recDate > compRange.prevTo) return false;
+      const recDateTime = extractDateTime(rawDate);
+      if (!recDateTime) return false;
+
+      const fromTime = hourFromVal ? `${hourFromVal}:00` : "00:00:00";
+      const fromDateTime = `${compRange.prevFrom} ${fromTime}`;
+      const toTime = hourToVal ? `${hourToVal}:59` : "23:59:59";
+      const toDateTime = `${compRange.prevTo} ${toTime}`;
+      if (recDateTime < fromDateTime || recDateTime > toDateTime) return false;
+
       return matchesCommonDashboardFilters(r, lineVal, dirVal, hourVal, warning3hVal, contactStatusVal, searchVal);
     });
   }
@@ -960,6 +1044,8 @@ function resetDashboardFilters() {
     filterDateTo.value = "";
     filterDateTo.removeAttribute("min");
   }
+  if (filterHourFrom) filterHourFrom.value = "";
+  if (filterHourTo) filterHourTo.value = "";
   if (btnClearDateFilter) btnClearDateFilter.style.display = "none";
   if (dashboardDateFilterGroup) dashboardDateFilterGroup.classList.remove("has-selection");
 

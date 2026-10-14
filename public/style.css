@@ -1303,6 +1303,46 @@ body {
   width: 100%;
 }
 
+/* Container kết hợp Ngày & Giờ cho Từ ngày và Đến ngày */
+.date-time-container {
+  display: flex !important;
+  gap: 6px !important;
+  align-items: center !important;
+  width: 100% !important;
+}
+
+.date-time-container .filter-date-input {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  width: auto !important;
+}
+
+.date-time-container .filter-time-input {
+  flex: 0 0 100px !important;
+  width: 100px !important;
+  min-width: 100px !important;
+  padding: 0 6px !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  color: #1e293b !important;
+  cursor: pointer;
+  text-align: center;
+}
+
+.date-time-container .filter-time-input::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  padding: 2px;
+  margin-left: 2px;
+  border-radius: 4px;
+  opacity: 0.8;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.date-time-container .filter-time-input::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+  transform: scale(1.15);
+}
+
 /* Hàng riêng cho Ghim cột và Đặt lại */
 .filter-actions-row {
   display: flex;

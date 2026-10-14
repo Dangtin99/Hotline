@@ -134,20 +134,24 @@
             </select>
           </div>
 
-          <!-- Hàng 1 - Cột 2: Từ Ngày -->
+          <!-- Hàng 1 - Cột 2: Từ Ngày & Giờ -->
           <div class="filter-field date-field">
-            <label for="filterDateFrom">Từ ngày</label>
-            <div class="date-input-container">
+            <label for="filterDateFrom">Từ ngày & Giờ</label>
+            <div class="date-time-container">
               <input type="date" id="filterDateFrom" class="filter-select filter-date-input" title="Lọc từ ngày" placeholder="Từ ngày">
+              <input type="time" id="filterHourFrom" class="filter-select filter-time-input" title="Chọn giờ & phút bắt đầu (Mặc định 00:00)" onclick="try{this.showPicker()}catch(e){}">
             </div>
           </div>
 
-          <!-- Hàng 1 - Cột 3: Đến Ngày -->
+          <!-- Hàng 1 - Cột 3: Đến Ngày & Giờ -->
           <div class="filter-field date-field">
-            <label for="filterDateTo">Đến ngày</label>
-            <div class="date-input-container" style="position: relative; display: flex; align-items: center;">
-              <input type="date" id="filterDateTo" class="filter-select filter-date-input" title="Lọc đến ngày" placeholder="Đến ngày" style="width: 100%;">
-              <button type="button" id="btnClearDateFilter" class="btn-clear-date" title="Xóa bộ lọc ngày" style="display: none; position: absolute; right: 30px;">×</button>
+            <label for="filterDateTo">Đến ngày & Giờ</label>
+            <div class="date-time-container">
+              <div style="position: relative; flex: 1; min-width: 0;">
+                <input type="date" id="filterDateTo" class="filter-select filter-date-input" title="Lọc đến ngày" placeholder="Đến ngày" style="width: 100%;">
+                <button type="button" id="btnClearDateFilter" class="btn-clear-date" title="Xóa bộ lọc ngày & giờ" style="display: none; position: absolute; right: 28px; top: 50%; transform: translateY(-50%); z-index: 2;">×</button>
+              </div>
+              <input type="time" id="filterHourTo" class="filter-select filter-time-input" title="Chọn giờ & phút kết thúc (Mặc định 23:59)" onclick="try{this.showPicker()}catch(e){}">
             </div>
           </div>
 
@@ -213,8 +217,8 @@
             </div>
           </div>
 
-          <!-- Hàng 2 - Cột 4: Khung Giờ Duyệt -->
-          <div class="filter-field dropdown-field">
+          <!-- Hàng 2 - Cột 4: Khung Giờ Duyệt (Đã ẩn theo yêu cầu) -->
+          <div class="filter-field dropdown-field" style="display: none;">
             <label for="filterApprovedHour">Khung giờ duyệt</label>
             <select id="filterApprovedHour" class="filter-select" title="Lọc theo khung giờ của cột Ngày được duyệt">
               <option value="">Tất cả giờ duyệt</option>
@@ -275,8 +279,8 @@
             </select>
           </div>
 
-          <!-- Hàng 3 - Cột 3 & 4: Tìm Nhanh (chiếm 2 cột) -->
-          <div class="filter-field search-field" style="grid-column: span 2;">
+          <!-- Hàng 3 - Cột 2, 3, 4: Tìm Nhanh (chiếm 3 cột) -->
+          <div class="filter-field search-field" style="grid-column: span 3;">
             <label for="dashboardSearchInput">Tìm nhanh</label>
             <div class="search-box">
               <input type="text" id="dashboardSearchInput" placeholder="Container, Booking, Tài xế, Nhà xe, Lý do...">
