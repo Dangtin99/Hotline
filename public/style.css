@@ -876,9 +876,9 @@ body {
   font-weight: 500;
 }
 
-/* KPI Cards */
+/* KPI Cards (Ẩn theo yêu cầu) */
 .kpi-grid {
-  display: grid;
+  display: none !important;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 18px;
   margin-bottom: 24px;
