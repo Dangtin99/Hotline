@@ -1562,7 +1562,14 @@ function renderTopDepotLineCancelTable(records = []) {
     const hangTau = (r.hangTau || "Khác").trim();
     const key = `${depot}___${hangTau}`;
     const teus = Number(r.sizeTeus) || 0;
-    const reason = (r.lyDoHuy || r.lyDoTuChoi || "Không có lý do").trim();
+
+    // Trích xuất và chuẩn hóa giải trình
+    let rawExp = (r.giaiTrinh || "").trim();
+    let cleanExp = "";
+    if (rawExp && rawExp !== "null" && rawExp !== "undefined" && rawExp !== "-" && rawExp.toLowerCase() !== "none") {
+      cleanExp = rawExp.replace(/\s+/g, " ");
+      cleanExp = cleanExp.charAt(0).toUpperCase() + cleanExp.slice(1);
+    }
 
     if (!groupMap.has(key)) {
       groupMap.set(key, {
@@ -1570,14 +1577,16 @@ function renderTopDepotLineCancelTable(records = []) {
         hangTau,
         cancelCount: 0,
         teus: 0,
-        reasonsMap: new Map()
+        explanationsMap: new Map()
       });
     }
 
     const item = groupMap.get(key);
     item.cancelCount += 1;
     item.teus += teus;
-    item.reasonsMap.set(reason, (item.reasonsMap.get(reason) || 0) + 1);
+    if (cleanExp) {
+      item.explanationsMap.set(cleanExp, (item.explanationsMap.get(cleanExp) || 0) + 1);
+    }
   });
 
   // Chuyển Map thành mảng, sắp xếp giảm dần theo số lượng đơn hủy
@@ -1589,20 +1598,37 @@ function renderTopDepotLineCancelTable(records = []) {
   tbody.innerHTML = topPairs.map((pair, idx) => {
     const pct = ((pair.cancelCount / totalCancelled) * 100).toFixed(1);
 
-    // Lấy Top 3 lý do hủy phổ biến nhất của cặp Depot - Hãng tàu này
-    const sortedReasons = Array.from(pair.reasonsMap.entries())
+    // Lấy các giải trình xuất hiện, sắp xếp theo số lượng giảm dần
+    const sortedExps = Array.from(pair.explanationsMap.entries())
       .map(([reason, count]) => ({ reason, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 3);
+      .sort((a, b) => b.count - a.count);
 
-    const reasonsHtml = sortedReasons.map((rs, rIdx) => {
-      const reasonPct = ((rs.count / pair.cancelCount) * 100).toFixed(0);
-      return `<div style="font-size: 12.5px; line-height: 1.5; margin-bottom: 2px;">
-        <span style="color: #475569; font-weight: 500;">- ${rs.reason}:</span> 
-        <strong style="color: #b91c1c;">${rs.count} đơn</strong> 
-        <span style="color: #64748b; font-size: 11px;">(${reasonPct}%)</span>
-      </div>`;
-    }).join("");
+    // Chỉ lấy các giải trình xuất hiện đa số:
+    // - Nếu có giải trình có số lượng >= 2: chỉ lấy các giải trình có count >= 2 (bỏ qua trường hợp đơn lẻ 1 đơn), tối đa Top 3
+    // - Nếu tất cả giải trình chỉ có 1 đơn: nếu số đơn của cặp <= 3 (tức tỷ lệ >= 33%), lấy giải trình đầu tiên
+    let majorityExps = [];
+    if (sortedExps.length > 0) {
+      const maxCount = sortedExps[0].count;
+      if (maxCount >= 2) {
+        majorityExps = sortedExps.filter(e => e.count >= 2).slice(0, 3);
+      } else if (pair.cancelCount <= 3) {
+        majorityExps = sortedExps.slice(0, 1);
+      }
+    }
+
+    let reasonsHtml = "";
+    if (majorityExps.length > 0) {
+      reasonsHtml = majorityExps.map(rs => {
+        const reasonPct = ((rs.count / pair.cancelCount) * 100).toFixed(0);
+        return `<div style="font-size: 12.5px; line-height: 1.5; margin-bottom: 2px;">
+          <span style="color: #475569; font-weight: 500;">- ${rs.reason}:</span> 
+          <strong style="color: #b91c1c;">${rs.count} đơn</strong> 
+          <span style="color: #64748b; font-size: 11px;">(${reasonPct}%)</span>
+        </div>`;
+      }).join("");
+    } else {
+      reasonsHtml = `<div style="font-size: 12.5px; color: #94a3b8; font-style: italic;">Chưa có giải trình đa số</div>`;
+    }
 
     return `
       <tr>
