@@ -2546,7 +2546,7 @@ function renderMatrixTable(records) {
 }
 
 // =====================================================
-// MA TRẬN PHÂN BỐ DEPOT & TRẠNG THÁI ĐƠN × TRẠNG THÁI LIÊN HỆ
+// MA TRẬN PHÂN BỐ ĐƠN HỦY THEO DEPOT × TRẠNG THÁI LIÊN HỆ
 // =====================================================
 
 function initContactMatrixControls(records) {
@@ -2557,7 +2557,7 @@ function initContactMatrixControls(records) {
     btnExportPng.onclick = () => {
       const card = document.getElementById("contactMatrixCard");
       const dateStr = new Date().toISOString().substring(0, 10);
-      exportElementToPng(card, `ma_tran_depot_trang_thai_don_lien_he_${dateStr}.png`, btnExportPng);
+      exportElementToPng(card, `ma_tran_don_huy_depot_lien_he_${dateStr}.png`, btnExportPng);
     };
   }
 
@@ -2568,20 +2568,20 @@ function initContactMatrixControls(records) {
   }
 }
 
-// Hàm xuất CSV cho ma trận Depot & Trạng thái đơn x Trạng thái liên hệ
+// Hàm xuất CSV cho ma trận đơn hủy theo Depot x Trạng thái liên hệ
 function exportContactMatrixCsv(records) {
   const rawList = records || [];
-  const list = rawList.filter(r => isUnpaidOrder(r) || isCancelledOrder(r));
+  // Chỉ lấy các đơn ĐÃ HỦY
+  const list = rawList.filter(r => isCancelledOrder(r));
   if (list.length === 0) {
-    alert("Không có dữ liệu đơn Chưa thanh toán hoặc Đã hủy để xuất CSV.");
+    alert("Không có dữ liệu đơn Đã hủy để xuất CSV.");
     return;
   }
 
   // Thu thập danh sách cột trạng thái liên hệ
   const contactMap = {};
   list.forEach(r => {
-    const isUnpaid = isUnpaidOrder(r);
-    const cskh = normalizeCskhStatus(r.trangThaiXuLy, isUnpaid) || "Chưa cập nhật";
+    const cskh = normalizeCskhStatus(r.trangThaiXuLy, false) || "Chưa cập nhật";
     contactMap[cskh] = (contactMap[cskh] || 0) + 1;
   });
 
@@ -2611,62 +2611,40 @@ function exportContactMatrixCsv(records) {
 
   const matrixData = {};
   sortedDepots.forEach(d => {
-    matrixData[d] = {
-      unpaid: { total: 0, counts: {} },
-      cancelled: { total: 0, counts: {} }
-    };
+    matrixData[d] = { total: 0, counts: {} };
   });
 
   list.forEach(r => {
     const d = normalizeStr(r.depot).toUpperCase() || "KHAC";
     if (!matrixData[d]) {
-      matrixData[d] = {
-        unpaid: { total: 0, counts: {} },
-        cancelled: { total: 0, counts: {} }
-      };
+      matrixData[d] = { total: 0, counts: {} };
     }
-    const isUnpaid = isUnpaidOrder(r);
-    const type = isUnpaid ? "unpaid" : "cancelled";
-    const cskh = normalizeCskhStatus(r.trangThaiXuLy, isUnpaid) || "Chưa cập nhật";
-    matrixData[d][type].counts[cskh] = (matrixData[d][type].counts[cskh] || 0) + 1;
-    matrixData[d][type].total += 1;
+    const cskh = normalizeCskhStatus(r.trangThaiXuLy, false) || "Chưa cập nhật";
+    matrixData[d].counts[cskh] = (matrixData[d].counts[cskh] || 0) + 1;
+    matrixData[d].total += 1;
   });
 
-  const headers = ["Depot", "Trạng Thái Đơn", ...allContactStatuses, "Grand Total"];
+  const headers = ["Depot", ...allContactStatuses, "Grand Total"];
   const rows = [];
 
   sortedDepots.forEach(d => {
     const dData = matrixData[d];
     rows.push([
       `"${d}"`,
-      `"Chưa thanh toán"`,
-      ...allContactStatuses.map(st => dData.unpaid.counts[st] || 0),
-      dData.unpaid.total
-    ]);
-    rows.push([
-      `"${d}"`,
-      `"Đã hủy"`,
-      ...allContactStatuses.map(st => dData.cancelled.counts[st] || 0),
-      dData.cancelled.total
+      ...allContactStatuses.map(st => dData.counts[st] || 0),
+      dData.total
     ]);
   });
 
-  const unpaidTotals = allContactStatuses.map(st => {
-    return sortedDepots.reduce((sum, d) => sum + (matrixData[d].unpaid.counts[st] || 0), 0);
+  const colTotals = allContactStatuses.map(st => {
+    return sortedDepots.reduce((sum, d) => sum + (matrixData[d].counts[st] || 0), 0);
   });
-  const cancelTotals = allContactStatuses.map(st => {
-    return sortedDepots.reduce((sum, d) => sum + (matrixData[d].cancelled.counts[st] || 0), 0);
-  });
-  const totalUnpaidSum = sortedDepots.reduce((sum, d) => sum + matrixData[d].unpaid.total, 0);
-  const totalCancelSum = sortedDepots.reduce((sum, d) => sum + matrixData[d].cancelled.total, 0);
+  const totalCancelledSum = sortedDepots.reduce((sum, d) => sum + matrixData[d].total, 0);
 
-  rows.push([`"TỔNG CỘNG"`, `"Chưa thanh toán"`, ...unpaidTotals, totalUnpaidSum]);
-  rows.push([`"TỔNG CỘNG"`, `"Đã hủy"`, ...cancelTotals, totalCancelSum]);
   rows.push([
-    `"TẤT CẢ (GRAND TOTAL)"`,
-    `"Tất cả trạng thái"`,
-    ...allContactStatuses.map((st, i) => unpaidTotals[i] + cancelTotals[i]),
-    totalUnpaidSum + totalCancelSum
+    `"TỔNG CỘNG"`,
+    ...colTotals,
+    totalCancelledSum
   ]);
 
   const csvContent = "\uFEFF" + [headers.map(h => `"${h}"`).join(","), ...rows.map(e => e.join(","))].join("\r\n");
@@ -2675,13 +2653,13 @@ function exportContactMatrixCsv(records) {
   const link = document.createElement("a");
   const dateStr = new Date().toISOString().substring(0, 10);
   link.setAttribute("href", url);
-  link.setAttribute("download", `ma_tran_depot_trang_thai_don_lien_he_${dateStr}.csv`);
+  link.setAttribute("download", `ma_tran_don_huy_depot_lien_he_${dateStr}.csv`);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
 }
 
-// Render Bảng Ma Trận: Rows = Depot & Trạng Thái Đơn, Columns = Trạng Thái Liên Hệ
+// Render Bảng Ma Trận: Rows = Depot, Columns = Trạng Thái Liên Hệ (Chỉ đơn hủy)
 function renderContactStatusMatrixTable(records) {
   const thead = document.getElementById("theadContactMatrix");
   const tbody = document.getElementById("tbodyContactMatrix");
@@ -2689,14 +2667,13 @@ function renderContactStatusMatrixTable(records) {
   if (!thead || !tbody) return;
 
   const rawList = records || [];
-  // Lọc chỉ lấy đơn Chưa thanh toán và Đã hủy
-  const list = rawList.filter(r => isUnpaidOrder(r) || isCancelledOrder(r));
+  // Chỉ lấy các đơn ĐÃ HỦY
+  const list = rawList.filter(r => isCancelledOrder(r));
 
   // 1. Thu thập danh sách Trạng Thái Liên Hệ (Columns)
   const contactMap = {};
   list.forEach(r => {
-    const isUnpaid = isUnpaidOrder(r);
-    const cskh = normalizeCskhStatus(r.trangThaiXuLy, isUnpaid) || "Chưa cập nhật";
+    const cskh = normalizeCskhStatus(r.trangThaiXuLy, false) || "Chưa cập nhật";
     contactMap[cskh] = (contactMap[cskh] || 0) + 1;
   });
 
@@ -2727,169 +2704,88 @@ function renderContactStatusMatrixTable(records) {
   });
   const sortedDepots = Array.from(depotSet).sort();
 
-  // 3. Phân nhóm dữ liệu theo Depot -> Trạng Thái Đơn -> Trạng Thái Liên Hệ
+  // 3. Phân nhóm dữ liệu theo Depot -> Trạng Thái Liên Hệ
   const matrixData = {};
   sortedDepots.forEach(d => {
-    matrixData[d] = {
-      unpaid: { total: 0, counts: {} },
-      cancelled: { total: 0, counts: {} }
-    };
+    matrixData[d] = { total: 0, counts: {} };
   });
 
   list.forEach(r => {
     const d = normalizeStr(r.depot).toUpperCase() || "KHAC";
     if (!matrixData[d]) {
-      matrixData[d] = {
-        unpaid: { total: 0, counts: {} },
-        cancelled: { total: 0, counts: {} }
-      };
+      matrixData[d] = { total: 0, counts: {} };
     }
-    const isUnpaid = isUnpaidOrder(r);
-    const type = isUnpaid ? "unpaid" : "cancelled";
-    const cskh = normalizeCskhStatus(r.trangThaiXuLy, isUnpaid) || "Chưa cập nhật";
-    matrixData[d][type].counts[cskh] = (matrixData[d][type].counts[cskh] || 0) + 1;
-    matrixData[d][type].total += 1;
+    const cskh = normalizeCskhStatus(r.trangThaiXuLy, false) || "Chưa cập nhật";
+    matrixData[d].counts[cskh] = (matrixData[d].counts[cskh] || 0) + 1;
+    matrixData[d].total += 1;
   });
 
-  // 4. Render thead
+  // 4. Render thead (Không còn cột Trạng Thái Đơn)
   thead.innerHTML = `
     <tr>
       <th class="col-sticky-depot" style="text-align: left; padding-left: 14px;">Depot</th>
-      <th class="col-sticky-status" style="text-align: left; padding-left: 10px;">Trạng Thái Đơn</th>
       ${allContactStatuses.map(st => `<th style="min-width: 110px; text-align: right;" title="${st}">${st}</th>`).join("")}
       <th class="matrix-col-total" style="min-width: 110px; text-align: right;">Grand Total</th>
     </tr>
   `;
 
-  // 5. Render tbody
+  // 5. Render tbody (Mỗi Depot 1 dòng)
   let tbodyHtml = "";
 
   sortedDepots.forEach(depotKey => {
     const dData = matrixData[depotKey];
 
-    const renderCells = (countsMap, orderTypeLabel) => {
-      return allContactStatuses.map(st => {
-        const cnt = countsMap[st] || 0;
-        if (cnt === 0) return `<td class="matrix-val-empty" style="text-align: right;">-</td>`;
-        let heatCls = "badge-heat-low";
-        if (cnt >= 9) heatCls = "badge-heat-high";
-        else if (cnt >= 4) heatCls = "badge-heat-med";
+    const cellsHtml = allContactStatuses.map(st => {
+      const cnt = dData.counts[st] || 0;
+      if (cnt === 0) return `<td class="matrix-val-empty" style="text-align: right;">-</td>`;
+      let heatCls = "badge-heat-low";
+      if (cnt >= 9) heatCls = "badge-heat-high";
+      else if (cnt >= 4) heatCls = "badge-heat-med";
 
-        return `
-          <td class="matrix-cell-clickable" style="text-align: right;" onclick="onContactMatrixCellClick('${depotKey}', '${orderTypeLabel}', '${st}', this)" title="Bấm xem ${cnt} đơn ${orderTypeLabel} của Depot ${depotKey} (${st})">
-            <span class="matrix-cell-badge ${heatCls}">
-              ${cnt}
-            </span>
-          </td>
-        `;
-      }).join("");
-    };
-
-    const unpaidCells = renderCells(dData.unpaid.counts, "Chưa thanh toán");
-    const cancelledCells = renderCells(dData.cancelled.counts, "Đã hủy");
+      return `
+        <td class="matrix-cell-clickable" style="text-align: right;" onclick="onContactMatrixCellClick('${depotKey}', '${st}', this)" title="Bấm xem ${cnt} đơn hủy của Depot ${depotKey} (${st})">
+          <span class="matrix-cell-badge ${heatCls}">
+            ${cnt}
+          </span>
+        </td>
+      `;
+    }).join("");
 
     tbodyHtml += `
       <tr>
-        <td class="col-sticky-depot" rowspan="2" style="border-bottom: 2px solid #cbd5e1; vertical-align: middle;">
+        <td class="col-sticky-depot">
           <strong style="color: #1e3a8a; font-size: 13.5px;">${depotKey}</strong>
         </td>
-        <td class="col-sticky-status">
-          <span class="badge badge-warning" style="font-size: 11px; padding: 2px 7px; font-weight: 600;">Chưa thanh toán</span>
-        </td>
-        ${unpaidCells}
-        <td class="matrix-col-total matrix-cell-clickable" style="text-align: right;" onclick="onContactMatrixCellClick('${depotKey}', 'Chưa thanh toán', 'ALL', this)" title="Bấm xem toàn bộ ${dData.unpaid.total} đơn Chưa thanh toán của Depot ${depotKey}">
-          <strong style="color: #d97706;">${dData.unpaid.total}</strong>
-        </td>
-      </tr>
-
-      <tr class="matrix-depot-divider">
-        <td class="col-sticky-status" style="border-bottom: 2px solid #cbd5e1;">
-          <span class="badge badge-danger" style="font-size: 11px; padding: 2px 7px; font-weight: 600;">Đã hủy</span>
-        </td>
-        ${cancelledCells.replace(/<td /g, '<td style="border-bottom: 2px solid #cbd5e1;" ')}
-        <td class="matrix-col-total matrix-cell-clickable" style="text-align: right; border-bottom: 2px solid #cbd5e1;" onclick="onContactMatrixCellClick('${depotKey}', 'Đã hủy', 'ALL', this)" title="Bấm xem toàn bộ ${dData.cancelled.total} đơn Đã hủy của Depot ${depotKey}">
-          <strong style="color: #dc2626;">${dData.cancelled.total}</strong>
+        ${cellsHtml}
+        <td class="matrix-col-total matrix-cell-clickable" style="text-align: right;" onclick="onContactMatrixCellClick('${depotKey}', 'ALL', this)" title="Bấm xem toàn bộ ${dData.total} đơn hủy của Depot ${depotKey}">
+          <strong style="color: #dc2626;">${dData.total}</strong>
         </td>
       </tr>
     `;
   });
 
-  // 6. Dòng Tổng Cộng (Grand Total Rows)
-  const totalUnpaidByStatus = {};
-  const totalCancelledByStatus = {};
-  let totalUnpaidSum = 0;
-  let totalCancelledSum = 0;
-
-  allContactStatuses.forEach(st => {
-    totalUnpaidByStatus[st] = sortedDepots.reduce((sum, d) => sum + (matrixData[d].unpaid.counts[st] || 0), 0);
-    totalCancelledByStatus[st] = sortedDepots.reduce((sum, d) => sum + (matrixData[d].cancelled.counts[st] || 0), 0);
+  // 6. Dòng Tổng Cộng (Grand Total Row)
+  const colTotals = allContactStatuses.map(st => {
+    return sortedDepots.reduce((sum, d) => sum + (matrixData[d].counts[st] || 0), 0);
   });
-  sortedDepots.forEach(d => {
-    totalUnpaidSum += matrixData[d].unpaid.total;
-    totalCancelledSum += matrixData[d].cancelled.total;
-  });
-  const grandTotalAll = totalUnpaidSum + totalCancelledSum;
+  const grandTotalAll = sortedDepots.reduce((sum, d) => sum + matrixData[d].total, 0);
 
-  const unpaidTotalCells = allContactStatuses.map(st => {
-    const cnt = totalUnpaidByStatus[st] || 0;
+  const grandTotalCells = allContactStatuses.map((st, i) => {
+    const cnt = colTotals[i] || 0;
     return `
-      <td class="matrix-cell-clickable" style="text-align: right;" onclick="onContactMatrixCellClick('ALL', 'Chưa thanh toán', '${st}', this)" title="Bấm xem toàn bộ ${cnt} đơn Chưa thanh toán trạng thái ${st}">
-        <strong style="color: #d97706;">${cnt}</strong>
-      </td>
-    `;
-  }).join("");
-
-  const cancelledTotalCells = allContactStatuses.map(st => {
-    const cnt = totalCancelledByStatus[st] || 0;
-    return `
-      <td class="matrix-cell-clickable" style="text-align: right;" onclick="onContactMatrixCellClick('ALL', 'Đã hủy', '${st}', this)" title="Bấm xem toàn bộ ${cnt} đơn Đã hủy trạng thái ${st}">
-        <strong style="color: #dc2626;">${cnt}</strong>
-      </td>
-    `;
-  }).join("");
-
-  const grandTotalCells = allContactStatuses.map(st => {
-    const cnt = (totalUnpaidByStatus[st] || 0) + (totalCancelledByStatus[st] || 0);
-    return `
-      <td class="matrix-cell-clickable" style="text-align: right;" onclick="onContactMatrixCellClick('ALL', 'ALL', '${st}', this)" title="Bấm xem toàn bộ ${cnt} đơn trạng thái liên hệ ${st}">
+      <td class="matrix-cell-clickable" style="text-align: right;" onclick="onContactMatrixCellClick('ALL', '${st}', this)" title="Bấm xem toàn bộ ${cnt} đơn hủy trạng thái ${st}">
         <strong style="color: #0f172a; font-size: 13.5px;">${cnt}</strong>
       </td>
     `;
   }).join("");
 
   tbodyHtml += `
-    <!-- Tổng Chưa thanh toán -->
-    <tr class="matrix-contact-total-row">
-      <td class="col-sticky-depot" rowspan="3" style="text-align: left; padding-left: 14px; font-size: 13.5px; font-weight: 800; color: #0f172a; vertical-align: middle; border-top: 2px solid #94a3b8; border-bottom: 2px solid #94a3b8;">
+    <tr class="matrix-contact-grand-row">
+      <td class="col-sticky-depot" style="text-align: left; padding-left: 14px; font-weight: 800; color: #1e3a8a; border-top: 2px solid #94a3b8; border-bottom: 2px solid #94a3b8;">
         TỔNG CỘNG
       </td>
-      <td class="col-sticky-status" style="border-top: 2px solid #94a3b8;">
-        <strong style="color: #d97706;">Chưa thanh toán</strong>
-      </td>
-      ${unpaidTotalCells.replace(/<td /g, '<td style="border-top: 2px solid #94a3b8;" ')}
-      <td class="matrix-col-total matrix-cell-clickable" style="text-align: right; border-top: 2px solid #94a3b8;" onclick="onContactMatrixCellClick('ALL', 'Chưa thanh toán', 'ALL', this)" title="Bấm xem toàn bộ ${totalUnpaidSum} đơn Chưa thanh toán">
-        <strong style="color: #d97706; font-size: 13.5px;">${totalUnpaidSum}</strong>
-      </td>
-    </tr>
-
-    <!-- Tổng Đã hủy -->
-    <tr class="matrix-contact-total-row">
-      <td class="col-sticky-status">
-        <strong style="color: #dc2626;">Đã hủy</strong>
-      </td>
-      ${cancelledTotalCells}
-      <td class="matrix-col-total matrix-cell-clickable" style="text-align: right;" onclick="onContactMatrixCellClick('ALL', 'Đã hủy', 'ALL', this)" title="Bấm xem toàn bộ ${totalCancelledSum} đơn Đã hủy">
-        <strong style="color: #dc2626; font-size: 13.5px;">${totalCancelledSum}</strong>
-      </td>
-    </tr>
-
-    <!-- Grand Total Tất cả -->
-    <tr class="matrix-contact-grand-row">
-      <td class="col-sticky-status" style="font-weight: 800; color: #1e3a8a; border-top: 2px solid #94a3b8; border-bottom: 2px solid #94a3b8;">
-        TẤT CẢ (GRAND TOTAL)
-      </td>
       ${grandTotalCells.replace(/<td /g, '<td style="border-top: 2px solid #94a3b8; border-bottom: 2px solid #94a3b8;" ')}
-      <td class="cell-grand-total matrix-cell-clickable" style="text-align: right; color: #1d4ed8; font-size: 14px; border-top: 2px solid #94a3b8; border-bottom: 2px solid #94a3b8;" onclick="onContactMatrixCellClick('ALL', 'ALL', 'ALL', this)" title="Bấm xem toàn bộ ${grandTotalAll} đơn">
+      <td class="cell-grand-total matrix-cell-clickable" style="text-align: right; color: #1d4ed8; font-size: 14px; border-top: 2px solid #94a3b8; border-bottom: 2px solid #94a3b8;" onclick="onContactMatrixCellClick('ALL', 'ALL', this)" title="Bấm xem toàn bộ ${grandTotalAll} đơn hủy">
         <strong>${grandTotalAll}</strong>
       </td>
     </tr>
@@ -2898,12 +2794,18 @@ function renderContactStatusMatrixTable(records) {
   tbody.innerHTML = tbodyHtml;
 
   if (summaryEl) {
-    summaryEl.textContent = `Tổng cộng: ${sortedDepots.length} Depot | ${totalUnpaidSum} đơn Chưa thanh toán | ${totalCancelledSum} đơn Đã hủy (${grandTotalAll} đơn theo bộ lọc)`;
+    summaryEl.textContent = `Tổng cộng: ${sortedDepots.length} Depot | ${grandTotalAll} đơn hủy theo bộ lọc`;
   }
 }
 
-// Xử lý khi click vào ô bất kỳ trên Ma Trận Depot & Trạng Thái Đơn x Trạng Thái Liên Hệ
-window.onContactMatrixCellClick = function(depot, orderStatus, contactStatus, elem) {
+// Xử lý khi click vào ô bất kỳ trên Ma Trận Đơn Hủy theo Depot × Trạng Thái Liên Hệ
+window.onContactMatrixCellClick = function(depot, contactStatus, elem) {
+  // Hỗ trợ nếu được truyền theo dạng 4 tham số cũ (depot, orderStatus, contactStatus, elem)
+  if (arguments.length === 4) {
+    contactStatus = arguments[2];
+    elem = arguments[3];
+  }
+
   // 1. Highlight ô đang chọn trên ma trận
   document.querySelectorAll(".matrix-cell-clickable").forEach(el => el.classList.remove("matrix-cell-selected"));
   if (elem) elem.classList.add("matrix-cell-selected");
@@ -2911,16 +2813,9 @@ window.onContactMatrixCellClick = function(depot, orderStatus, contactStatus, el
   currentInlineLine = "ALL";
   currentInlineDepot = depot;
 
-  // 2. Lọc danh sách đơn hàng
+  // 2. Lọc danh sách đơn hàng (CHỈ LẤY ĐƠN ĐÃ HỦY)
   const filtered = currentRecords.filter(r => {
-    // Lọc theo trạng thái đơn
-    if (orderStatus === "Chưa thanh toán") {
-      if (!isUnpaidOrder(r)) return false;
-    } else if (orderStatus === "Đã hủy") {
-      if (!isCancelledOrder(r)) return false;
-    } else {
-      if (!isUnpaidOrder(r) && !isCancelledOrder(r)) return false;
-    }
+    if (!isCancelledOrder(r)) return false;
 
     // Lọc theo depot
     if (depot !== "ALL") {
@@ -2929,8 +2824,7 @@ window.onContactMatrixCellClick = function(depot, orderStatus, contactStatus, el
 
     // Lọc theo trạng thái liên hệ
     if (contactStatus !== "ALL") {
-      const isUnpaid = isUnpaidOrder(r);
-      const cskh = normalizeCskhStatus(r.trangThaiXuLy, isUnpaid) || "Chưa cập nhật";
+      const cskh = normalizeCskhStatus(r.trangThaiXuLy, false) || "Chưa cập nhật";
       if (cskh !== contactStatus) return false;
     }
 
@@ -2939,11 +2833,10 @@ window.onContactMatrixCellClick = function(depot, orderStatus, contactStatus, el
 
   // 3. Render bảng chi tiết ngay bên dưới ma trận
   const depotText = depot === "ALL" ? "Tất cả Depot" : `Depot ${depot}`;
-  const statusText = orderStatus === "ALL" ? "Chưa thanh toán & Đã hủy" : orderStatus;
   const contactText = contactStatus === "ALL" ? "Tất cả trạng thái liên hệ" : contactStatus;
 
-  const customTitle = `Bảng Thống Kê Chi Tiết: ${depotText} • ${statusText} • ${contactText}`;
-  const customSubtitle = `Đang xem <strong>${filtered.length}</strong> đơn hàng theo giao điểm Ma trận Depot & Trạng thái đơn × Trạng thái liên hệ. Bấm nút "Hiện Tất Cả Đơn" để hủy lọc.`;
+  const customTitle = `Bảng Thống Kê Chi Tiết: ${depotText} • Đơn Hủy • ${contactText}`;
+  const customSubtitle = `Đang xem <strong>${filtered.length}</strong> đơn hủy theo giao điểm Ma trận Depot × Trạng thái liên hệ. Bấm nút "Hiện Tất Cả Đơn" để hủy lọc.`;
 
   renderInlineDetailTable(filtered, "ALL", depot, customTitle, customSubtitle);
 
