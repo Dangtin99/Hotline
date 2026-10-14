@@ -692,9 +692,14 @@ async function handleSaveUsersDepots(selectedUsers) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ depots: selected })
       });
-      const result = await res.json();
-      if (!res.ok || !result.success) {
-        throw new Error(result.message || `Lỗi khi lưu phân quyền cho tài khoản ${u.username}.`);
+      let result = null;
+      try {
+        result = await res.json();
+      } catch (e) {
+        throw new Error(`Máy chủ không thể xử lý yêu cầu (HTTP ${res.status}). Vui lòng khởi động lại Backend Node.js để nạp các API phân quyền mới.`);
+      }
+      if (!res.ok || !result || !result.success) {
+        throw new Error((result && result.message) || `Lỗi khi lưu phân quyền cho tài khoản ${u.username}.`);
       }
     }
 
