@@ -1553,7 +1553,15 @@ async function checkAndSyncOperationalUpdates() {
       const dataUpd = await resUpd.json();
       const updates = dataUpd.updates || {};
 
-      applyOperationalUpdatesToUI(updates);
+      if (Object.keys(updates).length > 0) {
+        applyOperationalUpdatesToUI(updates);
+      } else {
+        // Nếu phiên bản tăng do đăng tải file mới, xóa file hoặc lọc trùng
+        const activeTag = document.activeElement ? document.activeElement.tagName : "";
+        if (activeTag !== "INPUT" && activeTag !== "SELECT" && activeTag !== "TEXTAREA") {
+          await loadDataset();
+        }
+      }
       localOperationalVersion = serverVer;
     }
   } catch (err) {

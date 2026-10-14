@@ -211,6 +211,12 @@ try {
       is_active INTEGER DEFAULT 1
     );
 
+    CREATE TABLE IF NOT EXISTS system_metadata (
+      key TEXT PRIMARY KEY,
+      value TEXT,
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
     -- Composite Indexes tối ưu truy vấn
     CREATE INDEX IF NOT EXISTS idx_cancel_depot_date ON cancellation_orders(depot, ngay_huy_don DESC);
     CREATE INDEX IF NOT EXISTS idx_cancel_book_cont ON cancellation_orders(so_booking, so_container);
@@ -224,13 +230,70 @@ try {
 // Quản lý bộ nhớ đệm và dữ liệu đồng bộ
 let memoryOrders = [];
 let operationalVersion = Date.now();
+let lastVersionFetchTime = 0;
+const VERSION_CACHE_TTL_MS = 2500; // Bộ đệm 2.5s giảm tải I/O Turso khi polling 5s
 
 function bumpOperationalVersion() {
   operationalVersion = Date.now();
+  lastVersionFetchTime = operationalVersion;
+
+  if (sqliteEngine) {
+    try {
+      sqliteEngine.prepare(`
+        INSERT INTO system_metadata (key, value, updated_at)
+        VALUES ('operational_version', ?, datetime('now'))
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+      `).run(String(operationalVersion));
+    } catch (e) {}
+  }
+
+  if (tursoClient && tursoClient.isTursoAvailable()) {
+    tursoClient.bumpOperationalVersionInTurso().catch(() => {});
+  }
+
   return operationalVersion;
 }
 
 function getOperationalVersion() {
+  return operationalVersion;
+}
+
+async function getOperationalVersionAsync() {
+  const now = Date.now();
+  // Nếu trong khoảng 2.5s từ lần kiểm tra trước, dùng bộ nhớ đệm RAM để phản hồi siêu tốc (< 1ms)
+  if (now - lastVersionFetchTime < VERSION_CACHE_TTL_MS && operationalVersion > 0) {
+    return operationalVersion;
+  }
+
+  if (tursoClient && tursoClient.isTursoAvailable()) {
+    try {
+      const remoteVer = await tursoClient.getOperationalVersionFromTurso();
+      if (remoteVer) {
+        const num = Number(remoteVer);
+        if (!isNaN(num) && num > 0) {
+          operationalVersion = Math.max(operationalVersion, num);
+          lastVersionFetchTime = now;
+          return operationalVersion;
+        }
+      }
+    } catch (e) {}
+  }
+
+  if (sqliteEngine) {
+    try {
+      const row = sqliteEngine.prepare("SELECT value FROM system_metadata WHERE key = 'operational_version'").get();
+      if (row && row.value) {
+        const num = Number(row.value);
+        if (!isNaN(num) && num > 0) {
+          operationalVersion = Math.max(operationalVersion, num);
+          lastVersionFetchTime = now;
+          return operationalVersion;
+        }
+      }
+    } catch (e) {}
+  }
+
+  lastVersionFetchTime = now;
   return operationalVersion;
 }
 
@@ -667,6 +730,71 @@ function getOperationalUpdates() {
 
   return {
     version: operationalVersion,
+    updates
+  };
+}
+
+/**
+ * Đồng bộ ngược các thay đổi nhận từ Turso Cloud vào RAM và SQLite cục bộ
+ */
+function syncOperationalUpdatesToMemoryAndLocalSql(updates = {}) {
+  if (!updates || typeof updates !== "object" || Object.keys(updates).length === 0) return;
+  const nowStr = new Date().toISOString().replace("T", " ").substring(0, 19);
+
+  Object.entries(updates).forEach(([rowKey, item]) => {
+    if (!rowKey || !item) return;
+    const matched = memoryOrders.filter(o => o.rowKey === rowKey);
+    matched.forEach(rec => {
+      if (item.trangThaiXuLy !== undefined) rec.trangThaiXuLy = item.trangThaiXuLy || "";
+      if (item.giaiTrinh !== undefined) rec.giaiTrinh = item.giaiTrinh || "";
+      if (item.isPending !== undefined) rec.isPending = Boolean(item.isPending);
+      rec.updatedAt = item.updatedAt || nowStr;
+    });
+
+    if (sqliteEngine) {
+      try {
+        sqliteEngine.prepare(`
+          INSERT INTO order_operational_state (row_key, cskh_status, explanation, is_pending, updated_at)
+          VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(row_key) DO UPDATE SET
+            cskh_status = excluded.cskh_status,
+            explanation = excluded.explanation,
+            is_pending = excluded.is_pending,
+            updated_at = excluded.updated_at
+        `).run(
+          rowKey,
+          item.trangThaiXuLy || "",
+          item.giaiTrinh || "",
+          item.isPending ? 1 : 0,
+          item.updatedAt || nowStr
+        );
+      } catch (e) {}
+    }
+  });
+}
+
+/**
+ * Lấy toàn bộ trạng thái tác nghiệp đa máy chủ từ Turso Cloud (với fallback SQLite/Memory)
+ */
+async function getOperationalUpdatesAsync(since) {
+  let updates = null;
+  if (tursoClient && tursoClient.isTursoAvailable()) {
+    try {
+      updates = await tursoClient.getOperationalUpdatesFromTurso(since);
+      if (updates && typeof updates === "object") {
+        syncOperationalUpdatesToMemoryAndLocalSql(updates);
+      }
+    } catch (e) {}
+  }
+
+  if (!updates || Object.keys(updates).length === 0) {
+    const local = getOperationalUpdates();
+    updates = local.updates || {};
+  }
+
+  const currentVer = await getOperationalVersionAsync();
+  return {
+    version: currentVer,
     updates
   };
 }
@@ -1825,6 +1953,8 @@ async function insertRecordsAsync(records, metadata = {}) {
     persistStore();
   } catch (e) {}
 
+  bumpOperationalVersion();
+
   return {
     ...res,
     total: memoryOrders.length
@@ -1838,6 +1968,7 @@ async function updateOrderNoteAsync(rowKey, noteData = {}) {
       await tursoClient.updateOrderNoteInTurso(rowKey, noteData);
     } catch (e) {}
   }
+  bumpOperationalVersion();
   return res;
 }
 
@@ -1848,6 +1979,7 @@ async function deleteRecordsByUploadIdAsync(uploadId) {
       await tursoClient.deleteOrdersByUploadIdInTurso(uploadId);
     } catch (e) {}
   }
+  bumpOperationalVersion();
 }
 
 async function clearDatabaseAsync() {
@@ -1857,6 +1989,7 @@ async function clearDatabaseAsync() {
       await tursoClient.clearAllOrdersInTurso();
     } catch (e) {}
   }
+  bumpOperationalVersion();
 }
 
 async function getAllVerificationRecordsAsync(forceRefresh = false) {
@@ -1964,6 +2097,7 @@ async function updateOrdersFromCheckDataAsync() {
     }
   }
 
+  bumpOperationalVersion();
   return res;
 }
 
@@ -1983,6 +2117,7 @@ async function deduplicateOrdersByEirAsync() {
     } catch (e) {}
   }
 
+  bumpOperationalVersion();
   return res;
 }
 
@@ -2002,6 +2137,7 @@ async function insertManualOrderAsync(orderData) {
     } catch (e) {}
   }
 
+  bumpOperationalVersion();
   return res;
 }
 
@@ -2277,7 +2413,10 @@ module.exports = {
   batchSetOrdersPending,
   getPendingOrderKeys,
   getOperationalVersion,
+  getOperationalVersionAsync,
+  bumpOperationalVersion,
   getOperationalUpdates,
+  getOperationalUpdatesAsync,
   formatVietnamDateTime,
   formatToVietnamParts,
   getVietnamTodayYmd

@@ -121,19 +121,34 @@ async function checkAndSyncDashboardUpdates() {
       const updates = dataUpd.updates || {};
 
       let hasChanged = false;
-      Object.entries(updates).forEach(([rowKey, item]) => {
-        const matched = currentRecords.filter(r => (r.rowKey === rowKey || (r.stt && rowKey.includes(r.stt))));
-        matched.forEach(rec => {
-          if (rec.trangThaiXuLy !== item.trangThaiXuLy || rec.giaiTrinh !== item.giaiTrinh) {
-            rec.trangThaiXuLy = item.trangThaiXuLy || "";
-            rec.giaiTrinh = item.giaiTrinh || "";
-            hasChanged = true;
+      const updateKeys = Object.keys(updates);
+      if (updateKeys.length > 0) {
+        Object.entries(updates).forEach(([rowKey, item]) => {
+          const matched = (currentRecords || []).filter(r => (r.rowKey === rowKey || (r.stt && rowKey.includes(r.stt))));
+          matched.forEach(rec => {
+            if (rec.trangThaiXuLy !== item.trangThaiXuLy || rec.giaiTrinh !== item.giaiTrinh) {
+              rec.trangThaiXuLy = item.trangThaiXuLy || "";
+              rec.giaiTrinh = item.giaiTrinh || "";
+              hasChanged = true;
+            }
+          });
+
+          // Đồng bộ luôn vào mảng tổng masterDashboardRecords
+          if (Array.isArray(masterDashboardRecords)) {
+            const matchedMaster = masterDashboardRecords.filter(r => (r.rowKey === rowKey || (r.stt && rowKey.includes(r.stt))));
+            matchedMaster.forEach(rec => {
+              rec.trangThaiXuLy = item.trangThaiXuLy || "";
+              rec.giaiTrinh = item.giaiTrinh || "";
+            });
           }
         });
-      });
+      }
 
       if (hasChanged) {
         applyDashboardFilters();
+      } else {
+        // Nếu phiên bản tăng do đăng tải file mới, lọc trùng hoặc đối soát dữ liệu
+        await loadDashboardData();
       }
       localDashboardOperationalVersion = serverVer;
     }

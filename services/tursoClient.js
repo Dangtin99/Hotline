@@ -87,6 +87,13 @@ async function initTursoSchema() {
     // 1. Kiểm tra nhanh: Nếu bảng chính đã tồn tại, hoàn thành ngay (chỉ 1 round-trip duy nhất)
     try {
       await client.execute("SELECT 1 FROM cancellation_orders LIMIT 1;");
+      try {
+        await client.execute(`CREATE TABLE IF NOT EXISTS system_metadata (
+          key TEXT PRIMARY KEY,
+          value TEXT,
+          updated_at TEXT DEFAULT (datetime('now'))
+        );`);
+      } catch (mErr) {}
       isSchemaInitialized = true;
       return;
     } catch (checkErr) {
@@ -198,6 +205,11 @@ async function initTursoSchema() {
         new_explanation TEXT,
         changed_by TEXT,
         changed_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS system_metadata (
+        key TEXT PRIMARY KEY,
+        value TEXT,
+        updated_at TEXT DEFAULT (datetime('now'))
       );
       CREATE TABLE IF NOT EXISTS dim_depots (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -965,6 +977,107 @@ async function syncUserToTurso(user) {
   }
 }
 
+/**
+ * Đọc giá trị metadata hệ thống từ Turso Cloud
+ */
+async function getSystemMetadataFromTurso(key) {
+  const client = getTursoClient();
+  if (!client) return null;
+  try {
+    await initTursoSchema();
+    const res = await client.execute({
+      sql: "SELECT value, updated_at FROM system_metadata WHERE key = ?;",
+      args: [key]
+    });
+    if (res.rows && res.rows.length > 0) {
+      return res.rows[0].value;
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Lưu/Cập nhật metadata hệ thống vào Turso Cloud
+ */
+async function setSystemMetadataInTurso(key, value) {
+  const client = getTursoClient();
+  if (!client) return false;
+  try {
+    await initTursoSchema();
+    const nowStr = new Date().toISOString().replace("T", " ").substring(0, 19);
+    await client.execute({
+      sql: `INSERT INTO system_metadata (key, value, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET
+              value = excluded.value,
+              updated_at = excluded.updated_at;`,
+      args: [key, String(value), nowStr]
+    });
+    return true;
+  } catch (e) {
+    console.warn(`[Turso] Lỗi setSystemMetadataInTurso (${key}):`, e.message);
+    return false;
+  }
+}
+
+/**
+ * Lấy số phiên bản tác nghiệp (operational_version) từ Turso Cloud
+ */
+async function getOperationalVersionFromTurso() {
+  const val = await getSystemMetadataFromTurso("operational_version");
+  if (val) {
+    const num = Number(val);
+    return isNaN(num) ? val : num;
+  }
+  return null;
+}
+
+/**
+ * Tăng số phiên bản tác nghiệp trên Turso Cloud để thông báo cho toàn bộ các máy chủ khác
+ */
+async function bumpOperationalVersionInTurso() {
+  const newVer = Date.now();
+  await setSystemMetadataInTurso("operational_version", newVer);
+  return newVer;
+}
+
+/**
+ * Lấy các bản ghi tác nghiệp (CSKH / Giải trình / Pending) từ Turso Cloud
+ */
+async function getOperationalUpdatesFromTurso(since) {
+  const client = getTursoClient();
+  if (!client) return null;
+  try {
+    await initTursoSchema();
+    let sql = "SELECT row_key, is_pending, cskh_status, explanation, updated_at FROM order_operational_state";
+    const args = [];
+    if (since && typeof since === "string" && since.trim()) {
+      sql += " WHERE datetime(updated_at) > datetime(?)";
+      args.push(since.trim());
+    }
+    const res = await client.execute({ sql, args });
+    const updates = {};
+    if (res.rows && Array.isArray(res.rows)) {
+      res.rows.forEach(r => {
+        if (r.row_key) {
+          updates[r.row_key] = {
+            trangThaiXuLy: r.cskh_status || "",
+            giaiTrinh: r.explanation || "",
+            isPending: Number(r.is_pending) === 1,
+            updatedAt: r.updated_at || ""
+          };
+        }
+      });
+    }
+    return updates;
+  } catch (e) {
+    console.error("[Turso] Lỗi getOperationalUpdatesFromTurso:", e.message);
+    return null;
+  }
+}
+
 module.exports = {
   getTursoClient,
   isTursoAvailable,
@@ -995,5 +1108,10 @@ module.exports = {
   getAllUsersFromTurso,
   syncUserToTurso,
   getOrdersByDateRangeFromTurso,
-  getLatestDateFromTurso
+  getLatestDateFromTurso,
+  getSystemMetadataFromTurso,
+  setSystemMetadataInTurso,
+  getOperationalVersionFromTurso,
+  bumpOperationalVersionInTurso,
+  getOperationalUpdatesFromTurso
 };

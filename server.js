@@ -45,7 +45,9 @@ const {
   getPendingOrderKeys,
   generateSqlDumpFile,
   getOperationalVersion,
+  getOperationalVersionAsync,
   getOperationalUpdates,
+  getOperationalUpdatesAsync,
   formatVietnamDateTime,
   formatToVietnamParts,
   getDashboardDataAsync,
@@ -703,23 +705,42 @@ app.post("/api/orders/note", authRequired, async (req, res) => {
 
 /**
  * API: Kiểm tra phiên bản tác nghiệp (CSKH / Giải trình / Pending) - siêu nhẹ ~10 bytes
+ * Hỗ trợ đa máy chủ đồng bộ thời gian thực qua Turso Cloud
  */
-app.get("/api/orders/operational-version", authRequired, (req, res) => {
-  return res.json({
-    status: "success",
-    version: getOperationalVersion()
-  });
+app.get("/api/orders/operational-version", authRequired, async (req, res) => {
+  try {
+    const version = await getOperationalVersionAsync();
+    return res.json({
+      status: "success",
+      version
+    });
+  } catch (err) {
+    return res.json({
+      status: "success",
+      version: getOperationalVersion()
+    });
+  }
 });
 
 /**
  * API: Lấy toàn bộ bản đồ trạng thái tác nghiệp mới nhất để đồng bộ thời gian thực giữa các máy
+ * Tự động truy vấn Turso Cloud để nhận bản ghi cập nhật từ máy chủ khác
  */
-app.get("/api/orders/operational-updates", authRequired, (req, res) => {
-  const data = getOperationalUpdates();
-  return res.json({
-    status: "success",
-    ...data
-  });
+app.get("/api/orders/operational-updates", authRequired, async (req, res) => {
+  try {
+    const since = req.query.since || "";
+    const data = await getOperationalUpdatesAsync(since);
+    return res.json({
+      status: "success",
+      ...data
+    });
+  } catch (err) {
+    const data = getOperationalUpdates();
+    return res.json({
+      status: "success",
+      ...data
+    });
+  }
 });
 
 /**
