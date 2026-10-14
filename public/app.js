@@ -436,15 +436,39 @@ function getLatestRecordDate(records, dateType = "ngayHuy") {
   return maxDate || new Date().toISOString().substring(0, 10);
 }
 
-// Kiểm tra trạng thái CSKH có thuộc nhóm 1, 3, 6 (tự động cập nhật ĐÃ XỬ LÝ cho hạn hủy 3h) hay không
+// Hàm chuẩn hóa giá trị trạng thái CSKH cũ sang danh mục trạng thái mới
+function normalizeCskhStatus(rawStatus, isUnpaid = false) {
+  if (rawStatus === null || rawStatus === undefined) return "";
+  let st = String(rawStatus).trim();
+  if (!st || st === "null" || st === "undefined") return "";
+
+  if (st === "Đã liên hệ - Chờ đặt lại" || st === "Đã liên hệ - Chờ thanh toán" || st === "Đã liên hệ - Đang chờ" || st === "Đã liên hệ - Chờ") {
+    return "Đã liên hệ - Chờ";
+  }
+  if (st === "Không liên hệ được - Chờ thanh toán" || st === "Không liên hệ được - Hủy" || st === "Không liên hệ được - hủy" || st === "Không liên hệ được") {
+    return "Không liên hệ được";
+  }
+  if (st === "Đã liên hệ - Đã đặt lại" || st === "Đặt lại thành công" || st === "Tự động đặt lại" || st === "Đã liên hệ đã đặt lại" || st === "Đã đặt lại") {
+    return "Đã đặt lại";
+  }
+  if (st === "Đã liên hệ - Không đặt lại" || st === "Đã Liên hệ - Không đặt lại") {
+    return "Đã Liên hệ - Không đặt lại";
+  }
+  if (st === "Thanh toán thành công" || st === "Đã thanh toán" || st === "Đã thành công") {
+    return isUnpaid ? "Đã thanh toán" : "Đã thành công";
+  }
+  if (st === "Đã liên hệ - Không thành công") {
+    return "Đã liên hệ - Không thành công";
+  }
+  return st;
+}
+
+// Kiểm tra trạng thái CSKH có hợp lệ để tự động cập nhật ĐÃ XỬ LÝ cho hạn hủy 3h hay không
 function isProcessed3hStatus(trangThaiXuLy) {
   if (!trangThaiXuLy) return false;
   const s = String(trangThaiXuLy).trim();
-  if (s === "1" || s === "3" || s === "6") return true;
-  if (s === "Thanh toán thành công") return true;
-  if (s === "Đã liên hệ - Chờ thanh toán") return true;
-  if (s === "Không liên hệ được - Chờ thanh toán" || s === "Không liên hệ được") return true;
-  return false;
+  if (!s || s === "null" || s === "undefined") return false;
+  return true;
 }
 
 // Cập nhật: Không tự động chuyển đơn chưa thanh toán thành Đã hủy sau 3h
@@ -887,8 +911,10 @@ function matchesCommonDashboardFilters(r, lineVal, dirVal, hourVal, warning3hVal
   if (contactStatusVal) {
     if (contactStatusVal === "__EMPTY__") {
       if (r.trangThaiXuLy) return false;
-    } else if (r.trangThaiXuLy !== contactStatusVal) {
-      return false;
+    } else {
+      const normR = normalizeCskhStatus(r.trangThaiXuLy, isUnpaidOrder(r));
+      const normFilter = normalizeCskhStatus(contactStatusVal, isUnpaidOrder(r));
+      if (normR !== normFilter) return false;
     }
   }
 
@@ -1215,7 +1241,8 @@ function renderDashboard(data, records = []) {
   masterDashboardRecords.forEach(r => {
     const k = `${r.stt}_${r.soBooking || ''}_${r.soContainer || ''}`;
     const note = savedNotes[k] || {};
-    if (note.status && !r.trangThaiXuLy) r.trangThaiXuLy = note.status;
+    let st = r.trangThaiXuLy || note.status || "";
+    r.trangThaiXuLy = normalizeCskhStatus(st, isUnpaidOrder(r));
     if (note.giaiTrinh && !r.giaiTrinh) r.giaiTrinh = note.giaiTrinh;
   });
 
@@ -1562,7 +1589,7 @@ function renderTopDepotLineCancelTable(records = []) {
   }).join("");
 }
 
-// Trích xuất toàn bộ 11 chỉ số KPI Vận Hành & CSKH từ danh sách bản ghi
+// Trích xuất toàn bộ các chỉ số KPI Vận Hành & CSKH từ danh sách bản ghi
 function extractKpiSummaryMetrics(list = []) {
   const currentTotal = list.length;
   const totalCancelled = list.filter(r => {
@@ -1577,34 +1604,35 @@ function extractKpiSummaryMetrics(list = []) {
     return st && st !== "null" && st !== "undefined" && String(st).trim() !== "";
   }).length;
 
-  const countPaid = list.filter(r => {
-    const x = normalizeStr(r.trangThaiXuLy || "").toLowerCase();
-    return x === "thanh toán thành công" || x === "đã thanh toán" || x === "đã hoàn thành";
+  const countSuccess = list.filter(r => {
+    const x = normalizeCskhStatus(r.trangThaiXuLy || "", isUnpaidOrder(r));
+    return x === "Đã thanh toán" || x === "Đã thành công";
   }).length;
 
-  const countAutoReset = list.filter(r => {
-    const val = normalizeStr(r.trangThaiXuLy || "").trim();
-    return val === "Đặt lại thành công" || val === "Tự động đặt lại";
+  const countRebooked = list.filter(r => {
+    const x = normalizeCskhStatus(r.trangThaiXuLy || "", isUnpaidOrder(r));
+    return x === "Đã đặt lại";
   }).length;
 
   const countUncontacted = list.filter(r => {
-    return (r.trangThaiXuLy || "").trim().startsWith("Không liên hệ được");
+    const x = normalizeCskhStatus(r.trangThaiXuLy || "", isUnpaidOrder(r));
+    return x === "Không liên hệ được";
   }).length;
 
-  const countContactWaitPay = list.filter(r => {
-    return (r.trangThaiXuLy || "").trim() === "Đã liên hệ - Chờ thanh toán";
+  const countContactWait = list.filter(r => {
+    const x = normalizeCskhStatus(r.trangThaiXuLy || "", isUnpaidOrder(r));
+    return x === "Đã liên hệ - Chờ";
   }).length;
 
-  const countContactRebooked = list.filter(r => {
-    return (r.trangThaiXuLy || "").trim() === "Đã liên hệ - Đã đặt lại";
+  const countContactFailed = list.filter(r => {
+    const x = normalizeCskhStatus(r.trangThaiXuLy || "", isUnpaidOrder(r));
+    return x === "Đã liên hệ - Không thành công" || x === "Đã Liên hệ - Không đặt lại";
   }).length;
 
-  const countContactWaitRebook = list.filter(r => {
-    const x = (r.trangThaiXuLy || "").trim();
-    return x === "Đã liên hệ - Chờ đặt lại" || x === "Đã liên hệ - Chờ" || x === "Đã liên hệ - Đang chờ";
+  const totalContacted = list.filter(r => {
+    const x = normalizeCskhStatus(r.trangThaiXuLy || "", isUnpaidOrder(r));
+    return x.startsWith("Đã liên hệ") || x === "Đã thành công" || x === "Đã thanh toán" || x === "Đã đặt lại" || x === "Đã Liên hệ - Không đặt lại";
   }).length;
-
-  const totalContacted = list.filter(r => (r.trangThaiXuLy || "").trim().startsWith("Đã liên hệ")).length;
   const totalCalls = totalContacted + countUncontacted;
 
   const rateContacted = totalCalls > 0 ? ((totalContacted / totalCalls) * 100).toFixed(1) : "0.0";
@@ -1615,12 +1643,11 @@ function extractKpiSummaryMetrics(list = []) {
     totalCancelled,
     totalUnpaid,
     totalProcessed,
-    countPaid,
-    countAutoReset,
+    countSuccess,
+    countRebooked,
     countUncontacted,
-    countContactWaitPay,
-    countContactRebooked,
-    countContactWaitRebook,
+    countContactWait,
+    countContactFailed,
     totalContacted,
     totalCalls,
     rateContacted,
@@ -1775,21 +1802,21 @@ function renderKpiSummaryTable(records, totalMasterCount, comparisonInfo = null)
     },
     {
       stt: 4,
-      title: "Đã thanh toán",
-      count: curM.countPaid,
-      pct: calcPct(curM.countPaid),
-      compareHtml: formatCountDiff(curM.countPaid, prevM ? prevM.countPaid : 0, hasComp, false),
-      note: "Trạng thái xử lý: Thanh toán thành công / Đã thanh toán",
+      title: "Đã thanh toán / Đã thành công",
+      count: curM.countSuccess,
+      pct: calcPct(curM.countSuccess),
+      compareHtml: formatCountDiff(curM.countSuccess, prevM ? prevM.countSuccess : 0, hasComp, false),
+      note: "Trạng thái xử lý: Đã thanh toán / Đã thành công",
       badgeClass: "badge-success",
       isHighlight: false
     },
     {
       stt: 5,
-      title: "Đặt lại thành công",
-      count: curM.countAutoReset,
-      pct: calcPct(curM.countAutoReset),
-      compareHtml: formatCountDiff(curM.countAutoReset, prevM ? prevM.countAutoReset : 0, hasComp, false),
-      note: "Trạng thái xử lý: Đặt lại thành công",
+      title: "Đã đặt lại",
+      count: curM.countRebooked,
+      pct: calcPct(curM.countRebooked),
+      compareHtml: formatCountDiff(curM.countRebooked, prevM ? prevM.countRebooked : 0, hasComp, false),
+      note: "Trạng thái xử lý: Đã đặt lại",
       badgeClass: "badge-secondary",
       isHighlight: false
     },
@@ -1799,42 +1826,32 @@ function renderKpiSummaryTable(records, totalMasterCount, comparisonInfo = null)
       count: curM.countUncontacted,
       pct: calcPct(curM.countUncontacted),
       compareHtml: formatCountDiff(curM.countUncontacted, prevM ? prevM.countUncontacted : 0, hasComp, true),
-      note: "Trạng thái xử lý: Không liên hệ được (Chờ thanh toán / Hủy)",
+      note: "Trạng thái xử lý: Không liên hệ được",
       badgeClass: "badge-warning",
       isHighlight: false
     },
     {
       stt: 7,
-      title: "Đã liên hệ - Chờ thanh toán",
-      count: curM.countContactWaitPay,
-      pct: calcPct(curM.countContactWaitPay),
-      compareHtml: formatCountDiff(curM.countContactWaitPay, prevM ? prevM.countContactWaitPay : 0, hasComp, false),
-      note: "Trạng thái xử lý: Đã liên hệ - Chờ thanh toán",
+      title: "Đã liên hệ - Chờ",
+      count: curM.countContactWait,
+      pct: calcPct(curM.countContactWait),
+      compareHtml: formatCountDiff(curM.countContactWait, prevM ? prevM.countContactWait : 0, hasComp, false),
+      note: "Trạng thái xử lý: Đã liên hệ - Chờ",
       badgeClass: "badge-warning",
       isHighlight: false
     },
     {
       stt: 8,
-      title: "Đã liên hệ - Đã đặt lại",
-      count: curM.countContactRebooked,
-      pct: calcPct(curM.countContactRebooked),
-      compareHtml: formatCountDiff(curM.countContactRebooked, prevM ? prevM.countContactRebooked : 0, hasComp, false),
-      note: "Trạng thái xử lý: Đã liên hệ - Đã đặt lại",
-      badgeClass: "badge-success",
+      title: "Đã liên hệ - Không thành công / Không đặt lại",
+      count: curM.countContactFailed,
+      pct: calcPct(curM.countContactFailed),
+      compareHtml: formatCountDiff(curM.countContactFailed, prevM ? prevM.countContactFailed : 0, hasComp, false),
+      note: "Trạng thái xử lý: Đã liên hệ - Không thành công / Đã Liên hệ - Không đặt lại",
+      badgeClass: "badge-danger",
       isHighlight: false
     },
     {
       stt: 9,
-      title: "Đã liên hệ - Chờ đặt lại",
-      count: curM.countContactWaitRebook,
-      pct: calcPct(curM.countContactWaitRebook),
-      compareHtml: formatCountDiff(curM.countContactWaitRebook, prevM ? prevM.countContactWaitRebook : 0, hasComp, false),
-      note: "Trạng thái xử lý: Đã liên hệ - Chờ đặt lại",
-      badgeClass: "badge-secondary",
-      isHighlight: false
-    },
-    {
-      stt: 10,
       title: "Tỉ lệ liên hệ được",
       count: `${curM.totalContacted} / ${curM.totalCalls} cuộc`,
       pct: `${curM.rateContacted}%`,
@@ -1844,7 +1861,7 @@ function renderKpiSummaryTable(records, totalMasterCount, comparisonInfo = null)
       isHighlight: true
     },
     {
-      stt: 11,
+      stt: 10,
       title: "Tỉ lệ liên hệ không được",
       count: `${curM.countUncontacted} / ${curM.totalCalls} cuộc`,
       pct: `${curM.rateUncontacted}%`,

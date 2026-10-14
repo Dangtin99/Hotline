@@ -102,17 +102,43 @@ const btnLastPage = document.getElementById("btnLastPage");
 const inputPageDirect = document.getElementById("inputPageDirect");
 
 // Bảng cấu hình và thứ tự sắp xếp chuẩn cho trạng thái CSKH
-// Đánh số thứ tự (order: 1 -> 8) trong mã nguồn để quản lý và sắp xếp, hoàn toàn không hiển thị số ra màn hình HTML
+// Danh mục chuẩn: Đã liên hệ - Chờ, Đã thanh toán, Đã thành công, Đã đặt lại, Đã liên hệ - Không thành công, Đã Liên hệ - Không đặt lại, Không liên hệ được
 const CSKH_STATUS_CONFIG = [
-  { order: 1, val: "Thanh toán thành công", label: "Thanh toán thành công", bg: "#dcfce7", color: "#166534" },
-  { order: 2, val: "Đã liên hệ - Chờ đặt lại", label: "Đã liên hệ - Chờ đặt lại", bg: "#dbeafe", color: "#1e40af" },
-  { order: 3, val: "Đã liên hệ - Chờ thanh toán", label: "Đã liên hệ - Chờ thanh toán", bg: "#e0e7ff", color: "#4338ca" },
-  { order: 4, val: "Đã liên hệ - Đã đặt lại", label: "Đã liên hệ - Đã đặt lại", bg: "#dcfce7", color: "#166534" },
-  { order: 5, val: "Đã liên hệ - Không đặt lại", label: "Đã liên hệ - Không đặt lại", bg: "#fee2e2", color: "#991b1b" },
-  { order: 6, val: "Không liên hệ được - Chờ thanh toán", label: "Không liên hệ được - Chờ thanh toán", bg: "#fef3c7", color: "#92400e" },
-  { order: 7, val: "Không liên hệ được - Hủy", label: "Không liên hệ được - Hủy", bg: "#fee2e2", color: "#b91c1c" },
-  { order: 8, val: "Đặt lại thành công", label: "Đặt lại thành công", bg: "#f1f5f9", color: "#334155" }
+  { order: 1, val: "Đã liên hệ - Chờ", label: "Đã liên hệ - Chờ", bg: "#dbeafe", color: "#1e40af" },
+  { order: 2, val: "Đã thanh toán", label: "Đã thanh toán", bg: "#dcfce7", color: "#166534" },
+  { order: 3, val: "Đã thành công", label: "Đã thành công", bg: "#dcfce7", color: "#166534" },
+  { order: 4, val: "Đã đặt lại", label: "Đã đặt lại", bg: "#e0f2fe", color: "#0369a1" },
+  { order: 5, val: "Đã liên hệ - Không thành công", label: "Đã liên hệ - Không thành công", bg: "#ffedd5", color: "#c2410c" },
+  { order: 6, val: "Đã Liên hệ - Không đặt lại", label: "Đã Liên hệ - Không đặt lại", bg: "#fee2e2", color: "#991b1b" },
+  { order: 7, val: "Không liên hệ được", label: "Không liên hệ được", bg: "#fef3c7", color: "#92400e" }
 ].sort((a, b) => a.order - b.order);
+
+// Hàm chuẩn hóa giá trị trạng thái CSKH cũ sang danh mục trạng thái mới
+function normalizeCskhStatus(rawStatus, isUnpaid = false) {
+  if (rawStatus === null || rawStatus === undefined) return "";
+  let st = String(rawStatus).trim();
+  if (!st || st === "null" || st === "undefined") return "";
+
+  if (st === "Đã liên hệ - Chờ đặt lại" || st === "Đã liên hệ - Chờ thanh toán" || st === "Đã liên hệ - Đang chờ" || st === "Đã liên hệ - Chờ") {
+    return "Đã liên hệ - Chờ";
+  }
+  if (st === "Không liên hệ được - Chờ thanh toán" || st === "Không liên hệ được - Hủy" || st === "Không liên hệ được - hủy" || st === "Không liên hệ được") {
+    return "Không liên hệ được";
+  }
+  if (st === "Đã liên hệ - Đã đặt lại" || st === "Đặt lại thành công" || st === "Tự động đặt lại" || st === "Đã liên hệ đã đặt lại" || st === "Đã đặt lại") {
+    return "Đã đặt lại";
+  }
+  if (st === "Đã liên hệ - Không đặt lại" || st === "Đã Liên hệ - Không đặt lại") {
+    return "Đã Liên hệ - Không đặt lại";
+  }
+  if (st === "Thanh toán thành công" || st === "Đã thanh toán" || st === "Đã thành công") {
+    return isUnpaid ? "Đã thanh toán" : "Đã thành công";
+  }
+  if (st === "Đã liên hệ - Không thành công") {
+    return "Đã liên hệ - Không thành công";
+  }
+  return st;
+}
 
 // Hàm tra cứu thứ tự sắp xếp của trạng thái CSKH trong mã nguồn
 function getCskhStatusOrder(statusVal) {
@@ -120,35 +146,41 @@ function getCskhStatusOrder(statusVal) {
   if (typeof statusVal === "number") return statusVal;
   const str = String(statusVal).trim();
   if (!str) return 999;
-  if (["1", "2", "3", "4", "5", "6", "7", "8"].includes(str)) {
+  if (["1", "2", "3", "4", "5", "6", "7"].includes(str)) {
     return parseInt(str, 10);
   }
   const item = CSKH_STATUS_CONFIG.find(s => s.val === str);
   if (item) return item.order;
-  if (str === "Tự động đặt lại") return 8;
-  if (str === "Không liên hệ được") return 6;
-  if (str === "Đã liên hệ - Đang chờ" || str === "Đã liên hệ - Chờ") return 2;
-  if (str === "Không liên hệ được - hủy") return 7;
-  if (str === "Đã liên hệ đã đặt lại") return 4;
+  if (str === "Đã liên hệ - Đang chờ" || str === "Đã liên hệ - Chờ đặt lại" || str === "Đã liên hệ - Chờ thanh toán") return 1;
+  if (str === "Thanh toán thành công") return 2;
+  if (str === "Đã liên hệ - Đã đặt lại" || str === "Đặt lại thành công" || str === "Tự động đặt lại" || str === "Đã liên hệ đã đặt lại") return 4;
+  if (str === "Đã liên hệ - Không đặt lại") return 6;
+  if (str === "Không liên hệ được - Chờ thanh toán" || str === "Không liên hệ được - Hủy" || str === "Không liên hệ được - hủy") return 7;
   return 999;
 }
 
-// Kiểm tra trạng thái CSKH có thuộc nhóm 1, 3, 6 (tự động cập nhật ĐÃ XỬ LÝ cho hạn hủy 3h) hay không
+// Kiểm tra trạng thái CSKH có hợp lệ để tự động cập nhật ĐÃ XỬ LÝ cho hạn hủy 3h hay không
 function isProcessed3hStatus(trangThaiXuLy) {
-  const order = getCskhStatusOrder(trangThaiXuLy);
-  return order === 1 || order === 3 || order === 6;
+  if (!trangThaiXuLy) return false;
+  const s = String(trangThaiXuLy).trim();
+  if (!s || s === "null" || s === "undefined") return false;
+  return true;
 }
 
 // Lấy danh mục trạng thái CSKH phân loại theo từng tab:
-// - Tab Đơn chưa thanh toán: hiển thị các trạng thái 1, 3, 6, 8
-// - Tab Đơn hàng hủy: hiển thị các trạng thái 1, 2, 4, 5, 7, 8 (Thanh toán thành công, Đã liên hệ - Chờ đặt lại, Đã liên hệ - Đã đặt lại, Đã liên hệ - Không đặt lại, Không liên hệ được - Hủy, Đặt lại thành công)
-// - Tab Tất cả đơn hàng: hiển thị tất cả các trạng thái (1 -> 8)
+// - Tab Đơn chưa thanh toán: Đã liên hệ - Chờ, Đã thanh toán, Đã liên hệ - Không thành công, Không liên hệ được
+// - Tab Đơn hàng hủy: Đã liên hệ - Chờ, Đã đặt lại, Không liên hệ được, Đã Liên hệ - Không đặt lại
+// - Tab Tất cả / Chờ xử lý: Hiển thị đầy đủ tất cả các trạng thái
 function getTabCskhStatusOptions(tabName) {
   if (tabName === "unpaid") {
-    return CSKH_STATUS_CONFIG.filter(opt => [1, 3, 6, 8].includes(opt.order));
+    return CSKH_STATUS_CONFIG.filter(opt =>
+      ["Đã liên hệ - Chờ", "Đã thanh toán", "Đã liên hệ - Không thành công", "Không liên hệ được"].includes(opt.val)
+    );
   }
   if (tabName === "cancelled") {
-    return CSKH_STATUS_CONFIG.filter(opt => [1, 2, 4, 5, 7, 8].includes(opt.order));
+    return CSKH_STATUS_CONFIG.filter(opt =>
+      ["Đã liên hệ - Chờ", "Đã đặt lại", "Không liên hệ được", "Đã Liên hệ - Không đặt lại"].includes(opt.val)
+    );
   }
   return CSKH_STATUS_CONFIG;
 }
@@ -1161,14 +1193,9 @@ document.addEventListener("DOMContentLoaded", () => {
         <td>
           <select id="manual_trangThaiXuLy" class="manual-row-select" title="Trạng thái chăm sóc khách hàng">
             <option value="">-- Chọn trạng thái --</option>
-            <option value="Thanh toán thành công">Thanh toán thành công</option>
-            <option value="Đã liên hệ - Chờ đặt lại">Đã liên hệ - Chờ đặt lại</option>
-            <option value="Đã liên hệ - Chờ thanh toán">Đã liên hệ - Chờ thanh toán</option>
-            <option value="Đã liên hệ - Đã đặt lại">Đã liên hệ - Đã đặt lại</option>
-            <option value="Đã liên hệ - Không đặt lại">Đã liên hệ - Không đặt lại</option>
-            <option value="Không liên hệ được - Chờ thanh toán">Không liên hệ được - Chờ thanh toán</option>
-            <option value="Không liên hệ được - Hủy">Không liên hệ được - Hủy</option>
-            <option value="Đặt lại thành công">Đặt lại thành công</option>
+            ${getTabCskhStatusOptions(currentTab).map(opt => `
+              <option value="${opt.val}">${opt.label}</option>
+            `).join("")}
           </select>
         </td>
         <td>
@@ -1879,16 +1906,7 @@ async function loadDataset() {
       const k2 = `${r.stt}_${r.soBooking || ''}_${r.soContainer || ''}`;
       const note = savedNotes[k1] || (k2 ? savedNotes[k2] : null) || {};
       let st = r.trangThaiXuLy || note.status || "";
-      if (st === "Đã liên hệ - Đang chờ" || st === "Đã liên hệ - Chờ") {
-        st = "Đã liên hệ - Chờ đặt lại";
-      } else if (st === "Không liên hệ được") {
-        st = "Không liên hệ được - Chờ thanh toán";
-      } else if (st === "Không liên hệ được - hủy") {
-        st = "Không liên hệ được - Hủy";
-      } else if (st === "Đã liên hệ đã đặt lại") {
-        st = "Đã liên hệ - Đã đặt lại";
-      }
-      r.trangThaiXuLy = st;
+      r.trangThaiXuLy = normalizeCskhStatus(st, isUnpaidOrder(r));
       r.giaiTrinh = r.giaiTrinh || note.giaiTrinh || "";
     });
 
@@ -2064,12 +2082,10 @@ function applyFilters() {
     if (contactStatusVal) {
       if (contactStatusVal === "__EMPTY__") {
         if (r.trangThaiXuLy) return false;
-      } else if (r.trangThaiXuLy !== contactStatusVal) {
-        if (contactStatusVal === "Đã liên hệ - Đã đặt lại" && r.trangThaiXuLy === "Đã liên hệ đã đặt lại") {
-          // Khớp trạng thái Đã đặt lại
-        } else {
-          return false;
-        }
+      } else {
+        const normR = normalizeCskhStatus(r.trangThaiXuLy, isUnpaidOrder(r));
+        const normFilter = normalizeCskhStatus(contactStatusVal, isUnpaidOrder(r));
+        if (normR !== normFilter) return false;
       }
     }
 
