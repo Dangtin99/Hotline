@@ -437,6 +437,51 @@
         </div>
       </section>
 
+      <!-- Matrix Cross-Tabulation 2: Depot & Trạng Thái Đơn x Trạng Thái Liên Hệ -->
+      <section class="matrix-section" id="contactMatrixSection">
+        <div class="matrix-card" id="contactMatrixCard">
+          <div class="matrix-header">
+            <div class="matrix-title-group">
+              <div>
+                <h3 class="matrix-title">Ma Trận Phân Bố Theo Depot & Trạng Thái Đơn × Trạng Thái Liên Hệ</h3>
+                <p class="matrix-subtitle">Thống kê số lượng đơn <strong>Chưa thanh toán & Đã hủy</strong> theo từng <strong>Depot (Dòng)</strong> và <strong>Trạng Thái Liên Hệ CSKH (Cột)</strong>. Nhấp vào bất kỳ ô số lượng nào để lọc danh sách chi tiết bên dưới.</p>
+              </div>
+            </div>
+
+            <!-- Nút điều khiển in PNG & xuất CSV -->
+            <div class="matrix-controls">
+              <button type="button" class="btn btn-outline btn-sm" id="btnExportContactMatrixPng" title="Xuất ảnh PNG bảng ma trận liên hệ">In PNG</button>
+              <button type="button" class="btn btn-outline btn-sm" id="btnExportContactMatrixCsv" title="Xuất CSV bảng ma trận liên hệ">Xuất CSV</button>
+            </div>
+          </div>
+
+          <!-- Bảng Ma Trận Liên Hệ -->
+          <div class="table-responsive matrix-table-container">
+            <table class="data-table matrix-contact-table" id="tableContactMatrix">
+              <thead id="theadContactMatrix">
+                <!-- Nạp động thead -->
+              </thead>
+              <tbody id="tbodyContactMatrix">
+                <!-- Nạp động tbody -->
+              </tbody>
+            </table>
+          </div>
+
+          <div class="matrix-footer-info">
+            <div class="matrix-legend">
+              <span class="legend-label">Mật độ đơn:</span>
+              <span class="legend-item"><span class="legend-box val-0">-</span> 0 đơn</span>
+              <span class="legend-item"><span class="legend-box val-low">1-3</span> 1-3 đơn</span>
+              <span class="legend-item"><span class="legend-box val-med">4-8</span> 4-8 đơn</span>
+              <span class="legend-item"><span class="legend-box val-high">&ge;9</span> &ge;9 đơn</span>
+            </div>
+            <div class="matrix-summary-text" id="contactMatrixSummaryText">
+              Đang tải dữ liệu ma trận liên hệ...
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- BẢNG THỐNG KÊ CHI TIẾT CÁC ĐƠN HÀNG (HIỂN THỊ TRỰC TIẾP TRÊN TRANG KHI BẤM MA TRẬN) -->
       <section class="matrix-detail-section" id="matrixDetailSection">
         <div class="matrix-detail-card" id="matrixDetailCard">
