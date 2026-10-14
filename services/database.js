@@ -21,6 +21,57 @@ const VERIFICATION_SQL_DUMP_PATH = path.join(DATA_DIR, "eir_cancellation_orders.
 
 const { applyExpired3hCancellation } = require("./cancellationAnalyzer");
 
+/**
+ * Định dạng thời gian theo múi giờ chuẩn Việt Nam (Asia/Ho_Chi_Minh, GMT+7)
+ * Cấu trúc ngày: DD/MM/YYYY HH:mm:ss
+ */
+function formatToVietnamParts(dateObj) {
+  if (!dateObj || isNaN(dateObj.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  }).formatToParts(dateObj);
+  const p = {};
+  for (const part of parts) {
+    p[part.type] = part.value;
+  }
+  return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}:${p.second}`;
+}
+
+function formatVietnamDateTime(val = new Date(), id) {
+  if (id && /^UP-(\d{12,14})$/.test(String(id).trim())) {
+    const ms = Number(String(id).trim().replace("UP-", ""));
+    if (!isNaN(ms)) {
+      return formatToVietnamParts(new Date(ms));
+    }
+  }
+  if (!val) return "";
+  if (val instanceof Date || typeof val === "number") {
+    return formatToVietnamParts(new Date(val));
+  }
+  const str = String(val).trim();
+  if (str.includes("T") || str.endsWith("Z")) {
+    const dt = new Date(str);
+    if (!isNaN(dt.getTime())) {
+      return formatToVietnamParts(dt);
+    }
+  }
+  const ymdMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (ymdMatch) {
+    const time = ymdMatch[4] !== undefined
+      ? ` ${ymdMatch[4].padStart(2, "0")}:${ymdMatch[5].padStart(2, "0")}:${(ymdMatch[6] || "00").padStart(2, "0")}`
+      : "";
+    return `${ymdMatch[3].padStart(2, "0")}/${ymdMatch[2].padStart(2, "0")}/${ymdMatch[1]}${time}`;
+  }
+  return str;
+}
+
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -341,7 +392,7 @@ function insertRecords(records, metadata = {}, shouldPersist = true) {
 
   let insertedCount = 0;
   let updatedCount = 0;
-  const nowStr = metadata.uploadedAt || new Date().toISOString().replace("T", " ").substring(0, 19);
+  const nowStr = metadata.uploadedAt || formatVietnamDateTime(new Date());
 
   records.forEach(r => {
     const rowKey = generateOrderKey(r);
@@ -822,7 +873,7 @@ function insertVerificationRecords(records, metadata = {}, shouldPersist = true)
 
   let insertedCount = 0;
   let updatedCount = 0;
-  const nowStr = metadata.uploadedAt || new Date().toISOString().replace("T", " ").substring(0, 19);
+  const nowStr = metadata.uploadedAt || formatVietnamDateTime(new Date());
 
   records.forEach(r => {
     const rowKey = generateVerificationKey(r);
@@ -1630,7 +1681,7 @@ function deduplicateOrdersByEir() {
  */
 function insertManualOrder(orderData) {
   const now = new Date();
-  const nowStr = now.toISOString().replace("T", " ").substring(0, 19);
+  const nowStr = formatVietnamDateTime(now);
 
   // Tính số thứ tự mới
   let maxStt = 0;
@@ -1990,5 +2041,7 @@ module.exports = {
   batchSetOrdersPending,
   getPendingOrderKeys,
   getOperationalVersion,
-  getOperationalUpdates
+  getOperationalUpdates,
+  formatVietnamDateTime,
+  formatToVietnamParts
 };

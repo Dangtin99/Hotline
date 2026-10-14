@@ -45,7 +45,9 @@ const {
   getPendingOrderKeys,
   generateSqlDumpFile,
   getOperationalVersion,
-  getOperationalUpdates
+  getOperationalUpdates,
+  formatVietnamDateTime,
+  formatToVietnamParts
 } = require("./services/database");
 const tursoClient = require("./services/tursoClient");
 const {
@@ -494,7 +496,7 @@ app.post("/api/upload", authRequired, upload.single("file"), async (req, res) =>
     const analytics = aggregateCancellationData(records);
 
     const newId = `UP-${Date.now()}`;
-    const nowStr = new Date().toISOString().replace("T", " ").substring(0, 19);
+    const nowStr = formatVietnamDateTime(new Date());
 
     // 3. Tự động lưu trữ và tích lũy TOÀN BỘ dữ liệu vào SQL Database (Chờ Turso Cloud hoàn tất)
     const dbResult = await insertRecordsAsync(records, {
@@ -881,7 +883,7 @@ app.get("/api/history", authRequired, async (req, res) => {
       id: item.id,
       fileName: item.fileName,
       fileSize: item.fileSize,
-      uploadedAt: item.uploadedAt,
+      uploadedAt: formatVietnamDateTime(item.uploadedAt, item.id),
       recordCount: item.recordCount,
       teusCount: item.teusCount,
       matchPercent: item.matchPercent,
@@ -925,7 +927,7 @@ app.get("/api/history/:id", authRequired, async (req, res) => {
     return res.json({
       status: "success",
       fileName: item.fileName,
-      uploadedAt: item.uploadedAt,
+      uploadedAt: formatVietnamDateTime(item.uploadedAt, item.id),
       validation: item.validation,
       data: responseData
     });
@@ -996,10 +998,17 @@ app.post("/api/verification/upload", authRequired, upload.single("file"), async 
     const records = parseVerificationFile(req.file.buffer);
 
     const now = new Date();
-    const nowStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ` +
-      `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
+    const nowStr = formatVietnamDateTime(now);
 
-    const newId = `VER-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${String(Date.now()).slice(-4)}`;
+    const vParts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).formatToParts(now);
+    const vp = {};
+    for (const part of vParts) { vp[part.type] = part.value; }
+    const newId = `VER-${vp.year}${vp.month}${vp.day}-${String(Date.now()).slice(-4)}`;
 
     // 2. Lưu trữ toàn bộ bảng SQL lên hệ thống cơ sở dữ liệu (Chờ Turso Cloud hoàn tất)
     const dbResult = await insertVerificationRecordsAsync(records, {
@@ -1043,7 +1052,11 @@ app.post("/api/verification/upload", authRequired, upload.single("file"), async 
 app.get("/api/verification/history", authRequired, async (req, res) => {
   try {
     const history = await loadVerificationHistoryAsync();
-    return res.json({ status: "success", data: history });
+    const formattedHistory = (history || []).map(item => ({
+      ...item,
+      uploadedAt: formatVietnamDateTime(item.uploadedAt, item.id)
+    }));
+    return res.json({ status: "success", data: formattedHistory });
   } catch (err) {
     return res.status(500).json({ status: "error", message: err.message });
   }
@@ -1168,7 +1181,7 @@ app.get("/api/sample", authRequired, (req, res) => {
       return res.json({
         status: "success",
         fileName: history[0].fileName,
-        uploadedAt: history[0].uploadedAt,
+        uploadedAt: formatVietnamDateTime(history[0].uploadedAt, history[0].id),
         data
       });
     }

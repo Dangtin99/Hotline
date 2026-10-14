@@ -2510,9 +2510,9 @@ body {
 .matrix-contact-table td.col-sticky-depot {
   position: sticky;
   left: 0;
-  width: 140px;
-  min-width: 140px;
-  max-width: 140px;
+  width: 190px;
+  min-width: 190px;
+  max-width: 220px;
   text-align: left;
   padding-left: 14px;
   font-weight: 700;

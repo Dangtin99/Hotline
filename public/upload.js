@@ -38,6 +38,57 @@ const btnDownloadTemplateVerificationDropzone = document.getElementById("btnDown
 // History Elements - Tab 1
 const tbodyHistory = document.getElementById("tbodyHistory");
 const btnClearAllHistory = document.getElementById("btnClearAllHistory");
+
+/**
+ * Định dạng thời gian hiển thị chuẩn múi giờ Việt Nam (Asia/Ho_Chi_Minh, GMT+7)
+ * Cấu trúc ngày: DD/MM/YYYY HH:mm:ss
+ */
+function formatToVietnamParts(dateObj) {
+  if (!dateObj || isNaN(dateObj.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  }).formatToParts(dateObj);
+  const p = {};
+  for (const part of parts) {
+    p[part.type] = part.value;
+  }
+  return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}:${p.second}`;
+}
+
+function formatVietnamDateTime(val, id) {
+  if (id && /^UP-(\d{12,14})$/.test(String(id).trim())) {
+    const ms = Number(String(id).trim().replace("UP-", ""));
+    if (!isNaN(ms)) {
+      return formatToVietnamParts(new Date(ms));
+    }
+  }
+  if (!val) return "";
+  if (val instanceof Date || typeof val === "number") {
+    return formatToVietnamParts(new Date(val));
+  }
+  const str = String(val).trim();
+  if (str.includes("T") || str.endsWith("Z")) {
+    const dt = new Date(str);
+    if (!isNaN(dt.getTime())) {
+      return formatToVietnamParts(dt);
+    }
+  }
+  const ymdMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (ymdMatch) {
+    const time = ymdMatch[4] !== undefined
+      ? ` ${ymdMatch[4].padStart(2, "0")}:${ymdMatch[5].padStart(2, "0")}:${(ymdMatch[6] || "00").padStart(2, "0")}`
+      : "";
+    return `${ymdMatch[3].padStart(2, "0")}/${ymdMatch[2].padStart(2, "0")}/${ymdMatch[1]}${time}`;
+  }
+  return str;
+}
 const alertBox = document.getElementById("alertBox");
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -356,7 +407,7 @@ function renderHistoryTable(history) {
       <tr>
         <td><code>${item.id}</code></td>
         <td style="word-break: break-all;"><strong>${item.fileName}</strong></td>
-        <td class="text-center">${item.uploadedAt}</td>
+        <td class="text-center">${formatVietnamDateTime(item.uploadedAt, item.id)}</td>
         <td class="text-center">
           <button type="button" class="btn btn-outline btn-sm text-danger" onclick="deleteHistoryItem('${item.id}')">Xóa</button>
         </td>
@@ -511,7 +562,7 @@ function renderVerificationHistoryTable(history) {
           <span class="text-muted" style="font-size: 0.85rem; margin-left: 6px;">(${item.fileSize})</span>
         </td>
         <td class="text-center"><strong>${Number(item.recordCount || 0).toLocaleString()}</strong> dòng</td>
-        <td class="text-center">${item.uploadedAt}</td>
+        <td class="text-center">${formatVietnamDateTime(item.uploadedAt, item.id)}</td>
         <td class="text-center">
           <button type="button" class="btn btn-outline btn-sm text-danger" onclick="deleteVerificationHistoryItem('${item.id}')">Xóa</button>
         </td>
