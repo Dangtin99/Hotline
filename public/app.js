@@ -4,7 +4,10 @@ let chartReasonsInstance = null;
 let chartDepotsInstance = null;
 let chartLinesInstance = null;
 let chartHourlyDepotInstance = null;
-let currentHourlyDepot = "";
+let currentHourlyDepot = "ALL";
+let currentHourlyChartType = "line";
+let showHourlyTotalLine = false;
+let showHourlyDepotTable = true;
 let currentAnalyticsData = null;
 let currentRecords = [];
 let currentMatrixStatus = "ALL";
@@ -1645,11 +1648,13 @@ function renderShippingLinesChart(lines) {
 function getUserAuthorizedDepots(records = []) {
   let userDepots = [];
   let isRestricted = false;
+  let currentUserObj = null;
   try {
     const userStr = localStorage.getItem("gpg_auth_user");
     if (userStr) {
       const u = JSON.parse(userStr);
       if (u) {
+        currentUserObj = u;
         if (Array.isArray(u.assignedDepots)) {
           userDepots = u.assignedDepots.map(d => String(d).trim().toUpperCase()).filter(Boolean);
         } else if (typeof u.assignedDepots === "string") {
@@ -1687,65 +1692,122 @@ function getUserAuthorizedDepots(records = []) {
     // Toàn quyền truy cập tất cả depot
     finalDepots = Array.from(allDepotsSet).sort();
   }
-  return { depots: finalDepots, isRestricted };
+  return { depots: finalDepots, isRestricted, user: currentUserObj, allDepotsInSystem: Array.from(allDepotsSet).sort() };
 }
 
-// Lọc bản ghi dữ liệu dành riêng cho Depot được chọn trên Hourly Dashboard
+// Lọc bản ghi dữ liệu dành riêng cho Depot hoặc Tất Cả Depot được phân quyền trên Hourly Dashboard
 function getRecordsForHourlyDepot(depot, records = []) {
-  if (!depot) return [];
-  const targetDepot = String(depot).trim().toUpperCase();
+  const { depots, isRestricted } = getUserAuthorizedDepots(records);
+  const authorizedSet = new Set(depots.map(d => String(d).trim().toUpperCase()));
 
-  // Ưu tiên lọc từ tập records hiện tại
+  const dateTypeVal = filterDateType ? filterDateType.value : "ngayHuy";
+  const dateFromVal = filterDateFrom ? filterDateFrom.value : "";
+  const dateToVal = filterDateTo ? filterDateTo.value : "";
+  const hourFromVal = filterHourFrom ? filterHourFrom.value : "";
+  const hourToVal = filterHourTo ? filterHourTo.value : "";
+
+  const matchDateTimeFilter = (r) => {
+    if (!r) return false;
+    if (dateFromVal || dateToVal || hourFromVal || hourToVal) {
+      const rawDate = dateTypeVal === "ngayDuyet" ? r.ngayDuocDuyet : r.ngayHuyDon;
+      const recDateTime = extractDateTime(rawDate);
+      if (!recDateTime) return false;
+      if (dateFromVal) {
+        const fromTime = hourFromVal ? `${hourFromVal}:00` : "00:00:00";
+        if (recDateTime < `${dateFromVal} ${fromTime}`) return false;
+      }
+      if (dateToVal) {
+        const toTime = hourToVal ? `${hourToVal}:59` : "23:59:59";
+        if (recDateTime > `${dateToVal} ${toTime}`) return false;
+      }
+    }
+    return true;
+  };
+
+  // Trường hợp 1: Chọn "Tất Cả Depot Phân Quyền" (ALL)
+  if (!depot || depot === "ALL") {
+    let list = (records || []).filter(r => r && r.depot && authorizedSet.has(String(r.depot).trim().toUpperCase()));
+    if (list.length === 0 && Array.isArray(masterDashboardRecords) && masterDashboardRecords.length > 0) {
+      list = masterDashboardRecords.filter(r => {
+        if (!r || !r.depot || !authorizedSet.has(String(r.depot).trim().toUpperCase())) return false;
+        return matchDateTimeFilter(r);
+      });
+    }
+    return list;
+  }
+
+  // Trường hợp 2: Chọn 1 Depot cụ thể
+  const targetDepot = String(depot).trim().toUpperCase();
+  // Bảo vệ phân quyền: Nếu user bị giới hạn và depot này không nằm trong quyền thì không trả về dữ liệu
+  if (isRestricted && !authorizedSet.has(targetDepot)) {
+    return [];
+  }
+
   let list = (records || []).filter(r => r && String(r.depot || "").trim().toUpperCase() === targetDepot);
 
-  // Fallback an toàn: nếu list rỗng nhưng masterDashboardRecords có (ví dụ do filter multi-select ở trên đang bỏ chọn depot này),
-  // ta lấy các bản ghi từ masterDashboardRecords có cùng bộ lọc ngày giờ
+  // Fallback an toàn: nếu list rỗng do bộ lọc multi-select ở trên không chọn depot này
   if (list.length === 0 && Array.isArray(masterDashboardRecords) && masterDashboardRecords.length > 0) {
-    const dateTypeVal = filterDateType ? filterDateType.value : "ngayHuy";
-    const dateFromVal = filterDateFrom ? filterDateFrom.value : "";
-    const dateToVal = filterDateTo ? filterDateTo.value : "";
-    const hourFromVal = filterHourFrom ? filterHourFrom.value : "";
-    const hourToVal = filterHourTo ? filterHourTo.value : "";
-
     list = masterDashboardRecords.filter(r => {
       if (!r || String(r.depot || "").trim().toUpperCase() !== targetDepot) return false;
-      if (dateFromVal || dateToVal || hourFromVal || hourToVal) {
-        const rawDate = dateTypeVal === "ngayDuyet" ? r.ngayDuocDuyet : r.ngayHuyDon;
-        const recDateTime = extractDateTime(rawDate);
-        if (!recDateTime) return false;
-        if (dateFromVal) {
-          const fromTime = hourFromVal ? `${hourFromVal}:00` : "00:00:00";
-          if (recDateTime < `${dateFromVal} ${fromTime}`) return false;
-        }
-        if (dateToVal) {
-          const toTime = hourToVal ? `${hourToVal}:59` : "23:59:59";
-          if (recDateTime > `${dateToVal} ${toTime}`) return false;
-        }
-      }
-      return true;
+      return matchDateTimeFilter(r);
     });
   }
   return list;
 }
 
-// Khởi tạo & Render thanh Tab danh sách Depot phân quyền + vẽ biểu đồ
+// Khởi tạo & Render thanh Tab danh sách Depot phân quyền + Bộ điều khiển thể hiện + Bảng tổng hợp + Vẽ biểu đồ
 function renderHourlyDashboardSection(records = []) {
   const tabsContainer = document.getElementById("hourlyDepotTabsList");
   if (!tabsContainer) return;
 
-  const { depots, isRestricted } = getUserAuthorizedDepots(records);
+  const { depots, isRestricted, user } = getUserAuthorizedDepots(records);
   if (!depots || depots.length === 0) {
-    tabsContainer.innerHTML = `<span style="font-size: 13px; color: #ef4444; font-weight: 500;">Không có Depot nào được phân quyền</span>`;
+    tabsContainer.innerHTML = `<span style="font-size: 13px; color: #ef4444; font-weight: 500;">Không có Depot nào được phân quyền truy cập</span>`;
     return;
   }
 
-  // Nếu chưa có depot nào được chọn, hoặc depot đang chọn không còn nằm trong quyền:
-  if (!currentHourlyDepot || !depots.includes(currentHourlyDepot)) {
-    currentHourlyDepot = depots[0];
+  // Cập nhật huy hiệu phân quyền của user trên Header
+  const permBadge = document.getElementById("hourlyUserPermissionBadge");
+  if (permBadge) {
+    if (isRestricted) {
+      const uName = user ? (user.fullName || user.username || "User") : "Tài khoản";
+      permBadge.textContent = `Phân quyền User: ${uName} [${depots.join(", ")}]`;
+      permBadge.style.background = "#f5f3ff";
+      permBadge.style.color = "#6d28d9";
+      permBadge.style.borderColor = "#ddd6fe";
+    } else {
+      permBadge.textContent = `Phân quyền: Toàn quyền quản trị (${depots.length} Depot)`;
+      permBadge.style.background = "#f0fdf4";
+      permBadge.style.color = "#166534";
+      permBadge.style.borderColor = "#bbf7d0";
+    }
   }
 
-  // Render các nút tab cho từng Depot
-  tabsContainer.innerHTML = depots.map(d => {
+  // Nếu chưa có depot nào được chọn, hoặc depot đang chọn không hợp lệ:
+  if (!currentHourlyDepot || (currentHourlyDepot !== "ALL" && !depots.includes(currentHourlyDepot))) {
+    currentHourlyDepot = "ALL";
+  }
+
+  // 1. Tính số liệu tổng của tất cả các depot được phân quyền để hiển thị trên nút "Tất Cả Depot"
+  const allDepotsRecords = getRecordsForHourlyDepot("ALL", records);
+  const allCancelledCount = allDepotsRecords.filter(isCancelledOrder).length;
+  const allUnpaidCount = allDepotsRecords.filter(isUnpaidOrder).length;
+  const allTotalCount = allCancelledCount + allUnpaidCount;
+
+  // 2. Render nút "Tất Cả Depot" (ALL)
+  const isAllActive = currentHourlyDepot === "ALL";
+  let buttonsHtml = `
+    <button type="button" 
+      class="depot-tab-btn btn-all-depots ${isAllActive ? 'active' : ''}" 
+      data-depot="ALL" 
+      title="Nhấn để xem tổng hợp 24h của tất cả Depot được phân quyền">
+      <span>Tất Cả (${depots.length} Depot)</span>
+      <span class="depot-tab-badge">${allTotalCount}</span>
+    </button>
+  `;
+
+  // 3. Render các nút cho từng Depot trong danh sách phân quyền
+  buttonsHtml += depots.map(d => {
     const dRecords = getRecordsForHourlyDepot(d, records);
     const cancelCount = dRecords.filter(isCancelledOrder).length;
     const unpaidCount = dRecords.filter(isUnpaidOrder).length;
@@ -1763,37 +1825,343 @@ function renderHourlyDashboardSection(records = []) {
     `;
   }).join("");
 
-  // Gán sự kiện click cho các nút
+  tabsContainer.innerHTML = buttonsHtml;
+
+  // Gán sự kiện click cho các nút chọn Depot
   tabsContainer.querySelectorAll(".depot-tab-btn").forEach(btn => {
     btn.onclick = () => {
       const targetDepot = btn.getAttribute("data-depot");
       if (!targetDepot || targetDepot === currentHourlyDepot) return;
       currentHourlyDepot = targetDepot;
 
-      // Cập nhật class active
+      // Cập nhật class active cho các nút
       tabsContainer.querySelectorAll(".depot-tab-btn").forEach(b => {
         b.classList.toggle("active", b.getAttribute("data-depot") === currentHourlyDepot);
       });
 
-      // Tính toán & render lại biểu đồ cho Depot mới
+      // Highlight dòng tương ứng trong bảng chi tiết
+      highlightHourlyBreakdownRow(currentHourlyDepot);
+
+      // Render lại biểu đồ cho Depot vừa chọn
       renderHourlyDepotChart(currentHourlyDepot, records);
     };
   });
 
-  // Render biểu đồ cho depot hiện tại
+  // 4. Khởi tạo & Gán sự kiện cho các nút điều khiển chế độ xem (View Mode Controls)
+  initHourlyViewControls(records);
+
+  // 5. Render Bảng Tổng Hợp Chi Tiết Các Depot Phân Quyền
+  renderHourlyDepotBreakdownTable(depots, records);
+
+  // 6. Render biểu đồ cho depot hiện tại
   renderHourlyDepotChart(currentHourlyDepot, records);
 }
 
-// Tính toán dữ liệu 24 khung giờ và vẽ biểu đồ Line Chart
+// Khởi tạo các sự kiện cho bộ điều khiển thể hiện biểu đồ (Line/Bar, Toggle Total, Toggle Table)
+function initHourlyViewControls(records = []) {
+  const btnLine = document.getElementById("btnHourlyViewLine");
+  const btnBar = document.getElementById("btnHourlyViewBar");
+  const btnToggleTotal = document.getElementById("btnHourlyToggleTotal");
+  const txtToggleTotal = document.getElementById("txtHourlyToggleTotal");
+  const btnToggleTable = document.getElementById("btnHourlyToggleTable");
+  const tableWrapper = document.getElementById("hourlyDepotBreakdownWrapper");
+
+  if (btnLine && btnBar) {
+    btnLine.onclick = () => {
+      if (currentHourlyChartType === "line") return;
+      currentHourlyChartType = "line";
+      btnLine.classList.add("active");
+      btnLine.style.background = "#1d4ed8";
+      btnLine.style.color = "#ffffff";
+      btnBar.classList.remove("active");
+      btnBar.style.background = "#ffffff";
+      btnBar.style.color = "#475569";
+      renderHourlyDepotChart(currentHourlyDepot, records);
+    };
+
+    btnBar.onclick = () => {
+      if (currentHourlyChartType === "bar") return;
+      currentHourlyChartType = "bar";
+      btnBar.classList.add("active");
+      btnBar.style.background = "#1d4ed8";
+      btnBar.style.color = "#ffffff";
+      btnLine.classList.remove("active");
+      btnLine.style.background = "#ffffff";
+      btnLine.style.color = "#475569";
+      renderHourlyDepotChart(currentHourlyDepot, records);
+    };
+  }
+
+  if (btnToggleTotal) {
+    btnToggleTotal.onclick = () => {
+      showHourlyTotalLine = !showHourlyTotalLine;
+      if (showHourlyTotalLine) {
+        btnToggleTotal.classList.add("active");
+        btnToggleTotal.style.background = "#eff6ff";
+        btnToggleTotal.style.color = "#1d4ed8";
+        btnToggleTotal.style.borderColor = "#bfdbfe";
+        if (txtToggleTotal) txtToggleTotal.textContent = "Ẩn Đường Tổng";
+      } else {
+        btnToggleTotal.classList.remove("active");
+        btnToggleTotal.style.background = "#ffffff";
+        btnToggleTotal.style.color = "#475569";
+        btnToggleTotal.style.borderColor = "#cbd5e1";
+        if (txtToggleTotal) txtToggleTotal.textContent = "Hiện Đường Tổng";
+      }
+      renderHourlyDepotChart(currentHourlyDepot, records);
+    };
+  }
+
+  if (btnToggleTable && tableWrapper) {
+    btnToggleTable.onclick = () => {
+      showHourlyDepotTable = !showHourlyDepotTable;
+      if (showHourlyDepotTable) {
+        tableWrapper.style.display = "block";
+        btnToggleTable.classList.add("active");
+        btnToggleTable.style.background = "#eff6ff";
+        btnToggleTable.style.color = "#1d4ed8";
+        btnToggleTable.style.borderColor = "#bfdbfe";
+      } else {
+        tableWrapper.style.display = "none";
+        btnToggleTable.classList.remove("active");
+        btnToggleTable.style.background = "#ffffff";
+        btnToggleTable.style.color = "#475569";
+        btnToggleTable.style.borderColor = "#cbd5e1";
+      }
+    };
+  }
+}
+
+// Render Bảng Thống Kê Tổng Hợp Chi Tiết Các Depot Được Phân Quyền
+function renderHourlyDepotBreakdownTable(depots = [], records = []) {
+  const wrapper = document.getElementById("hourlyDepotBreakdownWrapper");
+  if (!wrapper) return;
+
+  if (!showHourlyDepotTable) {
+    wrapper.style.display = "none";
+  } else {
+    wrapper.style.display = "block";
+  }
+
+  if (!depots || depots.length === 0) {
+    wrapper.innerHTML = `<div style="padding: 12px; color: #ef4444; font-size: 13px;">Không có dữ liệu Depot phân quyền.</div>`;
+    return;
+  }
+
+  const { isRestricted, user } = getUserAuthorizedDepots(records);
+
+  // Tính toán số liệu thống kê cho từng Depot
+  let grandCancelled = 0;
+  let grandUnpaid = 0;
+  let grandTotal = 0;
+
+  const depotStats = depots.map(d => {
+    const dRecs = getRecordsForHourlyDepot(d, records);
+    const cancelCount = dRecs.filter(isCancelledOrder).length;
+    const unpaidCount = dRecs.filter(isUnpaidOrder).length;
+    const totalCount = cancelCount + unpaidCount;
+
+    grandCancelled += cancelCount;
+    grandUnpaid += unpaidCount;
+    grandTotal += totalCount;
+
+    // Tìm giờ cao điểm của riêng depot này
+    const hourlyCounts = Array(24).fill(0);
+    const dateTypeVal = (filterDateType && filterDateType.value) || "ngayHuy";
+    dRecs.forEach(r => {
+      if (!r) return;
+      const rawDate = dateTypeVal === "ngayDuyet" ? (r.ngayDuocDuyet || r.ngayHuyDon) : (r.ngayHuyDon || r.ngayDuocDuyet);
+      const h = extractHour(rawDate);
+      if (h !== null && h >= 0 && h <= 23) {
+        if (isCancelledOrder(r) || isUnpaidOrder(r)) {
+          hourlyCounts[h]++;
+        }
+      }
+    });
+
+    let peakH = "-";
+    let maxH = 0;
+    for (let i = 0; i < 24; i++) {
+      if (hourlyCounts[i] > maxH) {
+        maxH = hourlyCounts[i];
+        const nextH = (i + 1).toString().padStart(2, "0");
+        peakH = `${i.toString().padStart(2, "0")}:00 - ${nextH}:00 (${maxH} đơn)`;
+      }
+    }
+
+    return {
+      depot: d,
+      cancelCount,
+      unpaidCount,
+      totalCount,
+      peakH
+    };
+  });
+
+  // Render HTML Bảng Phân Tích
+  const rowsHtml = depotStats.map((st, idx) => {
+    const isSelected = currentHourlyDepot === st.depot;
+    const cancelRate = st.totalCount > 0 ? ((st.cancelCount / st.totalCount) * 100).toFixed(1) : "0.0";
+    const shareOfGrand = grandTotal > 0 ? ((st.totalCount / grandTotal) * 100).toFixed(1) : "0.0";
+
+    return `
+      <tr class="${isSelected ? 'row-selected' : ''}" data-depot="${st.depot}" style="cursor: pointer;">
+        <td style="text-align: center; color: #64748b; font-weight: 600;">${idx + 1}</td>
+        <td>
+          <strong style="color: #1d4ed8; font-size: 13.5px;">Depot ${st.depot}</strong>
+        </td>
+        <td>
+          <span class="badge" style="background: #f1f5f9; color: #475569; font-size: 11px; padding: 2px 8px; border-radius: 4px;">
+            ${isRestricted ? "Được phân quyền" : "Toàn quyền"}
+          </span>
+        </td>
+        <td style="text-align: right; font-weight: 700; color: #dc2626;">${st.cancelCount.toLocaleString("vi-VN")}</td>
+        <td style="text-align: right; font-weight: 700; color: #d97706;">${st.unpaidCount.toLocaleString("vi-VN")}</td>
+        <td style="text-align: right; font-weight: 800; color: #0f172a;">${st.totalCount.toLocaleString("vi-VN")}</td>
+        <td style="text-align: center; font-size: 12px; color: #334155;">${st.peakH}</td>
+        <td style="text-align: right; font-size: 12.5px; font-weight: 600; color: #64748b;">${shareOfGrand}%</td>
+        <td style="text-align: center;">
+          <button type="button" 
+                  class="btn btn-outline btn-sm btn-select-hourly-depot" 
+                  data-depot="${st.depot}" 
+                  style="font-size: 11.5px; padding: 3px 10px; border-color: #cbd5e1; background: #ffffff;"
+                  title="Xem biểu đồ 24h của Depot ${st.depot}">
+            ${isSelected ? "Đang xem" : "Xem 24h"}
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  wrapper.innerHTML = `
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+      <h4 style="margin: 0; font-size: 14px; font-weight: 700; color: #0f172a;">
+        Bảng Tổng Hợp Chi Tiết Theo Depot Được Phân Quyền (${depots.length} Depot)
+      </h4>
+      <span style="font-size: 12px; color: #64748b;">
+        Nhấn vào dòng hoặc nút [Xem 24h] để xem chi tiết biểu đồ theo từng Depot
+      </span>
+    </div>
+
+    <div class="hourly-breakdown-table-wrapper">
+      <table class="hourly-breakdown-table">
+        <thead>
+          <tr>
+            <th style="width: 50px; text-align: center;">STT</th>
+            <th style="width: 130px;">Depot</th>
+            <th style="width: 140px;">Quyền Truy Cập</th>
+            <th style="width: 110px; text-align: right;">Đơn Hủy</th>
+            <th style="width: 140px; text-align: right;">Chưa Thanh Toán</th>
+            <th style="width: 130px; text-align: right;">Tổng Phát Sinh</th>
+            <th style="width: 190px; text-align: center;">Giờ Cao Điểm</th>
+            <th style="width: 120px; text-align: right;">Tỷ Trọng (%)</th>
+            <th style="width: 120px; text-align: center;">Thao Tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="3" style="text-align: right; padding-right: 14px;">TỔNG CỘNG PHÂN QUYỀN:</td>
+            <td style="text-align: right; color: #dc2626;">${grandCancelled.toLocaleString("vi-VN")}</td>
+            <td style="text-align: right; color: #d97706;">${grandUnpaid.toLocaleString("vi-VN")}</td>
+            <td style="text-align: right; color: #0f172a; font-size: 14px;">${grandTotal.toLocaleString("vi-VN")}</td>
+            <td style="text-align: center; color: #64748b;">-</td>
+            <td style="text-align: right;">100.0%</td>
+            <td style="text-align: center;">
+              <button type="button" 
+                      class="btn btn-sm btn-select-hourly-depot" 
+                      data-depot="ALL" 
+                      style="font-size: 11.5px; padding: 3px 10px; background: #0f172a; color: #ffffff; border: none; border-radius: 4px; font-weight: 600;"
+                      title="Xem biểu đồ tổng của tất cả các depot phân quyền">
+                Xem Tất Cả
+              </button>
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  `;
+
+  // Gán sự kiện click cho các dòng và nút trong bảng tổng hợp
+  wrapper.querySelectorAll(".btn-select-hourly-depot").forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const targetDepot = btn.getAttribute("data-depot");
+      if (!targetDepot) return;
+      selectHourlyDepot(targetDepot, records);
+    };
+  });
+
+  wrapper.querySelectorAll("tbody tr").forEach(tr => {
+    tr.onclick = () => {
+      const targetDepot = tr.getAttribute("data-depot");
+      if (!targetDepot) return;
+      selectHourlyDepot(targetDepot, records);
+    };
+  });
+}
+
+// Hàm chọn depot đồng bộ giữa tabs, bảng và biểu đồ
+function selectHourlyDepot(targetDepot, records = []) {
+  currentHourlyDepot = targetDepot;
+
+  // Cập nhật class active cho tabs
+  const tabsContainer = document.getElementById("hourlyDepotTabsList");
+  if (tabsContainer) {
+    tabsContainer.querySelectorAll(".depot-tab-btn").forEach(b => {
+      b.classList.toggle("active", b.getAttribute("data-depot") === currentHourlyDepot);
+    });
+  }
+
+  // Cập nhật class row-selected trong bảng
+  highlightHourlyBreakdownRow(currentHourlyDepot);
+
+  // Render lại biểu đồ
+  renderHourlyDepotChart(currentHourlyDepot, records);
+}
+
+// Highlight dòng được chọn trong bảng tổng hợp
+function highlightHourlyBreakdownRow(selectedDepot) {
+  const wrapper = document.getElementById("hourlyDepotBreakdownWrapper");
+  if (!wrapper) return;
+  wrapper.querySelectorAll("tbody tr").forEach(tr => {
+    const d = tr.getAttribute("data-depot");
+    const isSelected = selectedDepot === d;
+    tr.classList.toggle("row-selected", isSelected);
+    const btn = tr.querySelector(".btn-select-hourly-depot");
+    if (btn) {
+      btn.textContent = isSelected ? "Đang xem" : "Xem 24h";
+      btn.style.background = isSelected ? "#1d4ed8" : "#ffffff";
+      btn.style.color = isSelected ? "#ffffff" : "#334155";
+      btn.style.borderColor = isSelected ? "#1d4ed8" : "#cbd5e1";
+    }
+  });
+}
+
+// Tính toán dữ liệu 24 khung giờ và vẽ biểu đồ (Line hoặc Bar Chart)
 function renderHourlyDepotChart(selectedDepot, records = []) {
   const canvasEl = document.getElementById("chartHourlyDepot");
   if (!canvasEl) return;
   const ctx = canvasEl.getContext("2d");
 
+  const { depots } = getUserAuthorizedDepots(records);
+
   // Cập nhật nhãn Depot trên header
   const scopeBadge = document.getElementById("hourlyChartScopeBadge");
   if (scopeBadge) {
-    scopeBadge.textContent = selectedDepot ? `Depot: ${selectedDepot}` : "Chưa chọn Depot";
+    if (selectedDepot === "ALL") {
+      scopeBadge.textContent = `Đang xem: Tất Cả Depot Phân Quyền (${depots.length} Depot)`;
+      scopeBadge.style.background = "#eff6ff";
+      scopeBadge.style.color = "#1d4ed8";
+      scopeBadge.style.borderColor = "#bfdbfe";
+    } else {
+      scopeBadge.textContent = `Đang xem: Depot ${selectedDepot}`;
+      scopeBadge.style.background = "#f8fafc";
+      scopeBadge.style.color = "#0f172a";
+      scopeBadge.style.borderColor = "#cbd5e1";
+    }
   }
 
   const depotRecords = getRecordsForHourlyDepot(selectedDepot, records);
@@ -1808,6 +2176,7 @@ function renderHourlyDepotChart(selectedDepot, records = []) {
 
   const cancelledHours = Array(24).fill(0);
   const unpaidHours = Array(24).fill(0);
+  const combinedHours = Array(24).fill(0);
 
   const dateTypeVal = (filterDateType && filterDateType.value) || "ngayHuy";
 
@@ -1825,15 +2194,20 @@ function renderHourlyDepotChart(selectedDepot, records = []) {
     }
   });
 
+  for (let i = 0; i < 24; i++) {
+    combinedHours[i] = cancelledHours[i] + unpaidHours[i];
+  }
+
   // Tính số liệu tóm tắt
   const totalCancelled = cancelledHours.reduce((a, b) => a + b, 0);
   const totalUnpaid = unpaidHours.reduce((a, b) => a + b, 0);
+  const totalCombined = totalCancelled + totalUnpaid;
 
   let peakHourStr = "-";
   let maxTotalInHour = 0;
   let peakIndex = -1;
   for (let i = 0; i < 24; i++) {
-    const totalInHour = cancelledHours[i] + unpaidHours[i];
+    const totalInHour = combinedHours[i];
     if (totalInHour > maxTotalInHour) {
       maxTotalInHour = totalInHour;
       peakIndex = i;
@@ -1847,9 +2221,11 @@ function renderHourlyDepotChart(selectedDepot, records = []) {
   // Cập nhật các badge số liệu tóm tắt
   const elCancel = document.getElementById("hourlyDepotTotalCancelled");
   const elUnpaid = document.getElementById("hourlyDepotTotalUnpaid");
+  const elCombined = document.getElementById("hourlyDepotTotalCombined");
   const elPeak = document.getElementById("hourlyDepotPeakHour");
-  if (elCancel) elCancel.textContent = `${totalCancelled} đơn`;
-  if (elUnpaid) elUnpaid.textContent = `${totalUnpaid} đơn`;
+  if (elCancel) elCancel.textContent = `${totalCancelled.toLocaleString("vi-VN")} đơn`;
+  if (elUnpaid) elUnpaid.textContent = `${totalUnpaid.toLocaleString("vi-VN")} đơn`;
+  if (elCombined) elCombined.textContent = `${totalCombined.toLocaleString("vi-VN")} đơn`;
   if (elPeak) elPeak.textContent = peakHourStr;
 
   // Hủy biểu đồ cũ nếu có
@@ -1857,41 +2233,64 @@ function renderHourlyDepotChart(selectedDepot, records = []) {
     chartHourlyDepotInstance.destroy();
   }
 
-  // Vẽ biểu đồ Line mới
+  // Xây dựng danh sách dataset
+  const datasets = [
+    {
+      label: "Số đơn hủy",
+      data: cancelledHours,
+      borderColor: "#dc2626",
+      backgroundColor: currentHourlyChartType === "bar" ? "rgba(220, 38, 38, 0.85)" : "rgba(220, 38, 38, 0.10)",
+      borderWidth: 2.2,
+      tension: 0.35,
+      fill: currentHourlyChartType === "line",
+      pointBackgroundColor: "#dc2626",
+      pointBorderColor: "#ffffff",
+      pointBorderWidth: 1.5,
+      pointRadius: 4,
+      pointHoverRadius: 6
+    },
+    {
+      label: "Số đơn chưa thanh toán",
+      data: unpaidHours,
+      borderColor: "#d97706",
+      backgroundColor: currentHourlyChartType === "bar" ? "rgba(217, 119, 6, 0.85)" : "rgba(217, 119, 6, 0.10)",
+      borderWidth: 2.2,
+      tension: 0.35,
+      fill: currentHourlyChartType === "line",
+      pointBackgroundColor: "#d97706",
+      pointBorderColor: "#ffffff",
+      pointBorderWidth: 1.5,
+      pointRadius: 4,
+      pointHoverRadius: 6
+    }
+  ];
+
+  if (showHourlyTotalLine) {
+    datasets.push({
+      label: "Tổng phát sinh (Hủy + Chưa TT)",
+      data: combinedHours,
+      borderColor: "#2563eb",
+      backgroundColor: currentHourlyChartType === "bar" ? "rgba(37, 99, 235, 0.85)" : "rgba(37, 99, 235, 0.08)",
+      borderWidth: 2.2,
+      borderDash: currentHourlyChartType === "line" ? [5, 5] : undefined,
+      tension: 0.35,
+      fill: false,
+      pointBackgroundColor: "#2563eb",
+      pointBorderColor: "#ffffff",
+      pointBorderWidth: 1.5,
+      pointRadius: 4,
+      pointHoverRadius: 6
+    });
+  }
+
+  const chartTitleScope = selectedDepot === "ALL" ? `Tất Cả Depot Phân Quyền (${depots.length} Depot)` : `Depot ${selectedDepot}`;
+
+  // Vẽ biểu đồ mới (Line hoặc Bar)
   chartHourlyDepotInstance = new Chart(ctx, {
-    type: "line",
+    type: currentHourlyChartType,
     data: {
       labels: hourLabels,
-      datasets: [
-        {
-          label: "Số đơn hủy",
-          data: cancelledHours,
-          borderColor: "#dc2626",
-          backgroundColor: "rgba(220, 38, 38, 0.10)",
-          borderWidth: 2.5,
-          tension: 0.35,
-          fill: true,
-          pointBackgroundColor: "#dc2626",
-          pointBorderColor: "#ffffff",
-          pointBorderWidth: 1.5,
-          pointRadius: 4,
-          pointHoverRadius: 6
-        },
-        {
-          label: "Số đơn chưa thanh toán",
-          data: unpaidHours,
-          borderColor: "#d97706",
-          backgroundColor: "rgba(217, 119, 6, 0.10)",
-          borderWidth: 2.5,
-          tension: 0.35,
-          fill: true,
-          pointBackgroundColor: "#d97706",
-          pointBorderColor: "#ffffff",
-          pointBorderWidth: 1.5,
-          pointRadius: 4,
-          pointHoverRadius: 6
-        }
-      ]
+      datasets: datasets
     },
     options: {
       responsive: true,
@@ -1917,12 +2316,17 @@ function renderHourlyDepotChart(selectedDepot, records = []) {
               if (!items || items.length === 0) return "";
               const hLabel = items[0].label;
               const nextHour = (parseInt(hLabel, 10) + 1).toString().padStart(2, "0");
-              return `Khung giờ: ${hLabel} - ${nextHour}:00 (Depot ${selectedDepot})`;
+              return `Khung giờ: ${hLabel} - ${nextHour}:00 (${chartTitleScope})`;
             },
             footer: (items) => {
-              let sum = 0;
-              items.forEach(it => { sum += (Number(it.raw) || 0); });
-              return `Tổng phát sinh: ${sum} đơn`;
+              let cancelVal = 0;
+              let unpaidVal = 0;
+              items.forEach(it => {
+                if (it.datasetIndex === 0) cancelVal = Number(it.raw) || 0;
+                if (it.datasetIndex === 1) unpaidVal = Number(it.raw) || 0;
+              });
+              const sum = cancelVal + unpaidVal;
+              return `Tổng phát sinh: ${sum} đơn (Hủy: ${cancelVal}, Chưa TT: ${unpaidVal})`;
             }
           }
         }

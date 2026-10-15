@@ -3429,5 +3429,77 @@ html.non-admin-user [data-admin-only="true"] {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
+/* Nút Chọn Tất Cả Depot Phân Quyền */
+.depot-tab-btn.btn-all-depots {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  font-weight: 700;
+}
 
+.depot-tab-btn.btn-all-depots.active {
+  background: #0f172a;
+  border-color: #0f172a;
+  color: #ffffff;
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.3);
+}
 
+.depot-tab-btn.btn-all-depots.active .depot-tab-badge {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
+/* Nút Chuyển Chế Độ Biểu Đồ */
+.btn-hourly-view {
+  transition: all 0.15s ease-in-out;
+}
+
+.btn-hourly-view:hover:not(.active) {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+/* Bảng Thống Kê Tổng Hợp Chi Tiết Các Depot Phân Quyền */
+.hourly-breakdown-table-wrapper {
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.hourly-breakdown-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  text-align: left;
+}
+
+.hourly-breakdown-table th {
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 700;
+  padding: 10px 14px;
+  border-bottom: 2px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.hourly-breakdown-table td {
+  padding: 9px 14px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+  vertical-align: middle;
+}
+
+.hourly-breakdown-table tbody tr:hover {
+  background-color: #f8fafc;
+}
+
+.hourly-breakdown-table tbody tr.row-selected {
+  background-color: #eff6ff;
+}
+
+.hourly-breakdown-table tfoot td {
+  background: #f1f5f9;
+  font-weight: 700;
+  border-top: 2px solid #cbd5e1;
+  color: #0f172a;
+}

@@ -400,12 +400,13 @@
           <!-- Header: Tiêu đề + Thống kê tóm tắt nhanh -->
           <div class="hourly-chart-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; margin-bottom: 16px; border-bottom: 1px solid #f1f5f9; padding-bottom: 14px;">
             <div>
-              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap;">
                 <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: #0f172a;">Biến Động Đơn Hủy & Chưa Thanh Toán 24 Giờ Theo Depot</h3>
-                <span id="hourlyChartScopeBadge" class="badge" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 9999px;">Depot: -</span>
+                <span id="hourlyUserPermissionBadge" class="badge" style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 9999px;">Phân quyền: Đang xác thực...</span>
+                <span id="hourlyChartScopeBadge" class="badge" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 9999px;">Đang xem: Tất Cả Depot</span>
               </div>
               <p style="margin: 0; font-size: 13px; color: #64748b;">
-                Theo dõi số lượng đơn hủy và đơn chưa thanh toán phát sinh theo từng khung giờ trong 24 tiếng. Bấm vào Depot bên dưới để xem chi tiết.
+                Theo dõi số lượng đơn hủy và đơn chưa thanh toán phát sinh theo từng khung giờ trong 24 tiếng. Bấm vào Depot bên dưới để xem chi tiết hoặc xem tổng hợp toàn bộ quyền truy cập.
               </p>
             </div>
 
@@ -419,29 +420,56 @@
                 <div style="font-size: 11px; font-weight: 700; color: #92400e; text-transform: uppercase; letter-spacing: 0.3px;">Chưa Thanh Toán</div>
                 <div id="hourlyDepotTotalUnpaid" style="font-size: 16px; font-weight: 800; color: #d97706;">0 đơn</div>
               </div>
-              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 14px; min-width: 120px; text-align: right;">
+              <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 6px 14px; min-width: 110px; text-align: right;">
+                <div style="font-size: 11px; font-weight: 700; color: #166534; text-transform: uppercase; letter-spacing: 0.3px;">Tổng Phát Sinh</div>
+                <div id="hourlyDepotTotalCombined" style="font-size: 16px; font-weight: 800; color: #15803d;">0 đơn</div>
+              </div>
+              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 14px; min-width: 130px; text-align: right;">
                 <div style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.3px;">Giờ Cao Điểm</div>
                 <div id="hourlyDepotPeakHour" style="font-size: 16px; font-weight: 800; color: #0f172a;">-</div>
               </div>
             </div>
           </div>
 
-          <!-- Danh sách Depot User Được Phân Quyền Truy Cập -->
-          <div class="hourly-depot-selector-row" style="margin-bottom: 16px;">
-            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <!-- Thanh điều khiển: Nút chọn Depot + Nút tùy chọn thể hiện -->
+          <div class="hourly-depot-selector-row" style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex: 1;">
               <span style="font-size: 13px; font-weight: 700; color: #334155; white-space: nowrap;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 4px; color: #1d4ed8;"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
                 Depot phân quyền:
               </span>
               <div id="hourlyDepotTabsList" class="depot-tabs-list" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
                 <!-- Render động các nút chọn depot -->
               </div>
             </div>
+
+            <!-- Tùy chọn thể hiện (View Mode Controls) -->
+            <div class="hourly-view-controls" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <!-- Nút chuyển đổi Đường / Cột -->
+              <div class="btn-group" style="display: inline-flex; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; background: #ffffff;">
+                <button type="button" id="btnHourlyViewLine" class="btn-hourly-view active" title="Biểu đồ đường 24h" style="padding: 5px 12px; font-size: 12px; font-weight: 600; border: none; background: #1d4ed8; color: #ffffff; cursor: pointer;">Đường</button>
+                <button type="button" id="btnHourlyViewBar" class="btn-hourly-view" title="Biểu đồ cột 24h" style="padding: 5px 12px; font-size: 12px; font-weight: 600; border: none; background: #ffffff; color: #475569; cursor: pointer; border-left: 1px solid #cbd5e1;">Cột</button>
+              </div>
+
+              <!-- Nút Toggle Đường Tổng Đơn -->
+              <button type="button" id="btnHourlyToggleTotal" class="btn btn-outline btn-sm" title="Bật/Tắt hiển thị đường Tổng cộng (Hủy + Chưa TT)" style="font-size: 12px; padding: 5px 10px; display: inline-flex; align-items: center; gap: 4px; background: #ffffff;">
+                <span id="txtHourlyToggleTotal">Hiện Đường Tổng</span>
+              </button>
+
+              <!-- Nút Toggle Bảng Chi Tiết Phân Quyền -->
+              <button type="button" id="btnHourlyToggleTable" class="btn btn-outline btn-sm active" title="Ẩn/Hiện Bảng phân tích chi tiết theo Depot phân quyền" style="font-size: 12px; padding: 5px 10px; display: inline-flex; align-items: center; gap: 4px; background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe;">
+                <span>Bảng Tổng Hợp Depot</span>
+              </button>
+            </div>
           </div>
 
           <!-- Chart Canvas -->
           <div class="chart-container" style="position: relative; height: 350px; width: 100%;">
             <canvas id="chartHourlyDepot"></canvas>
+          </div>
+
+          <!-- Bảng Chi Tiết Thống Kê Theo Các Depot Được Phân Quyền -->
+          <div id="hourlyDepotBreakdownWrapper" style="margin-top: 20px; border-top: 1px solid #f1f5f9; padding-top: 16px;">
+            <!-- Render động bảng tổng hợp chi tiết theo từng depot được phân quyền -->
           </div>
         </div>
       </section>
