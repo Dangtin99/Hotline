@@ -372,6 +372,14 @@
 
           <div class="filter-action-buttons" style="display: flex; gap: 8px; align-items: center;">
             <button id="btnResetFilter" class="btn btn-outline btn-sm" type="button" title="Đặt lại bộ lọc về mặc định">Đặt Lại</button>
+            <button id="btnExportExcel" class="btn btn-sm btn-export-excel" type="button" title="Xuất toàn bộ dữ liệu đang lọc ra tệp Excel (.xlsx)">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              <span>Xuất Excel</span>
+            </button>
             <button id="btnExportCsv" class="btn btn-outline btn-sm" type="button" style="display: none !important;" title="Xuất dữ liệu đang lọc ra tệp CSV">Xuất CSV</button>
           </div>
         </div>
@@ -410,7 +418,7 @@
               <th style="min-width: 250px;">Lý Do Từ Chối Duyệt</th>
               <th id="thColPending" class="col-pending-action" style="width: 110px; min-width: 110px; background: #fff7ed; color: #c2410c; text-align: center; display: none;">Chuyển Chờ</th>
               <th style="width: 220px; min-width: 220px; background: #e0f2fe; color: var(--blue-primary); text-align: center;">Trạng Thái</th>
-              <th style="width: 260px; min-width: 260px; background: #e0f2fe; color: var(--blue-primary);">Giải Trình</th>
+              <th style="width: 320px; min-width: 320px; background: #e0f2fe; color: var(--blue-primary);">Giải Trình</th>
               <th id="thColPendingRemove" class="col-pending-remove-action" style="width: 80px; min-width: 80px; background: #fee2e2; color: #b91c1c; text-align: center; display: none;">Thao Tác</th>
             </tr>
           </thead>
@@ -455,6 +463,18 @@
     </div>
   </div>
 
+  <!-- Thư viện SheetJS & XLSX-JS-Style hỗ trợ màu nền, viền và kiểu dáng bảng Excel -->
+  <script src="/vendor/xlsx-style/xlsx.bundle.js"></script>
+  <script>
+    if (typeof XLSX === "undefined") {
+      document.write('<script src="/vendor/xlsx/xlsx.full.min.js"><\\/script>');
+    }
+  </script>
+  <script>
+    if (typeof XLSX === "undefined") {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"><\\/script>');
+    }
+  </script>
   <script src="data-table.js"></script>
 </body>
 </html>

@@ -39,6 +39,7 @@ const btnClearDateFilter = document.getElementById("btnClearDateFilter");
 const tableDateFilterGroup = document.getElementById("tableDateFilterGroup");
 const btnResetFilter = document.getElementById("btnResetFilter");
 const btnExportCsv = document.getElementById("btnExportCsv");
+const btnExportExcel = document.getElementById("btnExportExcel");
 const btnSyncTurso = document.getElementById("btnSyncTurso") || document.getElementById("btnSyncSupabase");
 const tursoStatusBadge = document.getElementById("tursoStatusBadge") || document.getElementById("supabaseStatusBadge");
 const alertBox = document.getElementById("alertBox");
@@ -102,14 +103,14 @@ const btnLastPage = document.getElementById("btnLastPage");
 const inputPageDirect = document.getElementById("inputPageDirect");
 
 // Bảng cấu hình và thứ tự sắp xếp chuẩn cho trạng thái CSKH
-// Danh mục chuẩn: Đã liên hệ - Chờ, Đã thanh toán, Đã thành công, Đã đặt lại, Đã liên hệ - Không thành công, Đã Liên hệ - Không đặt lại, Không liên hệ được
+// Danh mục chuẩn: Đã liên hệ - Chờ, Đã thanh toán, Đã thành công, Đã đặt lại, Đã liên hệ - Không thành công, Đã liên hệ - Không đặt lại, Không liên hệ được
 const CSKH_STATUS_CONFIG = [
   { order: 1, val: "Đã liên hệ - Chờ", label: "Đã liên hệ - Chờ", bg: "#dbeafe", color: "#1e40af" },
   { order: 2, val: "Đã thanh toán", label: "Đã thanh toán", bg: "#dcfce7", color: "#166534" },
   { order: 3, val: "Đã thành công", label: "Đã thành công", bg: "#dcfce7", color: "#166534" },
   { order: 4, val: "Đã đặt lại", label: "Đã đặt lại", bg: "#e0f2fe", color: "#0369a1" },
   { order: 5, val: "Đã liên hệ - Không thành công", label: "Đã liên hệ - Không thành công", bg: "#ffedd5", color: "#c2410c" },
-  { order: 6, val: "Đã Liên hệ - Không đặt lại", label: "Đã Liên hệ - Không đặt lại", bg: "#fee2e2", color: "#991b1b" },
+  { order: 6, val: "Đã liên hệ - Không đặt lại", label: "Đã liên hệ - Không đặt lại", bg: "#fee2e2", color: "#991b1b" },
   { order: 7, val: "Không liên hệ được", label: "Không liên hệ được", bg: "#fef3c7", color: "#92400e" }
 ].sort((a, b) => a.order - b.order);
 
@@ -119,7 +120,7 @@ function normalizeCskhStatus(rawStatus, isUnpaid = false) {
   let st = String(rawStatus).trim();
   if (!st || st === "null" || st === "undefined") return "";
 
-  if (st === "Đã liên hệ - Chờ đặt lại" || st === "Đã liên hệ - Chờ thanh toán" || st === "Đã liên hệ - Đang chờ" || st === "Đã liên hệ - Chờ") {
+  if (st === "Đã liên hệ - Chờ đặt lại" || st === "Đã liên hệ - Chờ thanh toán" || st === "Đã liên hệ - Đang chờ" || st === "Đã liên hệ - Chờ" || st === "Đã liên hệ chờ") {
     return "Đã liên hệ - Chờ";
   }
   if (st === "Không liên hệ được - Chờ thanh toán" || st === "Không liên hệ được - Hủy" || st === "Không liên hệ được - hủy" || st === "Không liên hệ được") {
@@ -128,8 +129,8 @@ function normalizeCskhStatus(rawStatus, isUnpaid = false) {
   if (st === "Đã liên hệ - Đã đặt lại" || st === "Đặt lại thành công" || st === "Tự động đặt lại" || st === "Đã liên hệ đã đặt lại" || st === "Đã đặt lại") {
     return "Đã đặt lại";
   }
-  if (st === "Đã liên hệ - Không đặt lại" || st === "Đã Liên hệ - Không đặt lại") {
-    return "Đã Liên hệ - Không đặt lại";
+  if (st === "Đã liên hệ - Không đặt lại" || st === "Đã Liên hệ - Không đặt lại" || st === "Đã Liện hệ - Không đặt lại") {
+    return "Đã liên hệ - Không đặt lại";
   }
   if (st === "Thanh toán thành công" || st === "Đã thanh toán" || st === "Đã thành công") {
     return isUnpaid ? "Đã thanh toán" : "Đã thành công";
@@ -151,11 +152,13 @@ function getCskhStatusOrder(statusVal) {
   }
   const item = CSKH_STATUS_CONFIG.find(s => s.val === str);
   if (item) return item.order;
-  if (str === "Đã liên hệ - Đang chờ" || str === "Đã liên hệ - Chờ đặt lại" || str === "Đã liên hệ - Chờ thanh toán") return 1;
-  if (str === "Thanh toán thành công") return 2;
-  if (str === "Đã liên hệ - Đã đặt lại" || str === "Đặt lại thành công" || str === "Tự động đặt lại" || str === "Đã liên hệ đã đặt lại") return 4;
-  if (str === "Đã liên hệ - Không đặt lại") return 6;
-  if (str === "Không liên hệ được - Chờ thanh toán" || str === "Không liên hệ được - Hủy" || str === "Không liên hệ được - hủy") return 7;
+  if (str === "Đã liên hệ - Đang chờ" || str === "Đã liên hệ - Chờ đặt lại" || str === "Đã liên hệ - Chờ thanh toán" || str === "Đã liên hệ - Chờ") return 1;
+  if (str === "Thanh toán thành công" || str === "Đã thanh toán") return 2;
+  if (str === "Đã thành công") return 3;
+  if (str === "Đã liên hệ - Đã đặt lại" || str === "Đặt lại thành công" || str === "Tự động đặt lại" || str === "Đã liên hệ đã đặt lại" || str === "Đã đặt lại") return 4;
+  if (str === "Đã liên hệ - Không thành công") return 5;
+  if (str === "Đã liên hệ - Không đặt lại" || str === "Đã Liên hệ - Không đặt lại" || str === "Đã Liện hệ - Không đặt lại") return 6;
+  if (str === "Không liên hệ được - Chờ thanh toán" || str === "Không liên hệ được - Hủy" || str === "Không liên hệ được - hủy" || str === "Không liên hệ được") return 7;
   return 999;
 }
 
@@ -169,7 +172,7 @@ function isProcessed3hStatus(trangThaiXuLy) {
 
 // Lấy danh mục trạng thái CSKH phân loại theo từng tab:
 // - Tab Đơn chưa thanh toán: Đã liên hệ - Chờ, Đã thanh toán, Đã liên hệ - Không thành công, Không liên hệ được
-// - Tab Đơn hàng hủy: Đã liên hệ - Chờ, Đã đặt lại, Không liên hệ được, Đã Liên hệ - Không đặt lại
+// - Tab Đơn hàng hủy: Đã liên hệ - Chờ, Đã đặt lại, Không liên hệ được, Đã liên hệ - Không đặt lại
 // - Tab Tất cả / Chờ xử lý: Hiển thị đầy đủ tất cả các trạng thái
 function getTabCskhStatusOptions(tabName) {
   if (tabName === "unpaid") {
@@ -179,7 +182,7 @@ function getTabCskhStatusOptions(tabName) {
   }
   if (tabName === "cancelled") {
     return CSKH_STATUS_CONFIG.filter(opt =>
-      ["Đã liên hệ - Chờ", "Đã đặt lại", "Không liên hệ được", "Đã Liên hệ - Không đặt lại"].includes(opt.val)
+      ["Đã liên hệ - Chờ", "Đã đặt lại", "Không liên hệ được", "Đã liên hệ - Không đặt lại"].includes(opt.val)
     );
   }
   return CSKH_STATUS_CONFIG;
@@ -794,11 +797,15 @@ window.onStatusSelectChange = function(selectElem) {
   });
   saveNotes(notes);
 
-  // Đồng bộ hóa trực tiếp vào SQL Database trên Server
+  // Đồng bộ hóa trực tiếp vào SQL Database trên Server và cập nhật version
   fetch("/api/orders/note", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ rowKey, status: newStatus })
+  }).then(res => res.json()).then(data => {
+    if (data && data.version) {
+      localOperationalVersion = data.version;
+    }
   }).catch(() => {});
 
   // Cập nhật tức thì ô Hạn Hủy Đơn trên dòng hiện tại mà người dùng vừa thao tác
@@ -833,13 +840,90 @@ window.onStatusSelectChange = function(selectElem) {
   updateTabCounts();
 };
 
-// Xử lý nhập Giải Trình (tự động debounce lưu)
-let expDebounceTimer = null;
-window.onExplanationInput = function(inputElem) {
-  const rowKey = inputElem.getAttribute("data-rowkey");
-  const val = inputElem.value;
+// ==========================================
+// CHUẨN HÓA DANH MỤC LÝ DO GIẢI TRÌNH HỦY ĐƠN
+// ==========================================
+const CANCELLATION_REASON_GROUPS = [
+  "Chủ hàng & Kế hoạch (Hoãn lấy cont, hủy đóng hàng)",
+  "Hãng tàu & Booking (Hết hạn, hủy booking, đủ số lượng)",
+  "Depot & Vỏ Container (Chuyển depot, hết cont, cont xấu)",
+  "Chứng từ & Đặt lệnh (Sai booking, khai nhầm, trùng đơn)",
+  "Thanh toán & Vận chuyển (Chưa đóng phí, lỗi cổng, xe hư)",
+  "Khác (Nhập chi tiết cụ thể)"
+];
 
-  // Cập nhật cho tất cả bản ghi tương ứng trong mảng allRecords (chung cho cả tab Tất Cả, Đơn Chưa Thanh Toán, Đơn Hủy)
+/**
+ * Phân tích chuỗi giải trình thành Nhóm và Chi tiết
+ * Đảm bảo tương thích ngược 100% với dữ liệu tự do cũ
+ */
+function parseExplanationValue(rawVal) {
+  if (!rawVal || typeof rawVal !== "string") {
+    return { group: "", detail: "" };
+  }
+  const trimmed = rawVal.trim();
+  if (!trimmed) return { group: "", detail: "" };
+
+  // Dạng "Khác: [chi tiết]" hoặc "Khác (Nhập chi tiết cụ thể): [chi tiết]" hoặc "Khác"
+  if (/^khác/i.test(trimmed)) {
+    let detail = "";
+    if (trimmed.includes(":")) {
+      detail = trimmed.substring(trimmed.indexOf(":") + 1).trim();
+    } else if (trimmed.includes(" - ")) {
+      detail = trimmed.substring(trimmed.indexOf(" - ") + 3).trim();
+    } else if (trimmed !== "Khác" && trimmed !== "Khác (Nhập chi tiết cụ thể)") {
+      detail = trimmed.replace(/^khác\s*(\(.*\))?\s*/i, "").trim();
+    }
+    return { group: "Khác (Nhập chi tiết cụ thể)", detail };
+  }
+
+  // Khớp chính xác hoặc khớp phần đầu với 5 nhóm đầu
+  for (const g of CANCELLATION_REASON_GROUPS.slice(0, 5)) {
+    const baseName = g.split(" (")[0];
+    if (trimmed === g || trimmed === baseName || trimmed.startsWith(g) || trimmed.startsWith(baseName)) {
+      return { group: g, detail: "" };
+    }
+  }
+
+  // Tương thích ngược dữ liệu tự do cũ: ánh xạ sang nhóm chuẩn
+  const lower = trimmed.toLowerCase();
+  if (lower.includes("chủ hàng") || lower.includes("kế hoạch") || lower.includes("chờ sếp") || lower.includes("cho sep") || lower.includes("sếp")) {
+    return { group: "Chủ hàng & Kế hoạch (Hoãn lấy cont, hủy đóng hàng)", detail: "" };
+  }
+  if (lower.includes("hãng tàu") || lower.includes("hãn tàu") || lower.includes("hạng tàu") || lower.includes("booking") || lower.includes("gia hạn") || lower.includes("đủ số lượng")) {
+    return { group: "Hãng tàu & Booking (Hết hạn, hủy booking, đủ số lượng)", detail: "" };
+  }
+  if (lower.includes("depot") || lower.includes("hết cont") || lower.includes("cont xấu") || lower.includes("vỏ") || lower.includes("bãi")) {
+    return { group: "Depot & Vỏ Container (Chuyển depot, hết cont, cont xấu)", detail: "" };
+  }
+  if (lower.includes("đặt lại") || lower.includes("chứng từ") || lower.includes("đặt lệnh") || lower.includes("khai nhầm") || lower.includes("sai số") || lower.includes("mst")) {
+    return { group: "Chứng từ & Đặt lệnh (Sai booking, khai nhầm, trùng đơn)", detail: "" };
+  }
+  if (lower.includes("thanh toán") || lower.includes("tài xế") || lower.includes("hạ tầng") || lower.includes("vận chuyển") || lower.includes("xe hư") || lower.includes("chờ tài")) {
+    return { group: "Thanh toán & Vận chuyển (Chưa đóng phí, lỗi cổng, xe hư)", detail: "" };
+  }
+
+  // Nếu là ghi chú tự do khác, tự động xếp vào nhóm "Khác" và gán nội dung vào ô chi tiết
+  return { group: "Khác (Nhập chi tiết cụ thể)", detail: trimmed };
+}
+
+/**
+ * Ghép nhóm và chi tiết thành chuỗi lưu trữ
+ */
+function buildExplanationString(group, detail) {
+  if (!group) return "";
+  if (group.startsWith("Khác")) {
+    const d = (detail || "").trim();
+    return d ? `Khác: ${d}` : group;
+  }
+  return group;
+}
+
+/**
+ * Hàm lưu Giải Trình trung tâm với cơ chế debounce
+ */
+let expDebounceTimer = null;
+function saveExplanationValue(rowKey, fullVal, triggerElem, instant = false) {
+  // Cập nhật cho tất cả bản ghi tương ứng trong mảng allRecords (chung cho cả tab Tất Cả, Đơn Chưa Thanh Toán, Đơn Hủy, Chờ Xử Lý)
   let matchedRecs = allRecords.filter(r => 
     (rowKey && (r.rowKey === rowKey || getRowKey(r) === rowKey))
   );
@@ -852,7 +936,7 @@ window.onExplanationInput = function(inputElem) {
   }
 
   matchedRecs.forEach(rec => {
-    rec.giaiTrinh = val;
+    rec.giaiTrinh = fullVal;
   });
 
   const targetRec = matchedRecs[0];
@@ -862,42 +946,122 @@ window.onExplanationInput = function(inputElem) {
         (targetRec.soContainer && r.soContainer === targetRec.soContainer && (!targetRec.soBooking || r.soBooking === targetRec.soBooking)) ||
         (targetRec.soBooking && !targetRec.soContainer && r.soBooking === targetRec.soBooking)
       ) {
-        r.giaiTrinh = val;
+        r.giaiTrinh = fullVal;
       }
     });
   }
 
-  clearTimeout(expDebounceTimer);
-  expDebounceTimer = setTimeout(() => {
+  // Đồng bộ giao diện tức thì cho các dòng hiển thị cùng bản ghi / cùng số cont & booking
+  const parsed = parseExplanationValue(fullVal);
+  const tbody = document.getElementById("tbodyFullData") || document.getElementById("tbodyMainOrders");
+  if (tbody) {
+    matchedRecs.forEach(rec => {
+      const k = rec.rowKey || getRowKey(rec);
+      const rowTrs = tbody.querySelectorAll(`tr[data-rowkey="${CSS.escape ? CSS.escape(k) : k}"]`);
+      rowTrs.forEach(rowTr => {
+        const expContainer = rowTr.querySelector(".explanation-cell-container");
+        if (expContainer) {
+          const selGrp = expContainer.querySelector(".select-reason-group");
+          const inDetail = expContainer.querySelector(".input-reason-detail");
+          if (selGrp && selGrp !== triggerElem && selGrp.value !== parsed.group) {
+            selGrp.value = parsed.group;
+          }
+          if (inDetail && inDetail !== triggerElem && inDetail.value !== parsed.detail) {
+            inDetail.value = parsed.detail;
+          }
+          if (inDetail) {
+            inDetail.style.display = (parsed.group && parsed.group.startsWith("Khác") ? "block" : "none");
+          }
+        }
+      });
+    });
+  }
+
+  const doSave = () => {
     const notes = getSavedNotes();
     if (rowKey) {
       if (!notes[rowKey]) notes[rowKey] = {};
-      notes[rowKey].giaiTrinh = val;
+      notes[rowKey].giaiTrinh = fullVal;
     }
     matchedRecs.forEach(rec => {
       const k1 = getRowKey(rec);
       const k2 = `${rec.stt}_${rec.soBooking || ''}_${rec.soContainer || ''}`;
       if (k1) {
         if (!notes[k1]) notes[k1] = {};
-        notes[k1].giaiTrinh = val;
+        notes[k1].giaiTrinh = fullVal;
       }
       if (k2) {
         if (!notes[k2]) notes[k2] = {};
-        notes[k2].giaiTrinh = val;
+        notes[k2].giaiTrinh = fullVal;
       }
     });
     saveNotes(notes);
 
-    // Đồng bộ hóa trực tiếp vào SQL Database trên Server
+    // Đồng bộ hóa trực tiếp vào SQL Database trên Server và cập nhật version để tránh poller ghi đè
     fetch("/api/orders/note", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rowKey, giaiTrinh: val })
+      body: JSON.stringify({ rowKey, giaiTrinh: fullVal })
+    }).then(res => res.json()).then(data => {
+      if (data && data.version) {
+        localOperationalVersion = data.version;
+      }
     }).catch(() => {});
 
-    inputElem.classList.add("saved-pulse");
-    setTimeout(() => inputElem.classList.remove("saved-pulse"), 600);
-  }, 250);
+    if (triggerElem) {
+      triggerElem.classList.add("saved-pulse");
+      setTimeout(() => triggerElem.classList.remove("saved-pulse"), 600);
+    }
+  };
+
+  clearTimeout(expDebounceTimer);
+  if (instant) {
+    doSave();
+  } else {
+    expDebounceTimer = setTimeout(doSave, 250);
+  }
+}
+
+// Xử lý khi người dùng đổi Dropdown Nhóm Lý Do
+window.onReasonGroupChange = function(selectElem) {
+  const rowKey = selectElem.getAttribute("data-rowkey");
+  const selectedGroup = selectElem.value;
+  const container = selectElem.closest(".explanation-cell-container") || selectElem.closest("td");
+  const detailInput = container ? container.querySelector(".input-reason-detail") : null;
+
+  let detailVal = "";
+  if (detailInput) {
+    if (selectedGroup && selectedGroup.startsWith("Khác")) {
+      detailInput.style.display = "block";
+      detailInput.focus();
+      detailVal = detailInput.value || "";
+    } else {
+      detailInput.style.display = "none";
+      detailInput.value = "";
+      detailVal = "";
+    }
+  }
+
+  const fullVal = buildExplanationString(selectedGroup, detailVal);
+  saveExplanationValue(rowKey, fullVal, selectElem, true);
+};
+
+// Xử lý khi người dùng nhập ghi chú chi tiết cho nhóm "Khác"
+window.onReasonDetailInput = function(inputElem) {
+  const rowKey = inputElem.getAttribute("data-rowkey");
+  const detailVal = inputElem.value;
+  const container = inputElem.closest(".explanation-cell-container") || inputElem.closest("td");
+  const selectElem = container ? container.querySelector(".select-reason-group") : null;
+  const currentGroup = selectElem ? selectElem.value : "Khác (Nhập chi tiết cụ thể)";
+  const fullVal = buildExplanationString(currentGroup, detailVal);
+  saveExplanationValue(rowKey, fullVal, inputElem);
+};
+
+// Giữ lại hàm cũ onExplanationInput để tương thích ngược 100%
+window.onExplanationInput = function(inputElem) {
+  const rowKey = inputElem.getAttribute("data-rowkey");
+  const val = inputElem.value;
+  saveExplanationValue(rowKey, val, inputElem);
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -1222,10 +1386,18 @@ document.addEventListener("DOMContentLoaded", () => {
           </select>
         </td>
         <td>
-          <div style="display: flex; gap: 6px; align-items: center; min-width: 250px;">
-            <input type="text" id="manual_giaiTrinh" class="manual-row-input" placeholder="Giải trình..." title="Giải trình">
-            <button type="button" class="btn btn-primary btn-sm" id="btnSaveManualRow" style="padding: 4px 10px; font-weight: 700; white-space: nowrap;">Lưu</button>
-            <button type="button" class="btn btn-outline btn-sm" id="btnCancelManualRow" style="padding: 4px 8px; white-space: nowrap;">Hủy</button>
+          <div style="display: flex; flex-direction: column; gap: 4px; min-width: 260px;">
+            <select id="manual_giaiTrinh_group" class="manual-row-select" onchange="const d=document.getElementById('manual_giaiTrinh_detail'); if(d){ d.style.display = (this.value && this.value.startsWith('Khác')) ? 'block' : 'none'; if(this.value && this.value.startsWith('Khác')) d.focus(); }" title="Nhóm lý do giải trình">
+              <option value="">-- Chọn nhóm lý do --</option>
+              ${CANCELLATION_REASON_GROUPS.map((grp, idx) => `
+                <option value="${grp}">${idx + 1}. ${grp}</option>
+              `).join("")}
+            </select>
+            <input type="text" id="manual_giaiTrinh_detail" class="manual-row-input" placeholder="Ghi chú chi tiết..." style="display: none;" title="Ghi chú chi tiết cho nhóm Khác">
+            <div style="display: flex; gap: 6px; margin-top: 2px;">
+              <button type="button" class="btn btn-primary btn-sm" id="btnSaveManualRow" style="padding: 4px 10px; font-weight: 700; white-space: nowrap;">Lưu</button>
+              <button type="button" class="btn btn-outline btn-sm" id="btnCancelManualRow" style="padding: 4px 8px; white-space: nowrap;">Hủy</button>
+            </div>
           </div>
         </td>
       `;
@@ -1289,7 +1461,10 @@ document.addEventListener("DOMContentLoaded", () => {
             sdtNhaXe: (document.getElementById("manual_sdtNhaXe").value || "").trim(),
             lyDoTuChoi: (document.getElementById("manual_lyDoTuChoi").value || "").trim(),
             trangThaiXuLy: document.getElementById("manual_trangThaiXuLy").value,
-            giaiTrinh: (document.getElementById("manual_giaiTrinh").value || "").trim()
+            giaiTrinh: buildExplanationString(
+              document.getElementById("manual_giaiTrinh_group") ? document.getElementById("manual_giaiTrinh_group").value : "",
+              document.getElementById("manual_giaiTrinh_detail") ? document.getElementById("manual_giaiTrinh_detail").value : ""
+            )
           };
 
           const originalText = btnSave.textContent;
@@ -1502,6 +1677,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (filterContactStatus) filterContactStatus.onchange = applyFilters;
   if (btnResetFilter) btnResetFilter.onclick = resetFilters;
   if (btnExportCsv) btnExportCsv.onclick = exportFilteredToCsv;
+  if (btnExportExcel) btnExportExcel.onclick = exportFilteredToExcel;
   if (btnSyncTurso) btnSyncTurso.onclick = triggerTursoSync;
   if (tursoStatusBadge) tursoStatusBadge.onclick = triggerTursoSync;
 
@@ -1612,16 +1788,42 @@ function applyOperationalUpdatesToUI(updates) {
           if (tr) {
             // 1. Cập nhật ô Dropdown CSKH
             const selectElem = tr.querySelector(".status-badge-select, .select-status");
-            if (selectElem && selectElem.value !== newStatus) {
-              selectElem.value = newStatus;
-              selectElem.setAttribute("data-status", newStatus);
-              selectElem.setAttribute("data-status-order", getCskhStatusOrder(newStatus));
+            if (selectElem) {
+              const isUnpaid = isUnpaidOrder(rec) || Boolean(rec.isAutoCancelledBy3h);
+              const normStatus = normalizeCskhStatus(newStatus, isUnpaid) || newStatus || "";
+              if (selectElem.value !== normStatus) {
+                if (normStatus && !Array.from(selectElem.options).some(o => o.value === normStatus)) {
+                  const optElem = document.createElement("option");
+                  optElem.value = normStatus;
+                  optElem.textContent = normStatus;
+                  selectElem.appendChild(optElem);
+                }
+                selectElem.value = normStatus;
+                selectElem.setAttribute("data-status", normStatus);
+                selectElem.setAttribute("data-status-order", getCskhStatusOrder(normStatus));
+              }
             }
 
             // 2. Cập nhật ô Giải Trình
-            const inputElem = tr.querySelector(".input-giaitrinh");
-            if (inputElem && document.activeElement !== inputElem && inputElem.value !== newExp) {
-              inputElem.value = newExp;
+            const expContainer = tr.querySelector(".explanation-cell-container");
+            if (expContainer) {
+              const selGrp = expContainer.querySelector(".select-reason-group");
+              const inDetail = expContainer.querySelector(".input-reason-detail");
+              const parsed = parseExplanationValue(newExp);
+              if (selGrp && document.activeElement !== selGrp && selGrp.value !== parsed.group) {
+                selGrp.value = parsed.group;
+              }
+              if (inDetail && document.activeElement !== inDetail && inDetail.value !== parsed.detail) {
+                inDetail.value = parsed.detail;
+              }
+              if (inDetail) {
+                inDetail.style.display = (parsed.group && parsed.group.startsWith("Khác") ? "block" : "none");
+              }
+            } else {
+              const inputElem = tr.querySelector(".input-giaitrinh");
+              if (inputElem && document.activeElement !== inputElem && inputElem.value !== newExp) {
+                inputElem.value = newExp;
+              }
             }
 
             // 3. Cập nhật ô Đếm Ngược Hạn 3h (Dừng tính giờ ngay lập tức nếu đã xử lý)
@@ -1937,9 +2139,9 @@ async function loadDataset() {
       const k1 = getRowKey(r);
       const k2 = `${r.stt}_${r.soBooking || ''}_${r.soContainer || ''}`;
       const note = savedNotes[k1] || (k2 ? savedNotes[k2] : null) || {};
-      let st = r.trangThaiXuLy || note.status || "";
+      let st = (r.trangThaiXuLy !== undefined && r.trangThaiXuLy !== null) ? r.trangThaiXuLy : (note.status || "");
       r.trangThaiXuLy = normalizeCskhStatus(st, isUnpaidOrder(r));
-      r.giaiTrinh = r.giaiTrinh || note.giaiTrinh || "";
+      r.giaiTrinh = (r.giaiTrinh !== undefined && r.giaiTrinh !== null) ? r.giaiTrinh : (note.giaiTrinh || "");
     });
 
     // Cập nhật các đơn Chưa thanh toán quá 3h thành Đã hủy
@@ -2280,15 +2482,25 @@ function renderTable(records) {
 
     // Định danh dòng để lưu trạng thái & giải trình
     const rowKey = getRowKey(r);
-    const currStatus = r.trangThaiXuLy || "";
+    const isUnpaid = isUnpaidOrder(r) || Boolean(r.isAutoCancelledBy3h);
+    const normStatus = normalizeCskhStatus(r.trangThaiXuLy, isUnpaid) || r.trangThaiXuLy || "";
+    const currStatus = normStatus;
     const currExp = r.giaiTrinh || "";
 
-    let rowOptions = baseStatusOptions;
-    if (currStatus && !baseStatusOptions.some(opt => opt.val === currStatus)) {
-      const extraOpt = CSKH_STATUS_CONFIG.find(opt => opt.val === currStatus);
-      if (extraOpt) {
-        rowOptions = [...baseStatusOptions, extraOpt].sort((a, b) => a.order - b.order);
+    let rowOptions = [...baseStatusOptions];
+    if (currStatus && !rowOptions.some(opt => opt.val === currStatus)) {
+      let extraOpt = CSKH_STATUS_CONFIG.find(opt => opt.val === currStatus);
+      if (!extraOpt) {
+        extraOpt = {
+          order: getCskhStatusOrder(currStatus),
+          val: currStatus,
+          label: currStatus,
+          bg: "#dbeafe",
+          color: "#1e40af"
+        };
       }
+      rowOptions.push(extraOpt);
+      rowOptions.sort((a, b) => a.order - b.order);
     }
 
     const optionsHtml = rowOptions.map(opt => `
@@ -2305,8 +2517,26 @@ function renderTable(records) {
       </select>
     `;
 
-    const expInputHtml = `
-      <input type="text" class="input-giaitrinh" placeholder="Nhập giải trình..." value="${currExp ? currExp.replace(/"/g, '&quot;') : ""}" data-rowkey="${rowKey}" oninput="onExplanationInput(this)" title="Nhập giải trình (Tự động lưu)">
+    const parsedExp = parseExplanationValue(currExp);
+    const expCellHtml = `
+      <div class="explanation-cell-container" data-rowkey="${rowKey}">
+        <select class="select-reason-group" data-rowkey="${rowKey}" onchange="onReasonGroupChange(this)" title="Chọn nhóm lý do giải trình">
+          <option value="" ${!parsedExp.group ? "selected" : ""}>-- Chọn nhóm lý do --</option>
+          ${CANCELLATION_REASON_GROUPS.map((grp, idx) => `
+            <option value="${grp}" ${parsedExp.group === grp ? "selected" : ""}>
+              ${idx + 1}. ${grp}
+            </option>
+          `).join("")}
+        </select>
+        <input type="text" 
+               class="input-reason-detail" 
+               placeholder="Ghi chú chi tiết..." 
+               value="${parsedExp.detail ? parsedExp.detail.replace(/"/g, '&quot;') : ""}" 
+               data-rowkey="${rowKey}" 
+               oninput="onReasonDetailInput(this)" 
+               title="Nhập ghi chú chi tiết (Tự động lưu)"
+               style="${parsedExp.group && parsedExp.group.startsWith("Khác") ? "display: block;" : "display: none;"}">
+      </div>
     `;
 
     // Cột Đếm Ngược Hạn Hủy 3 Giờ
@@ -2354,7 +2584,7 @@ function renderTable(records) {
           </td>
         ` : ""}
         <td class="text-center" style="padding: 6px 10px;">${statusSelectHtml}</td>
-        <td style="padding: 6px 10px;">${expInputHtml}</td>
+        <td style="padding: 6px 10px;">${expCellHtml}</td>
         ${currentTab === "pending" ? `
           <td class="col-pending-remove-action text-center" style="padding: 6px 8px; vertical-align: middle;">
             <button type="button" class="btn btn-danger btn-sm btn-row-remove-pending" data-rowid="${encodeURIComponent(rId)}" data-rowkey="${rowKey}" style="background: #dc2626; color: #ffffff; border: none; padding: 4px 10px; font-size: 12px; font-weight: 600; border-radius: 4px; cursor: pointer; white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.05);" title="Xóa đơn khỏi tab Chờ Xử Lý">
@@ -2602,3 +2832,198 @@ function exportFilteredToCsv() {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+// Xuất toàn bộ dữ liệu đang lọc ra tệp Excel (.xlsx) chuyên nghiệp
+function exportFilteredToExcel() {
+  if (!filteredRecords || filteredRecords.length === 0) {
+    showAlert("Không có dữ liệu để xuất file!");
+    return;
+  }
+
+  // Fallback nếu thư viện SheetJS / xlsx-js-style chưa sẵn sàng
+  if (typeof XLSX === "undefined") {
+    console.warn("Thư viện SheetJS chưa sẵn sàng, chuyển sang xuất CSV.");
+    exportFilteredToCsv();
+    return;
+  }
+
+  // 1. Xác định thông tin khoảng thời gian xuất dữ liệu (Dòng 1)
+  const dateFromVal = filterDateFrom ? filterDateFrom.value : "";
+  const dateToVal = filterDateTo ? filterDateTo.value : "";
+  const hourFromVal = filterHourFrom ? filterHourFrom.value : "";
+  const hourToVal = filterHourTo ? filterHourTo.value : "";
+
+  let timeRangeText = "";
+  if (dateFromVal || dateToVal) {
+    const fromStr = dateFromVal ? `${dateFromVal}${hourFromVal ? ` ${hourFromVal}:00` : ""}` : "Bắt đầu";
+    const toStr = dateToVal ? `${dateToVal}${hourToVal ? ` ${hourToVal}:59` : ""}` : "Hiện tại";
+    timeRangeText = `Khoảng thời gian: Từ ${fromStr} đến ${toStr}`;
+  } else {
+    timeRangeText = "Khoảng thời gian: Toàn bộ dữ liệu";
+  }
+
+  const now = new Date();
+  const dateStrVn = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+  const exportTimeText = `Thời điểm xuất: ${dateStrVn}`;
+  const row1Text = `${timeRangeText}   |   ${exportTimeText}`;
+
+  // 2. Danh mục 23 cột Header của bảng (Bắt đầu từ Dòng 3)
+  const headers = [
+    "STT", "Depot", "Hãng tàu", "Số booking", "Số EIR", "Số container", "Hạn hủy đơn (3h)",
+    "Trạng thái đơn hàng", "Ngày hủy đơn", "Ngày được duyệt", "Trạng thái kích hoạt",
+    "Thời gian kích hoạt", "Lý do hủy", "Loại container", "Loại đơn hàng",
+    "SizeTEUS", "Tên tài xế", "Số điện thoại tài xế", "Tên nhà xe", "Số điện thoại nhà xe", "Lý do từ chối",
+    "Trạng thái CSKH", "Giải trình"
+  ];
+
+  // Dòng 1: Khoảng thời gian xuất dữ liệu
+  // Dòng 2: Dòng trống để cách dòng
+  // Dòng 3: Header của bảng
+  const excelRows = [
+    [row1Text],
+    [],
+    headers
+  ];
+
+  // 3. Nạp dữ liệu các dòng (Bắt đầu từ Dòng 4 trong Excel)
+  filteredRecords.forEach((r, idx) => {
+    const isUnpaidOrExpired = isUnpaidOrder(r) || Boolean(r.isAutoCancelledBy3h);
+    const isCancelled = isCancelledOrder(r);
+    const warnLevel = getWarning3hLevel(r.ngayDuocDuyet, isUnpaidOrExpired, r.trangThaiXuLy, isCancelled);
+    let warnText = "-";
+    if (warnLevel === "processed") warnText = "Đã xử lý";
+    else if (warnLevel === "expired") warnText = "Quá 3h (Tự động hủy)";
+    else if (warnLevel === "red") warnText = "Cảnh báo ĐỎ (>2h)";
+    else if (warnLevel === "yellow") warnText = "Cảnh báo VÀNG (>1h)";
+    else if (warnLevel === "safe") warnText = "An toàn (<1h)";
+
+    const contEir = parseContainerAndEir(r.soContainer);
+    const eirVal = contEir.soEir === "-" ? "" : contEir.soEir;
+    const contVal = contEir.soContainer === "-" ? "" : contEir.soContainer;
+
+    const isUnpaid = isUnpaidOrder(r) || Boolean(r.isAutoCancelledBy3h);
+    const normStatus = normalizeCskhStatus(r.trangThaiXuLy, isUnpaid) || r.trangThaiXuLy || "";
+
+    const row = [
+      idx + 1,
+      r.depot || "",
+      r.hangTau || "",
+      r.soBooking || "",
+      eirVal,
+      contVal,
+      warnText,
+      r.trangThaiDonHang || "",
+      r.ngayHuyDon || "",
+      r.ngayDuocDuyet || "",
+      r.trangThaiKichHoat || "",
+      r.thoiGianKichHoat || "",
+      r.lyDoHuy || "",
+      r.loaiContainer || "",
+      r.loaiDonHang || "",
+      r.sizeTeus !== undefined && r.sizeTeus !== null ? r.sizeTeus : "",
+      r.tenTaiXe || "",
+      r.sdtTaiXe || "",
+      r.tenNhaXe || "",
+      r.sdtNhaXe || "",
+      r.lyDoTuChoi || "",
+      normStatus,
+      r.giaiTrinh || ""
+    ];
+    excelRows.push(row);
+  });
+
+  // Tạo workbook và worksheet từ mảng dữ liệu
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(excelRows);
+
+  // Merge dòng 1 từ cột đầu đến cột cuối của bảng để hiển thị trọn vẹn thông tin thời gian
+  ws["!merges"] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } }
+  ];
+
+  // Định dạng kiểu dáng:
+  // - Dòng 1: Thời gian xuất
+  const a1Cell = ws["A1"];
+  if (a1Cell) {
+    a1Cell.s = {
+      font: { name: "Calibri", sz: 11, bold: true, color: { rgb: "1E3A8A" }, italic: true },
+      fill: { fgColor: { rgb: "F1F5F9" } },
+      alignment: { vertical: "center", horizontal: "left" },
+      border: {
+        bottom: { style: "thin", color: { rgb: "CBD5E1" } }
+      }
+    };
+  }
+
+  // - Bảng bắt đầu từ dòng 3 (r = 2). Header có màu cam nhạt, toàn bộ bảng có all bottom border
+  const headerBgColor = "FFEDD5"; // Màu cam nhạt sang trọng, dịu mắt
+  const headerTextColor = "7C2D12"; // Màu cam đậm nổi bật
+  const headerBorderBottom = { style: "medium", color: { rgb: "EA580C" } };
+  const dataBorderBottom = { style: "thin", color: { rgb: "D1D5DB" } };
+
+  for (let r = 2; r < excelRows.length; r++) {
+    for (let c = 0; c < headers.length; c++) {
+      const cellAddr = XLSX.utils.encode_cell({ r, c });
+      if (!ws[cellAddr]) {
+        ws[cellAddr] = { t: "s", v: "" };
+      }
+      if (!ws[cellAddr].s) {
+        ws[cellAddr].s = {};
+      }
+
+      if (r === 2) {
+        // Dòng 3 (Header của bảng)
+        ws[cellAddr].s = {
+          fill: { fgColor: { rgb: headerBgColor } },
+          font: { name: "Calibri", sz: 11, bold: true, color: { rgb: headerTextColor } },
+          alignment: { vertical: "center", horizontal: "center", wrapText: true },
+          border: {
+            bottom: headerBorderBottom
+          }
+        };
+      } else {
+        // Dòng 4 trở đi (Dữ liệu của bảng): All bottom border cho từng dòng
+        const alignHoriz = (c === 0 || c === 14 || c === 15) ? "center" : "left";
+        ws[cellAddr].s = {
+          font: { name: "Calibri", sz: 10, color: { rgb: "1F2937" } },
+          alignment: { vertical: "center", horizontal: alignHoriz },
+          border: {
+            bottom: dataBorderBottom
+          }
+        };
+      }
+    }
+  }
+
+  // Tự động tính toán độ rộng tối ưu cho các cột (Auto-fit Columns) dựa trên header và dữ liệu
+  const colWidths = headers.map((colName, cIdx) => {
+    let maxLen = colName.length;
+    const sampleLimit = Math.min(excelRows.length, 60);
+    for (let rIdx = 2; rIdx < sampleLimit; rIdx++) {
+      const cellVal = excelRows[rIdx] ? excelRows[rIdx][cIdx] : "";
+      if (cellVal !== undefined && cellVal !== null) {
+        const strLen = String(cellVal).length;
+        if (strLen > maxLen) maxLen = strLen;
+      }
+    }
+    return { wch: Math.min(Math.max(maxLen + 3, 10), 45) };
+  });
+  ws["!cols"] = colWidths;
+
+  // Cấu hình chiều cao dòng cho trang tính
+  const rowHeights = [{ hpt: 26 }, { hpt: 12 }, { hpt: 28 }];
+  ws["!rows"] = rowHeights;
+
+  // Xác định tên file theo tab hiện tại và ngày tháng
+  let tabNameStr = "Tat_Ca_Don_Hang";
+  if (currentTab === "unpaid") tabNameStr = "Don_Chua_Thanh_Toan";
+  else if (currentTab === "cancelled") tabNameStr = "Don_Huy";
+  else if (currentTab === "pending") tabNameStr = "Don_Cho_Xu_Ly";
+
+  const todayStr = new Date().toISOString().substring(0, 10);
+  const fileName = `Bao_Cao_${tabNameStr}_${todayStr}.xlsx`;
+
+  XLSX.utils.book_append_sheet(wb, ws, "Chi Tiết Đơn Hàng");
+  XLSX.writeFile(wb, fileName);
+}
+

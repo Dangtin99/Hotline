@@ -255,6 +255,8 @@ app.use(cors());
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use(express.static(path.join(__dirname, "public")));
+app.use("/vendor/xlsx-style", express.static(path.join(__dirname, "node_modules", "xlsx-js-style", "dist")));
+app.use("/vendor/xlsx", express.static(path.join(__dirname, "node_modules", "xlsx", "dist")));
 
 const upload = multer({
   storage: multer.memoryStorage(),

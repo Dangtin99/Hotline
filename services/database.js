@@ -581,8 +581,8 @@ function getAllRecords() {
       ...o,
       stt: String(idx + 1),
       isPending: op ? op.is_pending === 1 : Boolean(o.isPending),
-      trangThaiXuLy: (op && op.cskh_status) ? op.cskh_status : (o.trangThaiXuLy || ""),
-      giaiTrinh: (op && op.explanation) ? op.explanation : (o.giaiTrinh || "")
+      trangThaiXuLy: (op && op.cskh_status !== undefined && op.cskh_status !== null) ? op.cskh_status : (o.trangThaiXuLy || ""),
+      giaiTrinh: (op && op.explanation !== undefined && op.explanation !== null) ? op.explanation : (o.giaiTrinh || "")
     };
   });
 }
@@ -598,15 +598,39 @@ function updateOrderNote(rowKey, noteData = {}) {
       return altKey === rowKey || (o.soContainer && o.soBooking && rowKey.includes(o.soContainer) && rowKey.includes(o.soBooking));
     });
   }
+  const nowStr = new Date().toISOString().replace("T", " ").substring(0, 19);
+  const hasStatus = noteData.status !== undefined;
+  const hasExp = noteData.giaiTrinh !== undefined;
+  const statusVal = hasStatus ? (noteData.status || "") : "";
+  const expVal = hasExp ? (noteData.giaiTrinh || "") : "";
+
+  if (matched.length === 0 && rowKey) {
+    if (sqliteEngine) {
+      try {
+        const stmtOp = sqliteEngine.prepare(`
+          INSERT INTO order_operational_state (row_key, cskh_status, explanation, updated_at)
+          VALUES (?, ?, ?, ?)
+          ON CONFLICT(row_key) DO UPDATE SET
+            cskh_status = CASE WHEN ? = 1 THEN excluded.cskh_status ELSE order_operational_state.cskh_status END,
+            explanation = CASE WHEN ? = 1 THEN excluded.explanation ELSE order_operational_state.explanation END,
+            updated_at = excluded.updated_at
+        `);
+        stmtOp.run(rowKey, statusVal, expVal, nowStr, hasStatus ? 1 : 0, hasExp ? 1 : 0);
+      } catch (e) {}
+    }
+    if (tursoClient) {
+      tursoClient.updateOrderNoteInTurso(rowKey, noteData).catch(() => {});
+    }
+    return true;
+  }
   if (matched.length === 0) return false;
 
-  const nowStr = new Date().toISOString().replace("T", " ").substring(0, 19);
   matched.forEach(item => {
     const oldStatus = item.trangThaiXuLy || "";
     const oldExp = item.giaiTrinh || "";
 
-    if (noteData.status !== undefined) item.trangThaiXuLy = noteData.status;
-    if (noteData.giaiTrinh !== undefined) item.giaiTrinh = noteData.giaiTrinh;
+    if (hasStatus) item.trangThaiXuLy = statusVal;
+    if (hasExp) item.giaiTrinh = expVal;
     item.updatedAt = nowStr;
 
     if (sqliteEngine) {
@@ -614,21 +638,23 @@ function updateOrderNote(rowKey, noteData = {}) {
         // 1. Cập nhật bảng cancellation_orders (tương thích ngược)
         const stmt = sqliteEngine.prepare(`
           UPDATE cancellation_orders 
-          SET trang_thai_xu_ly = ?, giai_trinh = ?, updated_at = ? 
+          SET trang_thai_xu_ly = CASE WHEN ? = 1 THEN ? ELSE trang_thai_xu_ly END,
+              giai_trinh = CASE WHEN ? = 1 THEN ? ELSE giai_trinh END,
+              updated_at = ? 
           WHERE row_key = ?
         `);
-        stmt.run(item.trangThaiXuLy || '', item.giaiTrinh || '', nowStr, item.rowKey);
+        stmt.run(hasStatus ? 1 : 0, statusVal, hasExp ? 1 : 0, expVal, nowStr, item.rowKey);
 
         // 2. Cập nhật bảng chuẩn hóa order_operational_state
         const stmtOp = sqliteEngine.prepare(`
           INSERT INTO order_operational_state (row_key, cskh_status, explanation, updated_at)
           VALUES (?, ?, ?, ?)
           ON CONFLICT(row_key) DO UPDATE SET
-            cskh_status = excluded.cskh_status,
-            explanation = excluded.explanation,
+            cskh_status = CASE WHEN ? = 1 THEN excluded.cskh_status ELSE order_operational_state.cskh_status END,
+            explanation = CASE WHEN ? = 1 THEN excluded.explanation ELSE order_operational_state.explanation END,
             updated_at = excluded.updated_at
         `);
-        stmtOp.run(item.trangThaiXuLy || '', item.giaiTrinh || '', nowStr, item.rowKey);
+        stmtOp.run(item.rowKey, statusVal, expVal, nowStr, hasStatus ? 1 : 0, hasExp ? 1 : 0);
 
         // 3. Ghi audit log
         const stmtAudit = sqliteEngine.prepare(`
@@ -1904,8 +1930,8 @@ async function getAllRecordsAsync(forceRefresh = false) {
             ...o,
             stt: String(idx + 1),
             isPending: op ? op.isPending : Boolean(o.isPending),
-            trangThaiXuLy: (op && op.cskhStatus) ? op.cskhStatus : (o.trangThaiXuLy || ""),
-            giaiTrinh: (op && op.explanation) ? op.explanation : (o.giaiTrinh || "")
+            trangThaiXuLy: (op && op.cskhStatus !== undefined && op.cskhStatus !== null) ? op.cskhStatus : (o.trangThaiXuLy || ""),
+            giaiTrinh: (op && op.explanation !== undefined && op.explanation !== null) ? op.explanation : (o.giaiTrinh || "")
           };
         });
       }
@@ -2317,8 +2343,8 @@ async function getDashboardDataAsync(params = {}) {
     return {
       ...o,
       isPending: op ? op.isPending : Boolean(o.isPending),
-      trangThaiXuLy: (op && op.cskhStatus) ? op.cskhStatus : (o.trangThaiXuLy || ""),
-      giaiTrinh: (op && op.explanation) ? op.explanation : (o.giaiTrinh || "")
+      trangThaiXuLy: (op && op.cskhStatus !== undefined && op.cskhStatus !== null) ? op.cskhStatus : (o.trangThaiXuLy || ""),
+      giaiTrinh: (op && op.explanation !== undefined && op.explanation !== null) ? op.explanation : (o.giaiTrinh || "")
     };
   });
 

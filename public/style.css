@@ -1451,6 +1451,38 @@ body {
   display: none !important;
 }
 
+.btn-export-excel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-color: #15803d;
+  color: #ffffff !important;
+  border: 1px solid #166534;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.btn-export-excel:hover {
+  background-color: #166534;
+  border-color: #14532d;
+  color: #ffffff !important;
+  box-shadow: 0 2px 4px rgba(22, 101, 52, 0.2);
+  transform: translateY(-1px);
+}
+
+.btn-export-excel:active {
+  transform: translateY(0);
+}
+
+.btn-export-excel svg {
+  flex-shrink: 0;
+}
+
 @media (max-width: 1200px) {
   .filters-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
@@ -1903,6 +1935,8 @@ body {
   border: 1px solid transparent;
   width: 100%;
   min-width: 195px;
+  color: #1e293b;
+  text-overflow: ellipsis;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b' stroke-width='2.5'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
 }
 
@@ -1910,74 +1944,74 @@ body {
   filter: brightness(0.96);
 }
 
-/* --- BẢNG THỨ TỰ SẮP XẾP TRẠNG THÁI CSKH (1 -> 8) TRONG SOURCE CODE --- */
-/* 1. Thanh toán thành công (Thứ tự 1) */
-.status-badge-select[data-status="Thanh toán thành công"],
-.status-badge-select[data-status-order="1"] {
-  background-color: #dcfce7 !important;
-  color: #166534 !important;
-  border-color: #bbf7d0 !important;
-}
-
-/* 2. Đã liên hệ - Chờ đặt lại (Thứ tự 2) */
-.status-badge-select[data-status="Đã liên hệ - Chờ đặt lại"],
-.status-badge-select[data-status="Đã liên hệ - Đang chờ"],
+/* --- BẢNG THỨ TỰ SẮP XẾP TRẠNG THÁI CSKH (1 -> 7) ĐỒNG BỘ JS & CSS --- */
+/* 1. Đã liên hệ - Chờ (Order 1 - Xanh dương) */
 .status-badge-select[data-status="Đã liên hệ - Chờ"],
-.status-badge-select[data-status-order="2"] {
+.status-badge-select[data-status="Đã liên hệ - Đang chờ"],
+.status-badge-select[data-status="Đã liên hệ - Chờ đặt lại"],
+.status-badge-select[data-status="Đã liên hệ - Chờ thanh toán"],
+.status-badge-select[data-status-order="1"] {
   background-color: #dbeafe !important;
   color: #1e40af !important;
   border-color: #bfdbfe !important;
 }
 
-/* 3. Đã liên hệ - Chờ thanh toán (Thứ tự 3) */
-.status-badge-select[data-status="Đã liên hệ - Chờ thanh toán"],
-.status-badge-select[data-status-order="3"] {
-  background-color: #e0e7ff !important;
-  color: #4338ca !important;
-  border-color: #c7d2fe !important;
-}
-
-/* 4. Đã liên hệ - Đã đặt lại (Thứ tự 4) */
-.status-badge-select[data-status="Đã liên hệ - Đã đặt lại"],
-.status-badge-select[data-status="Đã liên hệ đã đặt lại"],
-.status-badge-select[data-status-order="4"] {
+/* 2. Đã thanh toán / Thanh toán thành công (Order 2 - Xanh lá) */
+.status-badge-select[data-status="Đã thanh toán"],
+.status-badge-select[data-status="Thanh toán thành công"],
+.status-badge-select[data-status-order="2"] {
   background-color: #dcfce7 !important;
   color: #166534 !important;
   border-color: #bbf7d0 !important;
 }
 
-/* 5. Đã liên hệ - Không đặt lại (Thứ tự 5) */
-.status-badge-select[data-status="Đã liên hệ - Không đặt lại"],
+/* 3. Đã thành công (Order 3 - Xanh lá) */
+.status-badge-select[data-status="Đã thành công"],
+.status-badge-select[data-status-order="3"] {
+  background-color: #dcfce7 !important;
+  color: #166534 !important;
+  border-color: #bbf7d0 !important;
+}
+
+/* 4. Đã đặt lại (Order 4 - Xanh da trời) */
+.status-badge-select[data-status="Đã đặt lại"],
+.status-badge-select[data-status="Đã liên hệ - Đã đặt lại"],
+.status-badge-select[data-status="Đã liên hệ đã đặt lại"],
+.status-badge-select[data-status="Đặt lại thành công"],
+.status-badge-select[data-status="Tự động đặt lại"],
+.status-badge-select[data-status-order="4"] {
+  background-color: #e0f2fe !important;
+  color: #0369a1 !important;
+  border-color: #bae6fd !important;
+}
+
+/* 5. Đã liên hệ - Không thành công (Order 5 - Cam nhạt) */
+.status-badge-select[data-status="Đã liên hệ - Không thành công"],
 .status-badge-select[data-status-order="5"] {
+  background-color: #ffedd5 !important;
+  color: #c2410c !important;
+  border-color: #fed7aa !important;
+}
+
+/* 6. Đã liên hệ - Không đặt lại (Order 6 - Hồng nhạt) */
+.status-badge-select[data-status="Đã liên hệ - Không đặt lại"],
+.status-badge-select[data-status="Đã Liên hệ - Không đặt lại"],
+.status-badge-select[data-status="Đã Liện hệ - Không đặt lại"],
+.status-badge-select[data-status-order="6"] {
   background-color: #fee2e2 !important;
   color: #991b1b !important;
   border-color: #fecaca !important;
 }
 
-/* 6. Không liên hệ được - Chờ thanh toán (Thứ tự 6) */
-.status-badge-select[data-status="Không liên hệ được - Chờ thanh toán"],
+/* 7. Không liên hệ được (Order 7 - Vàng nhạt) */
 .status-badge-select[data-status="Không liên hệ được"],
-.status-badge-select[data-status-order="6"] {
-  background-color: #fef3c7 !important;
-  color: #92400e !important;
-  border-color: #fde68a !important;
-}
-
-/* 7. Không liên hệ được - Hủy (Thứ tự 7) */
+.status-badge-select[data-status="Không liên hệ được - Chờ thanh toán"],
 .status-badge-select[data-status="Không liên hệ được - Hủy"],
 .status-badge-select[data-status="Không liên hệ được - hủy"],
 .status-badge-select[data-status-order="7"] {
-  background-color: #fee2e2 !important;
-  color: #b91c1c !important;
-  border-color: #fca5a5 !important;
-}
-
-/* 8. Tự động đặt lại (Thứ tự 8) */
-.status-badge-select[data-status="Tự động đặt lại"],
-.status-badge-select[data-status-order="8"] {
-  background-color: #f1f5f9 !important;
-  color: #334155 !important;
-  border-color: #cbd5e1 !important;
+  background-color: #fef3c7 !important;
+  color: #92400e !important;
+  border-color: #fde68a !important;
 }
 
 /* Mặc định chưa chọn */
@@ -1988,7 +2022,72 @@ body {
   border-style: dashed;
 }
 
-/* Ô nhập Giải Trình */
+/* Ô nhập & Chọn Nhóm Giải Trình Chuẩn Hóa */
+.explanation-cell-container {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+  min-width: 240px;
+}
+
+.select-reason-group {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-main);
+  background-color: #ffffff;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.select-reason-group:hover {
+  border-color: var(--border-color);
+}
+
+.select-reason-group:focus {
+  border-color: var(--blue-primary);
+  box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.12);
+}
+
+.select-reason-group.saved-pulse {
+  border-color: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.25);
+}
+
+.input-reason-detail {
+  width: 100%;
+  padding: 5px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+  font-size: 12px;
+  color: #1e293b;
+  background-color: #f8fafc;
+  outline: none;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+}
+
+.input-reason-detail:hover {
+  border-color: #94a3b8;
+  background-color: #ffffff;
+}
+
+.input-reason-detail:focus {
+  border-color: var(--blue-primary);
+  background-color: #ffffff;
+  box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.12);
+}
+
+.input-reason-detail.saved-pulse {
+  border-color: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.25);
+}
+
 .input-giaitrinh {
   width: 100%;
   min-width: 240px;

@@ -428,34 +428,44 @@ async function updateOrderNoteInTurso(rowKey, noteData = {}) {
   if (!client) return false;
   try {
     const nowStr = new Date().toISOString().replace("T", " ").substring(0, 19);
+    const hasStatus = noteData.status !== undefined;
+    const hasExp = noteData.giaiTrinh !== undefined;
+    const statusVal = hasStatus ? (noteData.status || "") : "";
+    const expVal = hasExp ? (noteData.giaiTrinh || "") : "";
+
     // 1. Cập nhật vào cancellation_orders (tương thích ngược)
     await client.execute({
       sql: `UPDATE cancellation_orders 
-            SET trang_thai_xu_ly = COALESCE(?, trang_thai_xu_ly),
-                giai_trinh = COALESCE(?, giai_trinh),
+            SET trang_thai_xu_ly = CASE WHEN ? = 1 THEN ? ELSE trang_thai_xu_ly END,
+                giai_trinh = CASE WHEN ? = 1 THEN ? ELSE giai_trinh END,
                 updated_at = ?
             WHERE row_key = ?`,
       args: [
-        noteData.status !== undefined ? noteData.status : null,
-        noteData.giaiTrinh !== undefined ? noteData.giaiTrinh : null,
+        hasStatus ? 1 : 0,
+        statusVal,
+        hasExp ? 1 : 0,
+        expVal,
         nowStr,
         rowKey
       ]
     });
 
     // 2. Cập nhật vào bảng chuẩn hóa order_operational_state
+    // Nếu trường được truyền vào (kể cả rỗng ""), cập nhật đúng giá trị đó; nếu không truyền thì giữ nguyên giá trị cũ
     await client.execute({
       sql: `INSERT INTO order_operational_state (row_key, cskh_status, explanation, updated_at)
             VALUES (?, ?, ?, ?)
             ON CONFLICT(row_key) DO UPDATE SET
-              cskh_status = COALESCE(NULLIF(excluded.cskh_status, ''), order_operational_state.cskh_status),
-              explanation = COALESCE(NULLIF(excluded.explanation, ''), order_operational_state.explanation),
+              cskh_status = CASE WHEN ? = 1 THEN excluded.cskh_status ELSE order_operational_state.cskh_status END,
+              explanation = CASE WHEN ? = 1 THEN excluded.explanation ELSE order_operational_state.explanation END,
               updated_at = excluded.updated_at;`,
       args: [
         rowKey,
-        noteData.status !== undefined ? noteData.status : "",
-        noteData.giaiTrinh !== undefined ? noteData.giaiTrinh : "",
-        nowStr
+        statusVal,
+        expVal,
+        nowStr,
+        hasStatus ? 1 : 0,
+        hasExp ? 1 : 0
       ]
     });
 
@@ -465,8 +475,8 @@ async function updateOrderNoteInTurso(rowKey, noteData = {}) {
             VALUES (?, 'UPDATE_NOTE', ?, ?, ?, ?)`,
       args: [
         rowKey,
-        noteData.status || "",
-        noteData.giaiTrinh || "",
+        statusVal,
+        expVal,
         noteData.user || "admin",
         nowStr
       ]
