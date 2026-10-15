@@ -798,10 +798,17 @@ window.onStatusSelectChange = function(selectElem) {
   saveNotes(notes);
 
   // Đồng bộ hóa trực tiếp vào SQL Database trên Server và cập nhật version
+  const currentTr = selectElem ? selectElem.closest("tr") : null;
+  const targetR = matchedRecs[0] || {};
   fetch("/api/orders/note", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ rowKey, status: newStatus })
+    body: JSON.stringify({
+      rowKey,
+      status: newStatus,
+      giaiTrinh: targetR.giaiTrinh || "",
+      giaiTrinhChiTiet: targetR.giaiTrinhChiTiet !== undefined ? targetR.giaiTrinhChiTiet : null
+    })
   }).then(res => res.json()).then(data => {
     if (data && data.version) {
       localOperationalVersion = data.version;
@@ -809,8 +816,6 @@ window.onStatusSelectChange = function(selectElem) {
   }).catch(() => {});
 
   // Cập nhật tức thì ô Hạn Hủy Đơn trên dòng hiện tại mà người dùng vừa thao tác
-  const currentTr = selectElem ? selectElem.closest("tr") : null;
-  const targetR = matchedRecs[0] || {};
   const isUnpaidOrExpired = isUnpaidOrder(targetR) || Boolean(targetR.isAutoCancelledBy3h);
   const isCancelled = isCancelledOrder(targetR);
   if (currentTr) {
@@ -979,10 +984,16 @@ function saveReasonGroupValue(rowKey, groupVal, triggerElem, instant = true) {
   });
   saveNotes(notes);
 
+  const targetRec = matchedRecs[0] || {};
   fetch("/api/orders/note", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ rowKey, giaiTrinh: finalGroup })
+    body: JSON.stringify({
+      rowKey,
+      giaiTrinh: finalGroup,
+      status: targetRec.trangThaiXuLy || "",
+      giaiTrinhChiTiet: targetRec.giaiTrinhChiTiet !== undefined ? targetRec.giaiTrinhChiTiet : null
+    })
   }).then(res => res.json()).then(data => {
     if (data && data.version) {
       localOperationalVersion = data.version;
@@ -1066,7 +1077,12 @@ function saveExplanationDetailValue(rowKey, detailVal, triggerElem, instant = fa
     fetch("/api/orders/note", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rowKey, giaiTrinhChiTiet: finalDetail })
+      body: JSON.stringify({
+        rowKey,
+        giaiTrinhChiTiet: finalDetail,
+        status: targetRec.trangThaiXuLy || "",
+        giaiTrinh: targetRec.giaiTrinh || ""
+      })
     }).then(res => res.json()).then(data => {
       if (data && data.version) {
         localOperationalVersion = data.version;
@@ -1819,16 +1835,31 @@ function applyOperationalUpdatesToUI(updates) {
     // Tìm tất cả bản ghi tương ứng trong mảng allRecords
     const matched = allRecords.filter(r => (r.rowKey === rowKey || getRowKey(r) === rowKey));
     matched.forEach(rec => {
-      const newStatus = item.trangThaiXuLy || "";
-      const newExp = item.giaiTrinh || "";
-      const newExpDetail = item.giaiTrinhChiTiet !== undefined ? item.giaiTrinhChiTiet : null;
-      const newPending = Boolean(item.isPending);
+      const newStatus = item.trangThaiXuLy !== undefined ? item.trangThaiXuLy : rec.trangThaiXuLy;
+      const newExp = item.giaiTrinh !== undefined ? item.giaiTrinh : rec.giaiTrinh;
+      const hasExpDetail = item.giaiTrinhChiTiet !== undefined;
+      const newExpDetail = hasExpDetail ? (item.giaiTrinhChiTiet !== null && String(item.giaiTrinhChiTiet).trim() !== "" ? String(item.giaiTrinhChiTiet).trim() : null) : rec.giaiTrinhChiTiet;
+      const newPending = item.isPending !== undefined ? Boolean(item.isPending) : rec.isPending;
 
-      if (rec.trangThaiXuLy !== newStatus || rec.giaiTrinh !== newExp || rec.giaiTrinhChiTiet !== newExpDetail || rec.isPending !== newPending) {
+      let changedThisRec = false;
+      if (item.trangThaiXuLy !== undefined && rec.trangThaiXuLy !== newStatus) {
         rec.trangThaiXuLy = newStatus;
+        changedThisRec = true;
+      }
+      if (item.giaiTrinh !== undefined && rec.giaiTrinh !== newExp) {
         rec.giaiTrinh = newExp;
+        changedThisRec = true;
+      }
+      if (hasExpDetail && rec.giaiTrinhChiTiet !== newExpDetail) {
         rec.giaiTrinhChiTiet = newExpDetail;
+        changedThisRec = true;
+      }
+      if (item.isPending !== undefined && rec.isPending !== newPending) {
         rec.isPending = newPending;
+        changedThisRec = true;
+      }
+
+      if (changedThisRec) {
         hasChanged = true;
 
         // Cập nhật trực tiếp lên dòng DOM nếu đang hiển thị trên trang hiện tại
@@ -1837,35 +1868,41 @@ function applyOperationalUpdatesToUI(updates) {
           const tr = tbody.querySelector(`tr[data-rowkey="${escapedKey}"]`);
           if (tr) {
             // 1. Cập nhật ô Dropdown CSKH
-            const selectElem = tr.querySelector(".status-badge-select, .select-status");
-            if (selectElem) {
-              const isUnpaid = isUnpaidOrder(rec) || Boolean(rec.isAutoCancelledBy3h);
-              const normStatus = normalizeCskhStatus(newStatus, isUnpaid) || newStatus || "";
-              if (selectElem.value !== normStatus) {
-                if (normStatus && !Array.from(selectElem.options).some(o => o.value === normStatus)) {
-                  const optElem = document.createElement("option");
-                  optElem.value = normStatus;
-                  optElem.textContent = normStatus;
-                  selectElem.appendChild(optElem);
+            if (item.trangThaiXuLy !== undefined) {
+              const selectElem = tr.querySelector(".status-badge-select, .select-status");
+              if (selectElem && document.activeElement !== selectElem) {
+                const isUnpaid = isUnpaidOrder(rec) || Boolean(rec.isAutoCancelledBy3h);
+                const normStatus = normalizeCskhStatus(newStatus, isUnpaid) || newStatus || "";
+                if (selectElem.value !== normStatus) {
+                  if (normStatus && !Array.from(selectElem.options).some(o => o.value === normStatus)) {
+                    const optElem = document.createElement("option");
+                    optElem.value = normStatus;
+                    optElem.textContent = normStatus;
+                    selectElem.appendChild(optElem);
+                  }
+                  selectElem.value = normStatus;
+                  selectElem.setAttribute("data-status", normStatus);
+                  selectElem.setAttribute("data-status-order", getCskhStatusOrder(normStatus));
                 }
-                selectElem.value = normStatus;
-                selectElem.setAttribute("data-status", normStatus);
-                selectElem.setAttribute("data-status-order", getCskhStatusOrder(normStatus));
               }
             }
 
             // 2. Cập nhật ô Giải Trình (Nhóm lý do)
-            const selGrp = tr.querySelector(".select-reason-group");
-            if (selGrp && document.activeElement !== selGrp && selGrp.value !== newExp) {
-              selGrp.value = newExp || "";
+            if (item.giaiTrinh !== undefined) {
+              const selGrp = tr.querySelector(".select-reason-group");
+              if (selGrp && document.activeElement !== selGrp && selGrp.value !== newExp) {
+                selGrp.value = newExp || "";
+              }
             }
 
-            // 3. Cập nhật ô Giải Trình Chi Tiết
-            const inDetail = tr.querySelector(".input-reason-detail");
-            if (inDetail && document.activeElement !== inDetail) {
-              const curInVal = inDetail.value.trim() === "" ? null : inDetail.value.trim();
-              if (curInVal !== newExpDetail) {
-                inDetail.value = newExpDetail !== null ? newExpDetail : "";
+            // 3. Cập nhật ô Giải Trình Chi Tiết (chỉ cập nhật khi update có trường này và ô không đang được focus)
+            if (hasExpDetail) {
+              const inDetail = tr.querySelector(".input-reason-detail");
+              if (inDetail && document.activeElement !== inDetail) {
+                const curInVal = inDetail.value.trim() === "" ? null : inDetail.value.trim();
+                if (curInVal !== newExpDetail) {
+                  inDetail.value = newExpDetail !== null ? newExpDetail : "";
+                }
               }
             }
 

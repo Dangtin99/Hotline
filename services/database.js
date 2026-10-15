@@ -663,7 +663,10 @@ function updateOrderNote(rowKey, noteData = {}) {
             explanation_detail = CASE WHEN ? = 1 THEN excluded.explanation_detail ELSE order_operational_state.explanation_detail END,
             updated_at = excluded.updated_at
         `);
-        stmtOp.run(item.rowKey, statusVal, expVal, expDetailVal, nowStr, hasStatus ? 1 : 0, hasExp ? 1 : 0, hasExpDetail ? 1 : 0);
+        const insertStatus = hasStatus ? statusVal : (item.trangThaiXuLy || "");
+        const insertExp = hasExp ? expVal : (item.giaiTrinh || "");
+        const insertExpDetail = hasExpDetail ? expDetailVal : (item.giaiTrinhChiTiet || null);
+        stmtOp.run(item.rowKey, insertStatus, insertExp, insertExpDetail, nowStr, hasStatus ? 1 : 0, hasExp ? 1 : 0, hasExpDetail ? 1 : 0);
 
         // 3. Ghi audit log
         const stmtAudit = sqliteEngine.prepare(`
@@ -784,27 +787,56 @@ function syncOperationalUpdatesToMemoryAndLocalSql(updates = {}) {
     matched.forEach(rec => {
       if (item.trangThaiXuLy !== undefined) rec.trangThaiXuLy = item.trangThaiXuLy || "";
       if (item.giaiTrinh !== undefined) rec.giaiTrinh = item.giaiTrinh || "";
+      if (item.giaiTrinhChiTiet !== undefined) rec.giaiTrinhChiTiet = item.giaiTrinhChiTiet || null;
       if (item.isPending !== undefined) rec.isPending = Boolean(item.isPending);
       rec.updatedAt = item.updatedAt || nowStr;
     });
 
     if (sqliteEngine) {
       try {
+        const hasStatus = item.trangThaiXuLy !== undefined;
+        const hasExp = item.giaiTrinh !== undefined;
+        const hasExpDetail = item.giaiTrinhChiTiet !== undefined;
+        const hasPending = item.isPending !== undefined;
+
         sqliteEngine.prepare(`
-          INSERT INTO order_operational_state (row_key, cskh_status, explanation, is_pending, updated_at)
-          VALUES (?, ?, ?, ?, ?)
+          INSERT INTO order_operational_state (row_key, cskh_status, explanation, explanation_detail, is_pending, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?)
           ON CONFLICT(row_key) DO UPDATE SET
-            cskh_status = excluded.cskh_status,
-            explanation = excluded.explanation,
-            is_pending = excluded.is_pending,
+            cskh_status = CASE WHEN ? = 1 THEN excluded.cskh_status ELSE order_operational_state.cskh_status END,
+            explanation = CASE WHEN ? = 1 THEN excluded.explanation ELSE order_operational_state.explanation END,
+            explanation_detail = CASE WHEN ? = 1 THEN excluded.explanation_detail ELSE order_operational_state.explanation_detail END,
+            is_pending = CASE WHEN ? = 1 THEN excluded.is_pending ELSE order_operational_state.is_pending END,
             updated_at = excluded.updated_at
         `).run(
           rowKey,
           item.trangThaiXuLy || "",
           item.giaiTrinh || "",
+          item.giaiTrinhChiTiet || null,
           item.isPending ? 1 : 0,
-          item.updatedAt || nowStr
+          item.updatedAt || nowStr,
+          hasStatus ? 1 : 0,
+          hasExp ? 1 : 0,
+          hasExpDetail ? 1 : 0,
+          hasPending ? 1 : 0
         );
+
+        if (hasStatus || hasExp || hasExpDetail) {
+          sqliteEngine.prepare(`
+            UPDATE cancellation_orders 
+            SET trang_thai_xu_ly = CASE WHEN ? = 1 THEN ? ELSE trang_thai_xu_ly END,
+                giai_trinh = CASE WHEN ? = 1 THEN ? ELSE giai_trinh END,
+                giai_trinh_chi_tiet = CASE WHEN ? = 1 THEN ? ELSE giai_trinh_chi_tiet END,
+                updated_at = ? 
+            WHERE row_key = ?
+          `).run(
+            hasStatus ? 1 : 0, item.trangThaiXuLy || "",
+            hasExp ? 1 : 0, item.giaiTrinh || "",
+            hasExpDetail ? 1 : 0, item.giaiTrinhChiTiet || null,
+            item.updatedAt || nowStr,
+            rowKey
+          );
+        }
       } catch (e) {}
     }
   });
@@ -2001,10 +2033,17 @@ async function insertRecordsAsync(records, metadata = {}) {
 }
 
 async function updateOrderNoteAsync(rowKey, noteData = {}) {
+  const existing = memoryOrders.find(o => o.rowKey === rowKey || (o.stt && rowKey && rowKey.includes(o.stt))) || {};
+  const enrichedNoteData = {
+    ...noteData,
+    currentStatus: existing.trangThaiXuLy || "",
+    currentExp: existing.giaiTrinh || "",
+    currentExpDetail: existing.giaiTrinhChiTiet || null
+  };
   const res = updateOrderNote(rowKey, noteData);
   if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
-      await tursoClient.updateOrderNoteInTurso(rowKey, noteData);
+      await tursoClient.updateOrderNoteInTurso(rowKey, enrichedNoteData);
     } catch (e) {}
   }
   bumpOperationalVersion();

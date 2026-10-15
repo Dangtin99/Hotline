@@ -94,6 +94,20 @@ async function initTursoSchema() {
           updated_at TEXT DEFAULT (datetime('now'))
         );`);
       } catch (mErr) {}
+      try {
+        await client.execute(`CREATE TABLE IF NOT EXISTS order_operational_state (
+          row_key TEXT PRIMARY KEY,
+          cskh_status TEXT DEFAULT '',
+          explanation TEXT DEFAULT '',
+          explanation_detail TEXT,
+          is_pending INTEGER DEFAULT 0,
+          pending_at TEXT,
+          updated_by TEXT,
+          updated_at TEXT DEFAULT (datetime('now'))
+        );`);
+      } catch (opErr) {}
+      try { await client.execute("ALTER TABLE cancellation_orders ADD COLUMN giai_trinh_chi_tiet TEXT;"); } catch (e) {}
+      try { await client.execute("ALTER TABLE order_operational_state ADD COLUMN explanation_detail TEXT;"); } catch (e) {}
       isSchemaInitialized = true;
       return;
     } catch (checkErr) {
@@ -127,6 +141,7 @@ async function initTursoSchema() {
         ly_do_tu_choi TEXT,
         trang_thai_xu_ly TEXT,
         giai_trinh TEXT,
+        giai_trinh_chi_tiet TEXT,
         original_trang_thai TEXT,
         is_auto_cancelled_3h INTEGER DEFAULT 0,
         created_at TEXT DEFAULT (datetime('now')),
@@ -190,6 +205,7 @@ async function initTursoSchema() {
         row_key TEXT PRIMARY KEY,
         cskh_status TEXT DEFAULT '',
         explanation TEXT DEFAULT '',
+        explanation_detail TEXT,
         is_pending INTEGER DEFAULT 0,
         pending_at TEXT,
         updated_by TEXT,
@@ -251,6 +267,10 @@ async function initTursoSchema() {
       );
     }
 
+    // Tự động migration thêm cột nếu bảng đã tồn tại trước đó trên Turso Cloud
+    try { await client.execute("ALTER TABLE cancellation_orders ADD COLUMN giai_trinh_chi_tiet TEXT;"); } catch (e) {}
+    try { await client.execute("ALTER TABLE order_operational_state ADD COLUMN explanation_detail TEXT;"); } catch (e) {}
+
     isSchemaInitialized = true;
   })();
 
@@ -287,6 +307,7 @@ function mapTursoOrderRow(r) {
     lyDoTuChoi: r.ly_do_tu_choi,
     trangThaiXuLy: r.trang_thai_xu_ly,
     giaiTrinh: r.giai_trinh,
+    giaiTrinhChiTiet: (r.giai_trinh_chi_tiet !== undefined && r.giai_trinh_chi_tiet !== null && r.giai_trinh_chi_tiet !== "") ? r.giai_trinh_chi_tiet : null,
     originalTrangThaiDonHang: r.original_trang_thai,
     isAutoCancelledBy3h: r.is_auto_cancelled_3h === 1,
     createdAt: r.created_at,
@@ -391,14 +412,15 @@ async function syncOrdersToTurso(orders) {
           row_key, upload_id, file_name, stt, depot, hang_tau, ngay_huy_don, ngay_duoc_duyet,
           so_booking, so_container, trang_thai_don_hang, trang_thai_kich_hoat, thoi_gian_kich_hoat,
           ly_do_huy, loai_container, loai_don_hang, size_teus, ten_tai_xe, sdt_tai_xe,
-          ten_nha_xe, sdt_nha_xe, ly_do_tu_choi, trang_thai_xu_ly, giai_trinh,
+          ten_nha_xe, sdt_nha_xe, ly_do_tu_choi, trang_thai_xu_ly, giai_trinh, giai_trinh_chi_tiet,
           original_trang_thai, is_auto_cancelled_3h, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
         ON CONFLICT(row_key) DO UPDATE SET
           trang_thai_don_hang = excluded.trang_thai_don_hang,
           ngay_duoc_duyet = excluded.ngay_duoc_duyet,
           trang_thai_xu_ly = COALESCE(NULLIF(excluded.trang_thai_xu_ly, ''), cancellation_orders.trang_thai_xu_ly),
           giai_trinh = COALESCE(NULLIF(excluded.giai_trinh, ''), cancellation_orders.giai_trinh),
+          giai_trinh_chi_tiet = COALESCE(NULLIF(excluded.giai_trinh_chi_tiet, ''), cancellation_orders.giai_trinh_chi_tiet),
           is_auto_cancelled_3h = excluded.is_auto_cancelled_3h,
           updated_at = datetime('now');
       `,
@@ -409,6 +431,7 @@ async function syncOrdersToTurso(orders) {
         o.thoiGianKichHoat || "", o.lyDoHuy || "", o.loaiContainer || "", o.loaiDonHang || "",
         Number(o.sizeTeus) || 0, o.tenTaiXe || "", o.sdtTaiXe || "", o.tenNhaXe || "",
         o.sdtNhaXe || "", o.lyDoTuChoi || "", o.trangThaiXuLy || "", o.giaiTrinh || "",
+        o.giaiTrinhChiTiet || null,
         o.originalTrangThaiDonHang || "", o.isAutoCancelledBy3h ? 1 : 0
       ]
     }));
@@ -430,14 +453,17 @@ async function updateOrderNoteInTurso(rowKey, noteData = {}) {
     const nowStr = new Date().toISOString().replace("T", " ").substring(0, 19);
     const hasStatus = noteData.status !== undefined;
     const hasExp = noteData.giaiTrinh !== undefined;
+    const hasExpDetail = noteData.giaiTrinhChiTiet !== undefined;
     const statusVal = hasStatus ? (noteData.status || "") : "";
     const expVal = hasExp ? (noteData.giaiTrinh || "") : "";
+    const expDetailVal = hasExpDetail ? (noteData.giaiTrinhChiTiet !== null && String(noteData.giaiTrinhChiTiet).trim() !== "" ? String(noteData.giaiTrinhChiTiet).trim() : null) : null;
 
     // 1. Cập nhật vào cancellation_orders (tương thích ngược)
     await client.execute({
       sql: `UPDATE cancellation_orders 
             SET trang_thai_xu_ly = CASE WHEN ? = 1 THEN ? ELSE trang_thai_xu_ly END,
                 giai_trinh = CASE WHEN ? = 1 THEN ? ELSE giai_trinh END,
+                giai_trinh_chi_tiet = CASE WHEN ? = 1 THEN ? ELSE giai_trinh_chi_tiet END,
                 updated_at = ?
             WHERE row_key = ?`,
       args: [
@@ -445,27 +471,36 @@ async function updateOrderNoteInTurso(rowKey, noteData = {}) {
         statusVal,
         hasExp ? 1 : 0,
         expVal,
+        hasExpDetail ? 1 : 0,
+        expDetailVal,
         nowStr,
         rowKey
       ]
     });
 
+    const insertStatus = hasStatus ? statusVal : (noteData.currentStatus || "");
+    const insertExp = hasExp ? expVal : (noteData.currentExp || "");
+    const insertExpDetail = hasExpDetail ? expDetailVal : (noteData.currentExpDetail || null);
+
     // 2. Cập nhật vào bảng chuẩn hóa order_operational_state
     // Nếu trường được truyền vào (kể cả rỗng ""), cập nhật đúng giá trị đó; nếu không truyền thì giữ nguyên giá trị cũ
     await client.execute({
-      sql: `INSERT INTO order_operational_state (row_key, cskh_status, explanation, updated_at)
-            VALUES (?, ?, ?, ?)
+      sql: `INSERT INTO order_operational_state (row_key, cskh_status, explanation, explanation_detail, updated_at)
+            VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(row_key) DO UPDATE SET
               cskh_status = CASE WHEN ? = 1 THEN excluded.cskh_status ELSE order_operational_state.cskh_status END,
               explanation = CASE WHEN ? = 1 THEN excluded.explanation ELSE order_operational_state.explanation END,
+              explanation_detail = CASE WHEN ? = 1 THEN excluded.explanation_detail ELSE order_operational_state.explanation_detail END,
               updated_at = excluded.updated_at;`,
       args: [
         rowKey,
-        statusVal,
-        expVal,
+        insertStatus,
+        insertExp,
+        insertExpDetail,
         nowStr,
         hasStatus ? 1 : 0,
-        hasExp ? 1 : 0
+        hasExp ? 1 : 0,
+        hasExpDetail ? 1 : 0
       ]
     });
 
@@ -528,6 +563,7 @@ async function getAllOperationalStatesFromTurso() {
         rowKey: r.row_key,
         cskhStatus: r.cskh_status,
         explanation: r.explanation,
+        explanationDetail: (r.explanation_detail !== undefined && r.explanation_detail !== null && r.explanation_detail !== "") ? r.explanation_detail : null,
         isPending: r.is_pending === 1,
         pendingAt: r.pending_at,
         updatedAt: r.updated_at
@@ -1061,7 +1097,7 @@ async function getOperationalUpdatesFromTurso(since) {
   if (!client) return null;
   try {
     await initTursoSchema();
-    let sql = "SELECT row_key, is_pending, cskh_status, explanation, updated_at FROM order_operational_state";
+    let sql = "SELECT row_key, is_pending, cskh_status, explanation, explanation_detail, updated_at FROM order_operational_state";
     const args = [];
     if (since && typeof since === "string" && since.trim()) {
       sql += " WHERE datetime(updated_at) > datetime(?)";
@@ -1075,6 +1111,7 @@ async function getOperationalUpdatesFromTurso(since) {
           updates[r.row_key] = {
             trangThaiXuLy: r.cskh_status || "",
             giaiTrinh: r.explanation || "",
+            giaiTrinhChiTiet: (r.explanation_detail !== undefined && r.explanation_detail !== null && r.explanation_detail !== "") ? r.explanation_detail : null,
             isPending: Number(r.is_pending) === 1,
             updatedAt: r.updated_at || ""
           };

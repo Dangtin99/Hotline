@@ -131,9 +131,16 @@ async function checkAndSyncDashboardUpdates() {
         Object.entries(updates).forEach(([rowKey, item]) => {
           const matched = (currentRecords || []).filter(r => (r.rowKey === rowKey || (r.stt && rowKey.includes(r.stt))));
           matched.forEach(rec => {
-            if (rec.trangThaiXuLy !== item.trangThaiXuLy || rec.giaiTrinh !== item.giaiTrinh) {
+            if (item.trangThaiXuLy !== undefined && rec.trangThaiXuLy !== item.trangThaiXuLy) {
               rec.trangThaiXuLy = item.trangThaiXuLy || "";
+              hasChanged = true;
+            }
+            if (item.giaiTrinh !== undefined && rec.giaiTrinh !== item.giaiTrinh) {
               rec.giaiTrinh = item.giaiTrinh || "";
+              hasChanged = true;
+            }
+            if (item.giaiTrinhChiTiet !== undefined && rec.giaiTrinhChiTiet !== item.giaiTrinhChiTiet) {
+              rec.giaiTrinhChiTiet = item.giaiTrinhChiTiet || null;
               hasChanged = true;
             }
           });
@@ -142,8 +149,9 @@ async function checkAndSyncDashboardUpdates() {
           if (Array.isArray(masterDashboardRecords)) {
             const matchedMaster = masterDashboardRecords.filter(r => (r.rowKey === rowKey || (r.stt && rowKey.includes(r.stt))));
             matchedMaster.forEach(rec => {
-              rec.trangThaiXuLy = item.trangThaiXuLy || "";
-              rec.giaiTrinh = item.giaiTrinh || "";
+              if (item.trangThaiXuLy !== undefined) rec.trangThaiXuLy = item.trangThaiXuLy || "";
+              if (item.giaiTrinh !== undefined) rec.giaiTrinh = item.giaiTrinh || "";
+              if (item.giaiTrinhChiTiet !== undefined) rec.giaiTrinhChiTiet = item.giaiTrinhChiTiet || null;
             });
           }
         });
@@ -1839,9 +1847,6 @@ function renderHourlyDashboardSection(records = []) {
         b.classList.toggle("active", b.getAttribute("data-depot") === currentHourlyDepot);
       });
 
-      // Highlight dòng tương ứng trong bảng chi tiết
-      highlightHourlyBreakdownRow(currentHourlyDepot);
-
       // Render lại biểu đồ cho Depot vừa chọn
       renderHourlyDepotChart(currentHourlyDepot, records);
     };
@@ -1850,21 +1855,16 @@ function renderHourlyDashboardSection(records = []) {
   // 4. Khởi tạo & Gán sự kiện cho các nút điều khiển chế độ xem (View Mode Controls)
   initHourlyViewControls(records);
 
-  // 5. Render Bảng Tổng Hợp Chi Tiết Các Depot Phân Quyền
-  renderHourlyDepotBreakdownTable(depots, records);
-
-  // 6. Render biểu đồ cho depot hiện tại
+  // 5. Render biểu đồ cho depot hiện tại
   renderHourlyDepotChart(currentHourlyDepot, records);
 }
 
-// Khởi tạo các sự kiện cho bộ điều khiển thể hiện biểu đồ (Line/Bar, Toggle Total, Toggle Table)
+// Khởi tạo các sự kiện cho bộ điều khiển thể hiện biểu đồ (Line/Bar, Toggle Total)
 function initHourlyViewControls(records = []) {
   const btnLine = document.getElementById("btnHourlyViewLine");
   const btnBar = document.getElementById("btnHourlyViewBar");
   const btnToggleTotal = document.getElementById("btnHourlyToggleTotal");
   const txtToggleTotal = document.getElementById("txtHourlyToggleTotal");
-  const btnToggleTable = document.getElementById("btnHourlyToggleTable");
-  const tableWrapper = document.getElementById("hourlyDepotBreakdownWrapper");
 
   if (btnLine && btnBar) {
     btnLine.onclick = () => {
@@ -1911,233 +1911,6 @@ function initHourlyViewControls(records = []) {
       renderHourlyDepotChart(currentHourlyDepot, records);
     };
   }
-
-  if (btnToggleTable && tableWrapper) {
-    btnToggleTable.onclick = () => {
-      showHourlyDepotTable = !showHourlyDepotTable;
-      if (showHourlyDepotTable) {
-        tableWrapper.style.display = "block";
-        btnToggleTable.classList.add("active");
-        btnToggleTable.style.background = "#eff6ff";
-        btnToggleTable.style.color = "#1d4ed8";
-        btnToggleTable.style.borderColor = "#bfdbfe";
-      } else {
-        tableWrapper.style.display = "none";
-        btnToggleTable.classList.remove("active");
-        btnToggleTable.style.background = "#ffffff";
-        btnToggleTable.style.color = "#475569";
-        btnToggleTable.style.borderColor = "#cbd5e1";
-      }
-    };
-  }
-}
-
-// Render Bảng Thống Kê Tổng Hợp Chi Tiết Các Depot Được Phân Quyền
-function renderHourlyDepotBreakdownTable(depots = [], records = []) {
-  const wrapper = document.getElementById("hourlyDepotBreakdownWrapper");
-  if (!wrapper) return;
-
-  if (!showHourlyDepotTable) {
-    wrapper.style.display = "none";
-  } else {
-    wrapper.style.display = "block";
-  }
-
-  if (!depots || depots.length === 0) {
-    wrapper.innerHTML = `<div style="padding: 12px; color: #ef4444; font-size: 13px;">Không có dữ liệu Depot phân quyền.</div>`;
-    return;
-  }
-
-  const { isRestricted, user } = getUserAuthorizedDepots(records);
-
-  // Tính toán số liệu thống kê cho từng Depot
-  let grandCancelled = 0;
-  let grandUnpaid = 0;
-  let grandTotal = 0;
-
-  const depotStats = depots.map(d => {
-    const dRecs = getRecordsForHourlyDepot(d, records);
-    const cancelCount = dRecs.filter(isCancelledOrder).length;
-    const unpaidCount = dRecs.filter(isUnpaidOrder).length;
-    const totalCount = cancelCount + unpaidCount;
-
-    grandCancelled += cancelCount;
-    grandUnpaid += unpaidCount;
-    grandTotal += totalCount;
-
-    // Tìm giờ cao điểm của riêng depot này
-    const hourlyCounts = Array(24).fill(0);
-    const dateTypeVal = (filterDateType && filterDateType.value) || "ngayHuy";
-    dRecs.forEach(r => {
-      if (!r) return;
-      const rawDate = dateTypeVal === "ngayDuyet" ? (r.ngayDuocDuyet || r.ngayHuyDon) : (r.ngayHuyDon || r.ngayDuocDuyet);
-      const h = extractHour(rawDate);
-      if (h !== null && h >= 0 && h <= 23) {
-        if (isCancelledOrder(r) || isUnpaidOrder(r)) {
-          hourlyCounts[h]++;
-        }
-      }
-    });
-
-    let peakH = "-";
-    let maxH = 0;
-    for (let i = 0; i < 24; i++) {
-      if (hourlyCounts[i] > maxH) {
-        maxH = hourlyCounts[i];
-        const nextH = (i + 1).toString().padStart(2, "0");
-        peakH = `${i.toString().padStart(2, "0")}:00 - ${nextH}:00 (${maxH} đơn)`;
-      }
-    }
-
-    return {
-      depot: d,
-      cancelCount,
-      unpaidCount,
-      totalCount,
-      peakH
-    };
-  });
-
-  // Render HTML Bảng Phân Tích
-  const rowsHtml = depotStats.map((st, idx) => {
-    const isSelected = currentHourlyDepot === st.depot;
-    const cancelRate = st.totalCount > 0 ? ((st.cancelCount / st.totalCount) * 100).toFixed(1) : "0.0";
-    const shareOfGrand = grandTotal > 0 ? ((st.totalCount / grandTotal) * 100).toFixed(1) : "0.0";
-
-    return `
-      <tr class="${isSelected ? 'row-selected' : ''}" data-depot="${st.depot}" style="cursor: pointer;">
-        <td style="text-align: center; color: #64748b; font-weight: 600;">${idx + 1}</td>
-        <td>
-          <strong style="color: #1d4ed8; font-size: 13.5px;">Depot ${st.depot}</strong>
-        </td>
-        <td>
-          <span class="badge" style="background: #f1f5f9; color: #475569; font-size: 11px; padding: 2px 8px; border-radius: 4px;">
-            ${isRestricted ? "Được phân quyền" : "Toàn quyền"}
-          </span>
-        </td>
-        <td style="text-align: right; font-weight: 700; color: #dc2626;">${st.cancelCount.toLocaleString("vi-VN")}</td>
-        <td style="text-align: right; font-weight: 700; color: #d97706;">${st.unpaidCount.toLocaleString("vi-VN")}</td>
-        <td style="text-align: right; font-weight: 800; color: #0f172a;">${st.totalCount.toLocaleString("vi-VN")}</td>
-        <td style="text-align: center; font-size: 12px; color: #334155;">${st.peakH}</td>
-        <td style="text-align: right; font-size: 12.5px; font-weight: 600; color: #64748b;">${shareOfGrand}%</td>
-        <td style="text-align: center;">
-          <button type="button" 
-                  class="btn btn-outline btn-sm btn-select-hourly-depot" 
-                  data-depot="${st.depot}" 
-                  style="font-size: 11.5px; padding: 3px 10px; border-color: #cbd5e1; background: #ffffff;"
-                  title="Xem biểu đồ 24h của Depot ${st.depot}">
-            ${isSelected ? "Đang xem" : "Xem 24h"}
-          </button>
-        </td>
-      </tr>
-    `;
-  }).join("");
-
-  wrapper.innerHTML = `
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-      <h4 style="margin: 0; font-size: 14px; font-weight: 700; color: #0f172a;">
-        Bảng Tổng Hợp Chi Tiết Theo Depot Được Phân Quyền (${depots.length} Depot)
-      </h4>
-      <span style="font-size: 12px; color: #64748b;">
-        Nhấn vào dòng hoặc nút [Xem 24h] để xem chi tiết biểu đồ theo từng Depot
-      </span>
-    </div>
-
-    <div class="hourly-breakdown-table-wrapper">
-      <table class="hourly-breakdown-table">
-        <thead>
-          <tr>
-            <th style="width: 50px; text-align: center;">STT</th>
-            <th style="width: 130px;">Depot</th>
-            <th style="width: 140px;">Quyền Truy Cập</th>
-            <th style="width: 110px; text-align: right;">Đơn Hủy</th>
-            <th style="width: 140px; text-align: right;">Chưa Thanh Toán</th>
-            <th style="width: 130px; text-align: right;">Tổng Phát Sinh</th>
-            <th style="width: 190px; text-align: center;">Giờ Cao Điểm</th>
-            <th style="width: 120px; text-align: right;">Tỷ Trọng (%)</th>
-            <th style="width: 120px; text-align: center;">Thao Tác</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rowsHtml}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td colspan="3" style="text-align: right; padding-right: 14px;">TỔNG CỘNG PHÂN QUYỀN:</td>
-            <td style="text-align: right; color: #dc2626;">${grandCancelled.toLocaleString("vi-VN")}</td>
-            <td style="text-align: right; color: #d97706;">${grandUnpaid.toLocaleString("vi-VN")}</td>
-            <td style="text-align: right; color: #0f172a; font-size: 14px;">${grandTotal.toLocaleString("vi-VN")}</td>
-            <td style="text-align: center; color: #64748b;">-</td>
-            <td style="text-align: right;">100.0%</td>
-            <td style="text-align: center;">
-              <button type="button" 
-                      class="btn btn-sm btn-select-hourly-depot" 
-                      data-depot="ALL" 
-                      style="font-size: 11.5px; padding: 3px 10px; background: #0f172a; color: #ffffff; border: none; border-radius: 4px; font-weight: 600;"
-                      title="Xem biểu đồ tổng của tất cả các depot phân quyền">
-                Xem Tất Cả
-              </button>
-            </td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-  `;
-
-  // Gán sự kiện click cho các dòng và nút trong bảng tổng hợp
-  wrapper.querySelectorAll(".btn-select-hourly-depot").forEach(btn => {
-    btn.onclick = (e) => {
-      e.stopPropagation();
-      const targetDepot = btn.getAttribute("data-depot");
-      if (!targetDepot) return;
-      selectHourlyDepot(targetDepot, records);
-    };
-  });
-
-  wrapper.querySelectorAll("tbody tr").forEach(tr => {
-    tr.onclick = () => {
-      const targetDepot = tr.getAttribute("data-depot");
-      if (!targetDepot) return;
-      selectHourlyDepot(targetDepot, records);
-    };
-  });
-}
-
-// Hàm chọn depot đồng bộ giữa tabs, bảng và biểu đồ
-function selectHourlyDepot(targetDepot, records = []) {
-  currentHourlyDepot = targetDepot;
-
-  // Cập nhật class active cho tabs
-  const tabsContainer = document.getElementById("hourlyDepotTabsList");
-  if (tabsContainer) {
-    tabsContainer.querySelectorAll(".depot-tab-btn").forEach(b => {
-      b.classList.toggle("active", b.getAttribute("data-depot") === currentHourlyDepot);
-    });
-  }
-
-  // Cập nhật class row-selected trong bảng
-  highlightHourlyBreakdownRow(currentHourlyDepot);
-
-  // Render lại biểu đồ
-  renderHourlyDepotChart(currentHourlyDepot, records);
-}
-
-// Highlight dòng được chọn trong bảng tổng hợp
-function highlightHourlyBreakdownRow(selectedDepot) {
-  const wrapper = document.getElementById("hourlyDepotBreakdownWrapper");
-  if (!wrapper) return;
-  wrapper.querySelectorAll("tbody tr").forEach(tr => {
-    const d = tr.getAttribute("data-depot");
-    const isSelected = selectedDepot === d;
-    tr.classList.toggle("row-selected", isSelected);
-    const btn = tr.querySelector(".btn-select-hourly-depot");
-    if (btn) {
-      btn.textContent = isSelected ? "Đang xem" : "Xem 24h";
-      btn.style.background = isSelected ? "#1d4ed8" : "#ffffff";
-      btn.style.color = isSelected ? "#ffffff" : "#334155";
-      btn.style.borderColor = isSelected ? "#1d4ed8" : "#cbd5e1";
-    }
-  });
 }
 
 // Tính toán dữ liệu 24 khung giờ và vẽ biểu đồ (Line hoặc Bar Chart)
