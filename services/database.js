@@ -221,6 +221,8 @@ try {
     CREATE INDEX IF NOT EXISTS idx_cancel_depot_date ON cancellation_orders(depot, ngay_huy_don DESC);
     CREATE INDEX IF NOT EXISTS idx_cancel_book_cont ON cancellation_orders(so_booking, so_container);
   `);
+  try { sqliteEngine.prepare("ALTER TABLE cancellation_orders ADD COLUMN giai_trinh_chi_tiet TEXT;").run(); } catch (e) {}
+  try { sqliteEngine.prepare("ALTER TABLE order_operational_state ADD COLUMN explanation_detail TEXT;").run(); } catch (e) {}
   console.log("Đã kết nối cơ sở dữ liệu SQLite thành công (cancellation_orders.db)");
 } catch (e) {
   console.log("Sử dụng File-backed SQL Store & Đồng bộ hóa SQL Dump script:", e.message);
@@ -582,7 +584,8 @@ function getAllRecords() {
       stt: String(idx + 1),
       isPending: op ? op.is_pending === 1 : Boolean(o.isPending),
       trangThaiXuLy: (op && op.cskh_status !== undefined && op.cskh_status !== null) ? op.cskh_status : (o.trangThaiXuLy || ""),
-      giaiTrinh: (op && op.explanation !== undefined && op.explanation !== null) ? op.explanation : (o.giaiTrinh || "")
+      giaiTrinh: (op && op.explanation !== undefined && op.explanation !== null) ? op.explanation : (o.giaiTrinh || ""),
+      giaiTrinhChiTiet: (op && op.explanation_detail !== undefined) ? op.explanation_detail : (o.giaiTrinhChiTiet !== undefined ? o.giaiTrinhChiTiet : null)
     };
   });
 }
@@ -601,21 +604,24 @@ function updateOrderNote(rowKey, noteData = {}) {
   const nowStr = new Date().toISOString().replace("T", " ").substring(0, 19);
   const hasStatus = noteData.status !== undefined;
   const hasExp = noteData.giaiTrinh !== undefined;
+  const hasExpDetail = noteData.giaiTrinhChiTiet !== undefined;
   const statusVal = hasStatus ? (noteData.status || "") : "";
   const expVal = hasExp ? (noteData.giaiTrinh || "") : "";
+  const expDetailVal = hasExpDetail ? (noteData.giaiTrinhChiTiet !== null && String(noteData.giaiTrinhChiTiet).trim() !== "" ? String(noteData.giaiTrinhChiTiet).trim() : null) : null;
 
   if (matched.length === 0 && rowKey) {
     if (sqliteEngine) {
       try {
         const stmtOp = sqliteEngine.prepare(`
-          INSERT INTO order_operational_state (row_key, cskh_status, explanation, updated_at)
-          VALUES (?, ?, ?, ?)
+          INSERT INTO order_operational_state (row_key, cskh_status, explanation, explanation_detail, updated_at)
+          VALUES (?, ?, ?, ?, ?)
           ON CONFLICT(row_key) DO UPDATE SET
             cskh_status = CASE WHEN ? = 1 THEN excluded.cskh_status ELSE order_operational_state.cskh_status END,
             explanation = CASE WHEN ? = 1 THEN excluded.explanation ELSE order_operational_state.explanation END,
+            explanation_detail = CASE WHEN ? = 1 THEN excluded.explanation_detail ELSE order_operational_state.explanation_detail END,
             updated_at = excluded.updated_at
         `);
-        stmtOp.run(rowKey, statusVal, expVal, nowStr, hasStatus ? 1 : 0, hasExp ? 1 : 0);
+        stmtOp.run(rowKey, statusVal, expVal, expDetailVal, nowStr, hasStatus ? 1 : 0, hasExp ? 1 : 0, hasExpDetail ? 1 : 0);
       } catch (e) {}
     }
     if (tursoClient) {
@@ -631,6 +637,7 @@ function updateOrderNote(rowKey, noteData = {}) {
 
     if (hasStatus) item.trangThaiXuLy = statusVal;
     if (hasExp) item.giaiTrinh = expVal;
+    if (hasExpDetail) item.giaiTrinhChiTiet = expDetailVal;
     item.updatedAt = nowStr;
 
     if (sqliteEngine) {
@@ -640,21 +647,23 @@ function updateOrderNote(rowKey, noteData = {}) {
           UPDATE cancellation_orders 
           SET trang_thai_xu_ly = CASE WHEN ? = 1 THEN ? ELSE trang_thai_xu_ly END,
               giai_trinh = CASE WHEN ? = 1 THEN ? ELSE giai_trinh END,
+              giai_trinh_chi_tiet = CASE WHEN ? = 1 THEN ? ELSE giai_trinh_chi_tiet END,
               updated_at = ? 
           WHERE row_key = ?
         `);
-        stmt.run(hasStatus ? 1 : 0, statusVal, hasExp ? 1 : 0, expVal, nowStr, item.rowKey);
+        stmt.run(hasStatus ? 1 : 0, statusVal, hasExp ? 1 : 0, expVal, hasExpDetail ? 1 : 0, expDetailVal, nowStr, item.rowKey);
 
         // 2. Cập nhật bảng chuẩn hóa order_operational_state
         const stmtOp = sqliteEngine.prepare(`
-          INSERT INTO order_operational_state (row_key, cskh_status, explanation, updated_at)
-          VALUES (?, ?, ?, ?)
+          INSERT INTO order_operational_state (row_key, cskh_status, explanation, explanation_detail, updated_at)
+          VALUES (?, ?, ?, ?, ?)
           ON CONFLICT(row_key) DO UPDATE SET
             cskh_status = CASE WHEN ? = 1 THEN excluded.cskh_status ELSE order_operational_state.cskh_status END,
             explanation = CASE WHEN ? = 1 THEN excluded.explanation ELSE order_operational_state.explanation END,
+            explanation_detail = CASE WHEN ? = 1 THEN excluded.explanation_detail ELSE order_operational_state.explanation_detail END,
             updated_at = excluded.updated_at
         `);
-        stmtOp.run(item.rowKey, statusVal, expVal, nowStr, hasStatus ? 1 : 0, hasExp ? 1 : 0);
+        stmtOp.run(item.rowKey, statusVal, expVal, expDetailVal, nowStr, hasStatus ? 1 : 0, hasExp ? 1 : 0, hasExpDetail ? 1 : 0);
 
         // 3. Ghi audit log
         const stmtAudit = sqliteEngine.prepare(`
@@ -724,12 +733,13 @@ function getOperationalUpdates() {
   const updates = {};
   if (sqliteEngine) {
     try {
-      const rows = sqliteEngine.prepare("SELECT row_key, is_pending, cskh_status, explanation, updated_at FROM order_operational_state").all();
+      const rows = sqliteEngine.prepare("SELECT row_key, is_pending, cskh_status, explanation, explanation_detail, updated_at FROM order_operational_state").all();
       rows.forEach(r => {
         if (r.row_key) {
           updates[r.row_key] = {
             trangThaiXuLy: r.cskh_status || "",
             giaiTrinh: r.explanation || "",
+            giaiTrinhChiTiet: (r.explanation_detail !== undefined && r.explanation_detail !== null && r.explanation_detail !== "") ? r.explanation_detail : null,
             isPending: r.is_pending === 1,
             updatedAt: r.updated_at || ""
           };
@@ -748,6 +758,7 @@ function getOperationalUpdates() {
       updates[o.rowKey] = {
         trangThaiXuLy: o.trangThaiXuLy || "",
         giaiTrinh: o.giaiTrinh || "",
+        giaiTrinhChiTiet: (o.giaiTrinhChiTiet !== undefined && o.giaiTrinhChiTiet !== null && o.giaiTrinhChiTiet !== "") ? o.giaiTrinhChiTiet : null,
         isPending: Boolean(o.isPending),
         updatedAt: o.updatedAt || ""
       };
@@ -1884,6 +1895,7 @@ function insertManualOrder(orderData) {
     lyDoTuChoi: (orderData.lyDoTuChoi || "").trim(),
     trangThaiXuLy: (orderData.trangThaiXuLy || "").trim(),
     giaiTrinh: (orderData.giaiTrinh || "").trim(),
+    giaiTrinhChiTiet: (orderData.giaiTrinhChiTiet !== undefined && orderData.giaiTrinhChiTiet !== null && String(orderData.giaiTrinhChiTiet).trim() !== "") ? String(orderData.giaiTrinhChiTiet).trim() : null,
     // Khi không có Container/Booking, dùng manualId để rowKey không bị trùng
     _manualId: (!soContainer && !orderData.soBooking) ? manualId : undefined
   };
@@ -1931,7 +1943,8 @@ async function getAllRecordsAsync(forceRefresh = false) {
             stt: String(idx + 1),
             isPending: op ? op.isPending : Boolean(o.isPending),
             trangThaiXuLy: (op && op.cskhStatus !== undefined && op.cskhStatus !== null) ? op.cskhStatus : (o.trangThaiXuLy || ""),
-            giaiTrinh: (op && op.explanation !== undefined && op.explanation !== null) ? op.explanation : (o.giaiTrinh || "")
+            giaiTrinh: (op && op.explanation !== undefined && op.explanation !== null) ? op.explanation : (o.giaiTrinh || ""),
+            giaiTrinhChiTiet: (op && op.explanationDetail !== undefined) ? (op.explanationDetail || null) : (o.giaiTrinhChiTiet || null)
           };
         });
       }
@@ -2325,6 +2338,7 @@ async function getDashboardDataAsync(params = {}) {
           lyDoTuChoi: r.ly_do_tu_choi,
           trangThaiXuLy: r.trang_thai_xu_ly,
           giaiTrinh: r.giai_trinh,
+          giaiTrinhChiTiet: r.giai_trinh_chi_tiet || null,
           createdAt: r.created_at
         }));
       } catch (e) {}
@@ -2344,7 +2358,8 @@ async function getDashboardDataAsync(params = {}) {
       ...o,
       isPending: op ? op.isPending : Boolean(o.isPending),
       trangThaiXuLy: (op && op.cskhStatus !== undefined && op.cskhStatus !== null) ? op.cskhStatus : (o.trangThaiXuLy || ""),
-      giaiTrinh: (op && op.explanation !== undefined && op.explanation !== null) ? op.explanation : (o.giaiTrinh || "")
+      giaiTrinh: (op && op.explanation !== undefined && op.explanation !== null) ? op.explanation : (o.giaiTrinh || ""),
+      giaiTrinhChiTiet: (op && op.explanationDetail !== undefined) ? op.explanationDetail : (o.giaiTrinhChiTiet !== undefined ? o.giaiTrinhChiTiet : null)
     };
   });
 

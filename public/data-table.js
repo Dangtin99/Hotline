@@ -229,9 +229,9 @@ function isUnpaidOrder(r) {
 function isCancelledStatus(val) {
   if (!val) return false;
   const raw = String(val).trim().toLowerCase();
-  if (raw === "đã hủy" || raw === "đã huỷ" || raw === "hủy" || raw === "huỷ") return true;
+  if (raw === "đã hủy" || raw === "đã huỷ" || raw === "hủy" || raw === "huỷ" || raw === "từ chối duyệt" || raw.includes("hoàn tiền") || raw.includes("hoan tien")) return true;
   const s = raw.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").trim();
-  return s === "da huy" || s === "huy" || s.includes("da huy");
+  return s === "da huy" || s === "huy" || s.includes("da huy") || s.includes("tu choi duyet") || s.includes("hoan tien");
 }
 
 // Kiểm tra xem đơn hàng có trạng thái Đã Hủy hay không
@@ -919,11 +919,9 @@ function buildExplanationString(group, detail) {
 }
 
 /**
- * Hàm lưu Giải Trình trung tâm với cơ chế debounce
+ * Hàm lưu Nhóm Giải Trình (Cột Giải Trình)
  */
-let expDebounceTimer = null;
-function saveExplanationValue(rowKey, fullVal, triggerElem, instant = false) {
-  // Cập nhật cho tất cả bản ghi tương ứng trong mảng allRecords (chung cho cả tab Tất Cả, Đơn Chưa Thanh Toán, Đơn Hủy, Chờ Xử Lý)
+function saveReasonGroupValue(rowKey, groupVal, triggerElem, instant = true) {
   let matchedRecs = allRecords.filter(r => 
     (rowKey && (r.rowKey === rowKey || getRowKey(r) === rowKey))
   );
@@ -935,8 +933,9 @@ function saveExplanationValue(rowKey, fullVal, triggerElem, instant = false) {
     });
   }
 
+  const finalGroup = groupVal ? groupVal.trim() : null;
   matchedRecs.forEach(rec => {
-    rec.giaiTrinh = fullVal;
+    rec.giaiTrinh = finalGroup;
   });
 
   const targetRec = matchedRecs[0];
@@ -946,32 +945,104 @@ function saveExplanationValue(rowKey, fullVal, triggerElem, instant = false) {
         (targetRec.soContainer && r.soContainer === targetRec.soContainer && (!targetRec.soBooking || r.soBooking === targetRec.soBooking)) ||
         (targetRec.soBooking && !targetRec.soContainer && r.soBooking === targetRec.soBooking)
       ) {
-        r.giaiTrinh = fullVal;
+        r.giaiTrinh = finalGroup;
       }
     });
   }
 
-  // Đồng bộ giao diện tức thì cho các dòng hiển thị cùng bản ghi / cùng số cont & booking
-  const parsed = parseExplanationValue(fullVal);
+  // Đồng bộ giao diện tức thì
   const tbody = document.getElementById("tbodyFullData") || document.getElementById("tbodyMainOrders");
   if (tbody) {
     matchedRecs.forEach(rec => {
       const k = rec.rowKey || getRowKey(rec);
       const rowTrs = tbody.querySelectorAll(`tr[data-rowkey="${CSS.escape ? CSS.escape(k) : k}"]`);
       rowTrs.forEach(rowTr => {
-        const expContainer = rowTr.querySelector(".explanation-cell-container");
-        if (expContainer) {
-          const selGrp = expContainer.querySelector(".select-reason-group");
-          const inDetail = expContainer.querySelector(".input-reason-detail");
-          if (selGrp && selGrp !== triggerElem && selGrp.value !== parsed.group) {
-            selGrp.value = parsed.group;
-          }
-          if (inDetail && inDetail !== triggerElem && inDetail.value !== parsed.detail) {
-            inDetail.value = parsed.detail;
-          }
-          if (inDetail) {
-            inDetail.style.display = (parsed.group && parsed.group.startsWith("Khác") ? "block" : "none");
-          }
+        const selGrp = rowTr.querySelector(".select-reason-group");
+        if (selGrp && selGrp !== triggerElem && selGrp.value !== (finalGroup || "")) {
+          selGrp.value = finalGroup || "";
+        }
+      });
+    });
+  }
+
+  const notes = getSavedNotes();
+  const saveToNoteObj = (k) => {
+    if (!notes[k]) notes[k] = {};
+    notes[k].giaiTrinh = finalGroup;
+  };
+  if (rowKey) saveToNoteObj(rowKey);
+  matchedRecs.forEach(rec => {
+    const k1 = getRowKey(rec);
+    const k2 = `${rec.stt}_${rec.soBooking || ''}_${rec.soContainer || ''}`;
+    if (k1) saveToNoteObj(k1);
+    if (k2) saveToNoteObj(k2);
+  });
+  saveNotes(notes);
+
+  fetch("/api/orders/note", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rowKey, giaiTrinh: finalGroup })
+  }).then(res => res.json()).then(data => {
+    if (data && data.version) {
+      localOperationalVersion = data.version;
+    }
+  }).catch(() => {});
+
+  if (triggerElem) {
+    triggerElem.classList.add("saved-pulse");
+    setTimeout(() => triggerElem.classList.remove("saved-pulse"), 600);
+  }
+}
+
+/**
+ * Hàm lưu Chi Tiết Giải Trình (Cột Giải Trình Chi Tiết) với debounce
+ * Khi xóa rỗng (empty string) lưu chính xác là null
+ */
+let expDetailDebounceTimer = null;
+function saveExplanationDetailValue(rowKey, detailVal, triggerElem, instant = false) {
+  let matchedRecs = allRecords.filter(r => 
+    (rowKey && (r.rowKey === rowKey || getRowKey(r) === rowKey))
+  );
+
+  if (matchedRecs.length === 0 && rowKey) {
+    matchedRecs = allRecords.filter(r => {
+      const alt = `${r.stt}_${r.soBooking || ''}_${r.soContainer || ''}`;
+      return alt === rowKey;
+    });
+  }
+
+  // Khi rỗng thì lưu rõ ràng là null
+  const finalDetail = (detailVal !== null && detailVal !== undefined && String(detailVal).trim() !== "") 
+    ? String(detailVal).trim() 
+    : null;
+
+  matchedRecs.forEach(rec => {
+    rec.giaiTrinhChiTiet = finalDetail;
+  });
+
+  const targetRec = matchedRecs[0];
+  if (targetRec && (targetRec.soContainer || targetRec.soBooking)) {
+    allRecords.forEach(r => {
+      if (
+        (targetRec.soContainer && r.soContainer === targetRec.soContainer && (!targetRec.soBooking || r.soBooking === targetRec.soBooking)) ||
+        (targetRec.soBooking && !targetRec.soContainer && r.soBooking === targetRec.soBooking)
+      ) {
+        r.giaiTrinhChiTiet = finalDetail;
+      }
+    });
+  }
+
+  // Đồng bộ giao diện tức thì
+  const tbody = document.getElementById("tbodyFullData") || document.getElementById("tbodyMainOrders");
+  if (tbody) {
+    matchedRecs.forEach(rec => {
+      const k = rec.rowKey || getRowKey(rec);
+      const rowTrs = tbody.querySelectorAll(`tr[data-rowkey="${CSS.escape ? CSS.escape(k) : k}"]`);
+      rowTrs.forEach(rowTr => {
+        const inDetail = rowTr.querySelector(".input-reason-detail");
+        if (inDetail && inDetail !== triggerElem) {
+          inDetail.value = finalDetail !== null ? finalDetail : "";
         }
       });
     });
@@ -979,29 +1050,23 @@ function saveExplanationValue(rowKey, fullVal, triggerElem, instant = false) {
 
   const doSave = () => {
     const notes = getSavedNotes();
-    if (rowKey) {
-      if (!notes[rowKey]) notes[rowKey] = {};
-      notes[rowKey].giaiTrinh = fullVal;
-    }
+    const saveToNoteObj = (k) => {
+      if (!notes[k]) notes[k] = {};
+      notes[k].giaiTrinhChiTiet = finalDetail;
+    };
+    if (rowKey) saveToNoteObj(rowKey);
     matchedRecs.forEach(rec => {
       const k1 = getRowKey(rec);
       const k2 = `${rec.stt}_${rec.soBooking || ''}_${rec.soContainer || ''}`;
-      if (k1) {
-        if (!notes[k1]) notes[k1] = {};
-        notes[k1].giaiTrinh = fullVal;
-      }
-      if (k2) {
-        if (!notes[k2]) notes[k2] = {};
-        notes[k2].giaiTrinh = fullVal;
-      }
+      if (k1) saveToNoteObj(k1);
+      if (k2) saveToNoteObj(k2);
     });
     saveNotes(notes);
 
-    // Đồng bộ hóa trực tiếp vào SQL Database trên Server và cập nhật version để tránh poller ghi đè
     fetch("/api/orders/note", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rowKey, giaiTrinh: fullVal })
+      body: JSON.stringify({ rowKey, giaiTrinhChiTiet: finalDetail })
     }).then(res => res.json()).then(data => {
       if (data && data.version) {
         localOperationalVersion = data.version;
@@ -1014,54 +1079,39 @@ function saveExplanationValue(rowKey, fullVal, triggerElem, instant = false) {
     }
   };
 
-  clearTimeout(expDebounceTimer);
+  clearTimeout(expDetailDebounceTimer);
   if (instant) {
     doSave();
   } else {
-    expDebounceTimer = setTimeout(doSave, 250);
+    expDetailDebounceTimer = setTimeout(doSave, 300);
   }
 }
 
 // Xử lý khi người dùng đổi Dropdown Nhóm Lý Do
 window.onReasonGroupChange = function(selectElem) {
   const rowKey = selectElem.getAttribute("data-rowkey");
-  const selectedGroup = selectElem.value;
-  const container = selectElem.closest(".explanation-cell-container") || selectElem.closest("td");
-  const detailInput = container ? container.querySelector(".input-reason-detail") : null;
-
-  let detailVal = "";
-  if (detailInput) {
-    if (selectedGroup && selectedGroup.startsWith("Khác")) {
-      detailInput.style.display = "block";
-      detailInput.focus();
-      detailVal = detailInput.value || "";
-    } else {
-      detailInput.style.display = "none";
-      detailInput.value = "";
-      detailVal = "";
-    }
-  }
-
-  const fullVal = buildExplanationString(selectedGroup, detailVal);
-  saveExplanationValue(rowKey, fullVal, selectElem, true);
+  const selectedGroup = selectElem.value ? selectElem.value.trim() : null;
+  saveReasonGroupValue(rowKey, selectedGroup, selectElem, true);
 };
 
-// Xử lý khi người dùng nhập ghi chú chi tiết cho nhóm "Khác"
+// Xử lý khi người dùng nhập hoặc xóa ô Giải Trình Chi Tiết
 window.onReasonDetailInput = function(inputElem) {
   const rowKey = inputElem.getAttribute("data-rowkey");
-  const detailVal = inputElem.value;
-  const container = inputElem.closest(".explanation-cell-container") || inputElem.closest("td");
-  const selectElem = container ? container.querySelector(".select-reason-group") : null;
-  const currentGroup = selectElem ? selectElem.value : "Khác (Nhập chi tiết cụ thể)";
-  const fullVal = buildExplanationString(currentGroup, detailVal);
-  saveExplanationValue(rowKey, fullVal, inputElem);
+  const rawVal = inputElem.value;
+  const detailVal = rawVal.trim() === "" ? null : rawVal;
+  saveExplanationDetailValue(rowKey, detailVal, inputElem, false);
 };
 
-// Giữ lại hàm cũ onExplanationInput để tương thích ngược 100%
-window.onExplanationInput = function(inputElem) {
+window.onReasonDetailBlur = function(inputElem) {
   const rowKey = inputElem.getAttribute("data-rowkey");
-  const val = inputElem.value;
-  saveExplanationValue(rowKey, val, inputElem);
+  const rawVal = inputElem.value;
+  const detailVal = rawVal.trim() === "" ? null : rawVal;
+  saveExplanationDetailValue(rowKey, detailVal, inputElem, true);
+};
+
+// Hàm tương thích ngược
+window.onExplanationInput = function(inputElem) {
+  window.onReasonDetailInput(inputElem);
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -1386,18 +1436,18 @@ document.addEventListener("DOMContentLoaded", () => {
           </select>
         </td>
         <td>
-          <div style="display: flex; flex-direction: column; gap: 4px; min-width: 260px;">
-            <select id="manual_giaiTrinh_group" class="manual-row-select" onchange="const d=document.getElementById('manual_giaiTrinh_detail'); if(d){ d.style.display = (this.value && this.value.startsWith('Khác')) ? 'block' : 'none'; if(this.value && this.value.startsWith('Khác')) d.focus(); }" title="Nhóm lý do giải trình">
-              <option value="">-- Chọn nhóm lý do --</option>
-              ${CANCELLATION_REASON_GROUPS.map((grp, idx) => `
-                <option value="${grp}">${idx + 1}. ${grp}</option>
-              `).join("")}
-            </select>
-            <input type="text" id="manual_giaiTrinh_detail" class="manual-row-input" placeholder="Ghi chú chi tiết..." style="display: none;" title="Ghi chú chi tiết cho nhóm Khác">
-            <div style="display: flex; gap: 6px; margin-top: 2px;">
-              <button type="button" class="btn btn-primary btn-sm" id="btnSaveManualRow" style="padding: 4px 10px; font-weight: 700; white-space: nowrap;">Lưu</button>
-              <button type="button" class="btn btn-outline btn-sm" id="btnCancelManualRow" style="padding: 4px 8px; white-space: nowrap;">Hủy</button>
-            </div>
+          <select id="manual_giaiTrinh_group" class="manual-row-select" title="Nhóm lý do giải trình" style="width: 100%; min-width: 210px;">
+            <option value="">-- Chọn nhóm lý do --</option>
+            ${CANCELLATION_REASON_GROUPS.map((grp, idx) => `
+              <option value="${grp}">${idx + 1}. ${grp}</option>
+            `).join("")}
+          </select>
+        </td>
+        <td>
+          <div style="display: flex; gap: 6px; align-items: center; min-width: 260px;">
+            <input type="text" id="manual_giaiTrinh_detail" class="manual-row-input" placeholder="Chi tiết giải trình..." style="flex: 1;" title="Chi tiết giải trình (Xóa trống để lưu null)">
+            <button type="button" class="btn btn-primary btn-sm" id="btnSaveManualRow" style="padding: 4px 10px; font-weight: 700; white-space: nowrap;">Lưu</button>
+            <button type="button" class="btn btn-outline btn-sm" id="btnCancelManualRow" style="padding: 4px 8px; white-space: nowrap;">Hủy</button>
           </div>
         </td>
       `;
@@ -1461,10 +1511,8 @@ document.addEventListener("DOMContentLoaded", () => {
             sdtNhaXe: (document.getElementById("manual_sdtNhaXe").value || "").trim(),
             lyDoTuChoi: (document.getElementById("manual_lyDoTuChoi").value || "").trim(),
             trangThaiXuLy: document.getElementById("manual_trangThaiXuLy").value,
-            giaiTrinh: buildExplanationString(
-              document.getElementById("manual_giaiTrinh_group") ? document.getElementById("manual_giaiTrinh_group").value : "",
-              document.getElementById("manual_giaiTrinh_detail") ? document.getElementById("manual_giaiTrinh_detail").value : ""
-            )
+            giaiTrinh: (document.getElementById("manual_giaiTrinh_group")?.value || "").trim() || null,
+            giaiTrinhChiTiet: (document.getElementById("manual_giaiTrinh_detail")?.value || "").trim() || null
           };
 
           const originalText = btnSave.textContent;
@@ -1773,11 +1821,13 @@ function applyOperationalUpdatesToUI(updates) {
     matched.forEach(rec => {
       const newStatus = item.trangThaiXuLy || "";
       const newExp = item.giaiTrinh || "";
+      const newExpDetail = item.giaiTrinhChiTiet !== undefined ? item.giaiTrinhChiTiet : null;
       const newPending = Boolean(item.isPending);
 
-      if (rec.trangThaiXuLy !== newStatus || rec.giaiTrinh !== newExp || rec.isPending !== newPending) {
+      if (rec.trangThaiXuLy !== newStatus || rec.giaiTrinh !== newExp || rec.giaiTrinhChiTiet !== newExpDetail || rec.isPending !== newPending) {
         rec.trangThaiXuLy = newStatus;
         rec.giaiTrinh = newExp;
+        rec.giaiTrinhChiTiet = newExpDetail;
         rec.isPending = newPending;
         hasChanged = true;
 
@@ -1804,25 +1854,18 @@ function applyOperationalUpdatesToUI(updates) {
               }
             }
 
-            // 2. Cập nhật ô Giải Trình
-            const expContainer = tr.querySelector(".explanation-cell-container");
-            if (expContainer) {
-              const selGrp = expContainer.querySelector(".select-reason-group");
-              const inDetail = expContainer.querySelector(".input-reason-detail");
-              const parsed = parseExplanationValue(newExp);
-              if (selGrp && document.activeElement !== selGrp && selGrp.value !== parsed.group) {
-                selGrp.value = parsed.group;
-              }
-              if (inDetail && document.activeElement !== inDetail && inDetail.value !== parsed.detail) {
-                inDetail.value = parsed.detail;
-              }
-              if (inDetail) {
-                inDetail.style.display = (parsed.group && parsed.group.startsWith("Khác") ? "block" : "none");
-              }
-            } else {
-              const inputElem = tr.querySelector(".input-giaitrinh");
-              if (inputElem && document.activeElement !== inputElem && inputElem.value !== newExp) {
-                inputElem.value = newExp;
+            // 2. Cập nhật ô Giải Trình (Nhóm lý do)
+            const selGrp = tr.querySelector(".select-reason-group");
+            if (selGrp && document.activeElement !== selGrp && selGrp.value !== newExp) {
+              selGrp.value = newExp || "";
+            }
+
+            // 3. Cập nhật ô Giải Trình Chi Tiết
+            const inDetail = tr.querySelector(".input-reason-detail");
+            if (inDetail && document.activeElement !== inDetail) {
+              const curInVal = inDetail.value.trim() === "" ? null : inDetail.value.trim();
+              if (curInVal !== newExpDetail) {
+                inDetail.value = newExpDetail !== null ? newExpDetail : "";
               }
             }
 
@@ -2142,6 +2185,9 @@ async function loadDataset() {
       let st = (r.trangThaiXuLy !== undefined && r.trangThaiXuLy !== null) ? r.trangThaiXuLy : (note.status || "");
       r.trangThaiXuLy = normalizeCskhStatus(st, isUnpaidOrder(r));
       r.giaiTrinh = (r.giaiTrinh !== undefined && r.giaiTrinh !== null) ? r.giaiTrinh : (note.giaiTrinh || "");
+      r.giaiTrinhChiTiet = (r.giaiTrinhChiTiet !== undefined && r.giaiTrinhChiTiet !== null && r.giaiTrinhChiTiet !== "")
+        ? r.giaiTrinhChiTiet
+        : ((note.giaiTrinhChiTiet !== undefined && note.giaiTrinhChiTiet !== null && note.giaiTrinhChiTiet !== "") ? note.giaiTrinhChiTiet : null);
     });
 
     // Cập nhật các đơn Chưa thanh toán quá 3h thành Đã hủy
@@ -2433,7 +2479,7 @@ function renderTable(records) {
     totalRowsBadge.style.padding = "6px 14px";
   }
 
-  const colSpanCount = (currentTab === "cancelled" || currentTab === "pending") ? 24 : 23;
+  const colSpanCount = (currentTab === "cancelled" || currentTab === "pending") ? 25 : 24;
 
   if (!pagedRecords || pagedRecords.length === 0) {
     tbodyFullData.innerHTML = `
@@ -2518,25 +2564,32 @@ function renderTable(records) {
     `;
 
     const parsedExp = parseExplanationValue(currExp);
-    const expCellHtml = `
-      <div class="explanation-cell-container" data-rowkey="${rowKey}">
-        <select class="select-reason-group" data-rowkey="${rowKey}" onchange="onReasonGroupChange(this)" title="Chọn nhóm lý do giải trình">
-          <option value="" ${!parsedExp.group ? "selected" : ""}>-- Chọn nhóm lý do --</option>
-          ${CANCELLATION_REASON_GROUPS.map((grp, idx) => `
-            <option value="${grp}" ${parsedExp.group === grp ? "selected" : ""}>
-              ${idx + 1}. ${grp}
-            </option>
-          `).join("")}
-        </select>
-        <input type="text" 
-               class="input-reason-detail" 
-               placeholder="Ghi chú chi tiết..." 
-               value="${parsedExp.detail ? parsedExp.detail.replace(/"/g, '&quot;') : ""}" 
-               data-rowkey="${rowKey}" 
-               oninput="onReasonDetailInput(this)" 
-               title="Nhập ghi chú chi tiết (Tự động lưu)"
-               style="${parsedExp.group && parsedExp.group.startsWith("Khác") ? "display: block;" : "display: none;"}">
-      </div>
+    const selectedGroup = parsedExp.group || currExp || "";
+    const detailValue = (r.giaiTrinhChiTiet !== undefined && r.giaiTrinhChiTiet !== null)
+      ? String(r.giaiTrinhChiTiet)
+      : (parsedExp.detail || "");
+
+    const expGroupSelectHtml = `
+      <select class="select-reason-group" data-rowkey="${rowKey}" onchange="onReasonGroupChange(this)" title="Chọn nhóm lý do giải trình" style="width: 100%; min-width: 210px; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12.5px; background-color: #ffffff; cursor: pointer;">
+        <option value="" ${!selectedGroup ? "selected" : ""}>-- Chọn nhóm lý do --</option>
+        ${CANCELLATION_REASON_GROUPS.map((grp, idx) => `
+          <option value="${grp}" ${selectedGroup === grp ? "selected" : ""}>
+            ${idx + 1}. ${grp}
+          </option>
+        `).join("")}
+      </select>
+    `;
+
+    const expDetailInputHtml = `
+      <input type="text" 
+             class="input-reason-detail" 
+             placeholder="Nhập chi tiết giải trình..." 
+             value="${detailValue ? detailValue.replace(/"/g, '&quot;') : ""}" 
+             data-rowkey="${rowKey}" 
+             oninput="onReasonDetailInput(this)" 
+             onblur="onReasonDetailBlur(this)" 
+             title="Nhập chi tiết giải trình (Xóa trống để lưu null)"
+             style="width: 100%; min-width: 260px; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12.5px; background: #ffffff;">
     `;
 
     // Cột Đếm Ngược Hạn Hủy 3 Giờ
@@ -2584,7 +2637,8 @@ function renderTable(records) {
           </td>
         ` : ""}
         <td class="text-center" style="padding: 6px 10px;">${statusSelectHtml}</td>
-        <td style="padding: 6px 10px;">${expCellHtml}</td>
+        <td style="padding: 6px 10px;">${expGroupSelectHtml}</td>
+        <td style="padding: 6px 10px;">${expDetailInputHtml}</td>
         ${currentTab === "pending" ? `
           <td class="col-pending-remove-action text-center" style="padding: 6px 8px; vertical-align: middle;">
             <button type="button" class="btn btn-danger btn-sm btn-row-remove-pending" data-rowid="${encodeURIComponent(rId)}" data-rowkey="${rowKey}" style="background: #dc2626; color: #ffffff; border: none; padding: 4px 10px; font-size: 12px; font-weight: 600; border-radius: 4px; cursor: pointer; white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.05);" title="Xóa đơn khỏi tab Chờ Xử Lý">
@@ -2778,7 +2832,7 @@ function exportFilteredToCsv() {
     "Trạng thái đơn hàng", "Ngày hủy đơn", "Ngày được duyệt", "Trạng thái kích hoạt",
     "Thời gian kích hoạt", "Lý do hủy", "Loại container", "Loại đơn hàng (IN/OUT)",
     "SizeTEUS", "Tên tài xế", "Số điện thoại tài xế", "Tên nhà xe", "Số điện thoại nhà xe", "Lý do từ chối",
-    "Trạng thái", "Giải trình"
+    "Trạng thái", "Giải trình", "Giải trình chi tiết"
   ];
 
   const csvRows = [headers.join(",")];
@@ -2818,7 +2872,8 @@ function exportFilteredToCsv() {
       `"${r.sdtNhaXe || ""}"`,
       `"${(r.lyDoTuChoi || "").replace(/"/g, '""')}"`,
       `"${(r.trangThaiXuLy || "").replace(/"/g, '""')}"`,
-      `"${(r.giaiTrinh || "").replace(/"/g, '""')}"`
+      `"${(r.giaiTrinh || "").replace(/"/g, '""')}"`,
+      `"${(r.giaiTrinhChiTiet || "").replace(/"/g, '""')}"`
     ];
     csvRows.push(row.join(","));
   });
@@ -2867,13 +2922,13 @@ function exportFilteredToExcel() {
   const exportTimeText = `Thời điểm xuất: ${dateStrVn}`;
   const row1Text = `${timeRangeText}   |   ${exportTimeText}`;
 
-  // 2. Danh mục 23 cột Header của bảng (Bắt đầu từ Dòng 3)
+  // 2. Danh mục 24 cột Header của bảng (Bắt đầu từ Dòng 3)
   const headers = [
     "STT", "Depot", "Hãng tàu", "Số booking", "Số EIR", "Số container", "Hạn hủy đơn (3h)",
     "Trạng thái đơn hàng", "Ngày hủy đơn", "Ngày được duyệt", "Trạng thái kích hoạt",
     "Thời gian kích hoạt", "Lý do hủy", "Loại container", "Loại đơn hàng",
     "SizeTEUS", "Tên tài xế", "Số điện thoại tài xế", "Tên nhà xe", "Số điện thoại nhà xe", "Lý do từ chối",
-    "Trạng thái CSKH", "Giải trình"
+    "Trạng thái CSKH", "Giải trình", "Giải trình chi tiết"
   ];
 
   // Dòng 1: Khoảng thời gian xuất dữ liệu
@@ -2927,7 +2982,8 @@ function exportFilteredToExcel() {
       r.sdtNhaXe || "",
       r.lyDoTuChoi || "",
       normStatus,
-      r.giaiTrinh || ""
+      r.giaiTrinh || "",
+      r.giaiTrinhChiTiet || ""
     ];
     excelRows.push(row);
   });

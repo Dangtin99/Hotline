@@ -200,7 +200,8 @@ function parseCancellationFile(input) {
         tenNhaXe: cleanString(item["Tên nhà xe"]),
         sdtNhaXe: cleanString(item["Số điện thoại nhà xe"]),
         lyDoTuChoi: cleanString(item["Lý do từ chối"]),
-        lyDoHuyCheck: cleanString(item["Lý do hủy_Check"])
+        lyDoHuyCheck: cleanString(item["Lý do hủy_Check"]),
+        giaiTrinh: cleanString(item["Giải trình"] || item["Giải trình lý do"] || item["Giai trinh"] || item["Ghi chú giải trình"])
       });
     }
   }

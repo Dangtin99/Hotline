@@ -240,7 +240,7 @@ async function fetchDashboardDataByRange(dateFrom, dateTo, dateType = "ngayHuy",
     const savedNotes = getSavedNotes();
     masterDashboardRecords.forEach(r => {
       const k = `${r.stt}_${r.soBooking || ''}_${r.soContainer || ''}`;
-      const note = savedNotes[k] || {};
+      const note = (r.rowKey && savedNotes[r.rowKey]) ? savedNotes[r.rowKey] : (savedNotes[k] || {});
       let st = r.trangThaiXuLy || note.status || "";
       r.trangThaiXuLy = normalizeCskhStatus(st, isUnpaidOrder(r));
       if (note.giaiTrinh && !r.giaiTrinh) r.giaiTrinh = note.giaiTrinh;
@@ -353,13 +353,13 @@ function isUnpaidOrder(r) {
   return isUnpaidStatus(r.trangThaiDonHang);
 }
 
-// Kiểm tra trạng thái có thuộc nhóm Đã Hủy / Từ chối duyệt hay không
+// Kiểm tra trạng thái có thuộc nhóm Đã Hủy / Từ chối duyệt / Hoàn tiền hay không
 function isCancelledStatus(val) {
   if (!val) return false;
   const raw = String(val).trim().toLowerCase();
-  if (raw === "đã hủy" || raw === "đã huỷ" || raw === "hủy" || raw === "huỷ" || raw === "từ chối duyệt") return true;
+  if (raw === "đã hủy" || raw === "đã huỷ" || raw === "hủy" || raw === "huỷ" || raw === "từ chối duyệt" || raw.includes("hoàn tiền") || raw.includes("hoan tien")) return true;
   const s = raw.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").trim();
-  return s === "da huy" || s === "huy" || s.includes("da huy") || s.includes("tu choi duyet");
+  return s === "da huy" || s === "huy" || s.includes("da huy") || s.includes("tu choi duyet") || s.includes("hoan tien");
 }
 
 // Kiểm tra xem đơn hàng có trạng thái Đã Hủy hay không
@@ -1108,7 +1108,8 @@ function matchesCommonDashboardFilters(r, lineVal, dirVal, hourVal, warning3hVal
       (r.soBooking && r.soBooking.toLowerCase().includes(searchVal)) ||
       (r.tenTaiXe && r.tenTaiXe.toLowerCase().includes(searchVal)) ||
       (r.tenNhaXe && r.tenNhaXe.toLowerCase().includes(searchVal)) ||
-      (r.lyDoHuy && r.lyDoHuy.toLowerCase().includes(searchVal));
+      (r.lyDoHuy && r.lyDoHuy.toLowerCase().includes(searchVal)) ||
+      (r.giaiTrinh && r.giaiTrinh.toLowerCase().includes(searchVal));
     if (!matchSearch) return false;
   }
 
@@ -1422,7 +1423,7 @@ function renderDashboard(data, records = []) {
   const savedNotes = getSavedNotes();
   masterDashboardRecords.forEach(r => {
     const k = `${r.stt}_${r.soBooking || ''}_${r.soContainer || ''}`;
-    const note = savedNotes[k] || {};
+    const note = (r.rowKey && savedNotes[r.rowKey]) ? savedNotes[r.rowKey] : (savedNotes[k] || {});
     let st = r.trangThaiXuLy || note.status || "";
     r.trangThaiXuLy = normalizeCskhStatus(st, isUnpaidOrder(r));
     if (note.giaiTrinh && !r.giaiTrinh) r.giaiTrinh = note.giaiTrinh;
@@ -2016,29 +2017,39 @@ function renderTopDepotLineCancelTable(records = []) {
   if (!tbody) return;
 
   const list = records || [];
-  // Lọc chỉ lấy các đơn hủy (Đã hủy / Quá 3h tự động hủy / Từ chối duyệt)
-  const cancelledList = list.filter(r => isCancelledOrder(r) || isAutoCancelledBy3h(r));
-  const totalCancelled = cancelledList.length;
+  // Sử dụng toàn bộ danh sách đơn hàng trong bộ lọc hiện tại để bảo đảm không bị sót đơn (khớp 100% với các thẻ KPI và biểu đồ)
+  const totalInView = list.length;
 
-  if (totalCancelled === 0) {
+  if (totalInView === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="7" class="text-center text-muted" style="padding: 24px;">Không có đơn hủy nào trong bộ lọc hiện tại.</td>
+        <td colspan="7" class="text-center text-muted" style="padding: 24px;">Không có đơn hàng nào trong bộ lọc hiện tại.</td>
       </tr>
     `;
     return;
   }
 
+  // Đồng bộ thêm ghi chú giải trình từ localStorage cache nếu có
+  const savedNotes = typeof getSavedNotes === "function" ? getSavedNotes() : {};
+
   // Gom nhóm theo cặp: Depot + Hãng Tàu
   const groupMap = new Map();
-  cancelledList.forEach(r => {
+  list.forEach(r => {
     const depot = (r.depot || "Chưa xác định").trim();
     const hangTau = (r.hangTau || "Khác").trim();
     const key = `${depot}___${hangTau}`;
     const teus = Number(r.sizeTeus) || 0;
 
-    // Trích xuất và chuẩn hóa giải trình
-    let rawExp = (r.giaiTrinh || "").trim();
+    // Trích xuất chính xác theo cột dữ liệu Giải Trình (giaiTrinh)
+    let rawExp = (r.giaiTrinh || r.giai_trinh || r.explanation || "").trim();
+    if (!rawExp && r.rowKey && savedNotes[r.rowKey] && savedNotes[r.rowKey].giaiTrinh) {
+      rawExp = String(savedNotes[r.rowKey].giaiTrinh).trim();
+    }
+    const kFallback = `${r.stt}_${r.soBooking || ''}_${r.soContainer || ''}`;
+    if (!rawExp && savedNotes[kFallback] && savedNotes[kFallback].giaiTrinh) {
+      rawExp = String(savedNotes[kFallback].giaiTrinh).trim();
+    }
+
     let cleanExp = "";
     if (rawExp && rawExp !== "null" && rawExp !== "undefined" && rawExp !== "-" && rawExp.toLowerCase() !== "none") {
       cleanExp = rawExp.replace(/\s+/g, " ");
@@ -2051,6 +2062,7 @@ function renderTopDepotLineCancelTable(records = []) {
         hangTau,
         cancelCount: 0,
         teus: 0,
+        explainedCount: 0,
         explanationsMap: new Map()
       });
     }
@@ -2059,49 +2071,51 @@ function renderTopDepotLineCancelTable(records = []) {
     item.cancelCount += 1;
     item.teus += teus;
     if (cleanExp) {
+      item.explainedCount += 1;
       item.explanationsMap.set(cleanExp, (item.explanationsMap.get(cleanExp) || 0) + 1);
     }
   });
 
-  // Chuyển Map thành mảng, sắp xếp giảm dần theo số lượng đơn hủy
+  // Chuyển Map thành mảng, sắp xếp giảm dần theo số lượng đơn
   const sortedPairs = Array.from(groupMap.values()).sort((a, b) => b.cancelCount - a.cancelCount);
 
-  // Hiển thị Top 3 cặp Depot - Hãng tàu có đơn hủy nhiều nhất
+  // Hiển thị Top 3 cặp Depot - Hãng tàu có số lượng đơn nhiều nhất
   const topPairs = sortedPairs.slice(0, 3);
 
   tbody.innerHTML = topPairs.map((pair, idx) => {
-    const pct = ((pair.cancelCount / totalCancelled) * 100).toFixed(1);
+    const pct = ((pair.cancelCount / totalInView) * 100).toFixed(1);
 
-    // Lấy các giải trình xuất hiện, sắp xếp theo số lượng giảm dần
+    // Lấy danh sách giải trình thực tế xuất hiện từ cột dữ liệu giải trình, sắp xếp giảm dần theo số lượng
     const sortedExps = Array.from(pair.explanationsMap.entries())
       .map(([reason, count]) => ({ reason, count }))
       .sort((a, b) => b.count - a.count);
 
-    // Chỉ lấy các giải trình xuất hiện đa số:
-    // - Nếu có giải trình có số lượng >= 2: chỉ lấy các giải trình có count >= 2 (bỏ qua trường hợp đơn lẻ 1 đơn), tối đa Top 3
-    // - Nếu tất cả giải trình chỉ có 1 đơn: nếu số đơn của cặp <= 3 (tức tỷ lệ >= 33%), lấy giải trình đầu tiên
-    let majorityExps = [];
-    if (sortedExps.length > 0) {
-      const maxCount = sortedExps[0].count;
-      if (maxCount >= 2) {
-        majorityExps = sortedExps.filter(e => e.count >= 2).slice(0, 3);
-      } else if (pair.cancelCount <= 3) {
-        majorityExps = sortedExps.slice(0, 1);
-      }
-    }
+    // Lấy Top các lý do giải trình phổ biến nhất (Top 3) mà không lọc bỏ đơn lẻ
+    const topExps = sortedExps.slice(0, 3);
 
     let reasonsHtml = "";
-    if (majorityExps.length > 0) {
-      reasonsHtml = majorityExps.map(rs => {
-        const reasonPct = ((rs.count / pair.cancelCount) * 100).toFixed(0);
+    if (topExps.length > 0) {
+      const expsListHtml = topExps.map(rs => {
+        const pctOfExplained = pair.explainedCount > 0 ? ((rs.count / pair.explainedCount) * 100).toFixed(0) : "0";
         return `<div style="font-size: 12.5px; line-height: 1.5; margin-bottom: 2px;">
           <span style="color: #475569; font-weight: 500;">- ${rs.reason}:</span> 
-          <strong style="color: #b91c1c;">${rs.count} đơn</strong> 
-          <span style="color: #64748b; font-size: 11px;">(${reasonPct}%)</span>
+          <strong style="color: #b91c1c;">${rs.count.toLocaleString()} đơn</strong> 
+          <span style="color: #64748b; font-size: 11px;">(${pctOfExplained}% số đã giải trình)</span>
         </div>`;
       }).join("");
+
+      const summaryExplainedHtml = `
+        <div style="font-size: 11.5px; color: #64748b; margin-top: 5px; padding-top: 4px; border-top: 1px dashed #cbd5e1;">
+          Đã giải trình: <strong style="color: #0f172a;">${pair.explainedCount.toLocaleString()}</strong> / ${pair.cancelCount.toLocaleString()} đơn (${((pair.explainedCount / pair.cancelCount) * 100).toFixed(1)}%)
+        </div>
+      `;
+
+      reasonsHtml = expsListHtml + summaryExplainedHtml;
     } else {
-      reasonsHtml = `<div style="font-size: 12.5px; color: #94a3b8; font-style: italic;">Chưa có giải trình đa số</div>`;
+      reasonsHtml = `
+        <div style="font-size: 12.5px; color: #94a3b8; font-style: italic;">Chưa có dữ liệu giải trình</div>
+        <div style="font-size: 11.5px; color: #94a3b8; margin-top: 3px;">(0 / ${pair.cancelCount.toLocaleString()} đơn)</div>
+      `;
     }
 
     return `

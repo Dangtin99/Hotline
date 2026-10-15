@@ -694,11 +694,11 @@ app.get("/api/template/:type", (req, res) => {
  */
 app.post("/api/orders/note", authRequired, async (req, res) => {
   try {
-    const { rowKey, status, giaiTrinh } = req.body || {};
+    const { rowKey, status, giaiTrinh, giaiTrinhChiTiet } = req.body || {};
     if (!rowKey) {
       return res.status(400).json({ status: "error", message: "Thiếu rowKey." });
     }
-    await updateOrderNoteAsync(rowKey, { status, giaiTrinh });
+    await updateOrderNoteAsync(rowKey, { status, giaiTrinh, giaiTrinhChiTiet });
     return res.json({ status: "success", version: getOperationalVersion() });
   } catch (err) {
     return res.status(500).json({ status: "error", message: err.message });
