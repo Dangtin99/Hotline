@@ -984,15 +984,15 @@ function saveReasonGroupValue(rowKey, groupVal, triggerElem, instant = true) {
   });
   saveNotes(notes);
 
-  const targetRec = matchedRecs[0] || {};
+  const safeTargetRec = targetRec || {};
   fetch("/api/orders/note", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       rowKey,
       giaiTrinh: finalGroup,
-      status: targetRec.trangThaiXuLy || "",
-      giaiTrinhChiTiet: targetRec.giaiTrinhChiTiet !== undefined ? targetRec.giaiTrinhChiTiet : null
+      status: safeTargetRec.trangThaiXuLy || "",
+      giaiTrinhChiTiet: safeTargetRec.giaiTrinhChiTiet !== undefined ? safeTargetRec.giaiTrinhChiTiet : null
     })
   }).then(res => res.json()).then(data => {
     if (data && data.version) {
