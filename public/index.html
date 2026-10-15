@@ -508,9 +508,10 @@
             <div class="matrix-legend">
               <span class="legend-label">Mật độ đơn:</span>
               <span class="legend-item"><span class="legend-box val-0">-</span> 0 đơn</span>
-              <span class="legend-item"><span class="legend-box val-low">1-3</span> 1-3 đơn</span>
-              <span class="legend-item"><span class="legend-box val-med">4-8</span> 4-8 đơn</span>
-              <span class="legend-item"><span class="legend-box val-high">&ge;9</span> &ge;9 đơn</span>
+              <span class="legend-item"><span class="legend-box val-lvl1">1-5</span> 1 - 5 đơn</span>
+              <span class="legend-item"><span class="legend-box val-lvl2">5-10</span> 5 - 10 đơn</span>
+              <span class="legend-item"><span class="legend-box val-lvl3">10-15</span> 10 - 15 đơn</span>
+              <span class="legend-item"><span class="legend-box val-lvl4">&ge;15</span> &ge;15 đơn</span>
             </div>
             <div class="matrix-summary-text" id="matrixSummaryText">
               Đang tải dữ liệu ma trận...
@@ -553,9 +554,10 @@
             <div class="matrix-legend">
               <span class="legend-label">Mật độ đơn:</span>
               <span class="legend-item"><span class="legend-box val-0">-</span> 0 đơn</span>
-              <span class="legend-item"><span class="legend-box val-low">1-3</span> 1-3 đơn</span>
-              <span class="legend-item"><span class="legend-box val-med">4-8</span> 4-8 đơn</span>
-              <span class="legend-item"><span class="legend-box val-high">&ge;9</span> &ge;9 đơn</span>
+              <span class="legend-item"><span class="legend-box val-lvl1">1-5</span> 1 - 5 đơn</span>
+              <span class="legend-item"><span class="legend-box val-lvl2">5-10</span> 5 - 10 đơn</span>
+              <span class="legend-item"><span class="legend-box val-lvl3">10-15</span> 10 - 15 đơn</span>
+              <span class="legend-item"><span class="legend-box val-lvl4">&ge;15</span> &ge;15 đơn</span>
             </div>
             <div class="matrix-summary-text" id="contactMatrixSummaryText">
               Đang tải dữ liệu ma trận liên hệ...
@@ -647,7 +649,7 @@
           <div class="d-flex-between" style="margin-bottom: 12px; align-items: center; flex-wrap: wrap; gap: 10px;">
             <div>
               <h3 style="margin: 0;">Top 3 Depot & Hãng Tàu Có Số Lượng Đơn Hủy Nhiều Nhất</h3>
-              <p class="text-muted" style="font-size: 13px; margin: 3px 0 0 0;">Thống kê chi tiết 3 cặp Depot - Hãng tàu có tỷ trọng đơn hủy cao nhất kèm các giải trình hủy đơn phổ biến nhất</p>
+              <p class="text-muted" style="font-size: 13px; margin: 3px 0 0 0;">Thống kê chi tiết 3 cặp Depot - Hãng tàu có tỷ trọng đơn hủy cao nhất kèm các nhóm giải trình hủy đơn phổ biến nhất</p>
             </div>
             <button type="button" class="btn btn-outline btn-sm" id="btnExportTopDepotLinePng" title="Xuất ảnh PNG bảng thống kê Top Depot & Hãng tàu">In PNG</button>
           </div>
@@ -661,7 +663,7 @@
                   <th style="width: 120px; text-align: right;">Số Đơn Hủy</th>
                   <th style="width: 120px; text-align: right;">Sản Lượng (TEUs)</th>
                   <th style="width: 110px; text-align: right;">Tỷ Lệ / Tổng Hủy</th>
-                  <th style="min-width: 320px;">Top Lý Do Hủy Phổ Biến Nhất (Theo Giải Trình)</th>
+                  <th style="min-width: 320px;">Top Lý Do Hủy Phổ Biến Nhất (Theo Nhóm Giải Trình)</th>
                 </tr>
               </thead>
               <tbody id="tbodyTopDepotLineCancel">

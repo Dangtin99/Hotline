@@ -2188,6 +2188,65 @@ function renderReasonsTable(reasons) {
   `).join("");
 }
 
+// Chuẩn hóa danh mục 6 nhóm lý do giải trình hủy đơn
+const CANCELLATION_REASON_GROUPS = [
+  "Chủ hàng & Kế hoạch (Hoãn lấy cont, hủy đóng hàng)",
+  "Hãng tàu & Booking (Hết hạn, hủy booking, đủ số lượng)",
+  "Depot & Vỏ Container (Chuyển depot, hết cont, cont xấu)",
+  "Chứng từ & Đặt lệnh (Sai booking, khai nhầm, trùng đơn)",
+  "Thanh toán & Vận chuyển (Chưa đóng phí, lỗi cổng, xe hư)",
+  "Khác (Nhập chi tiết cụ thể)"
+];
+
+/**
+ * Phân tích và chuẩn hóa giá trị giải trình thành một trong 6 Nhóm Giải Trình chuẩn
+ */
+function getExplanationGroup(rawVal) {
+  if (!rawVal || typeof rawVal !== "string") return "";
+  const trimmed = rawVal.trim();
+  if (!trimmed || trimmed === "null" || trimmed === "undefined" || trimmed === "-" || trimmed.toLowerCase() === "none") {
+    return "";
+  }
+
+  // 1. Khớp chính xác 6 nhóm chuẩn
+  for (const g of CANCELLATION_REASON_GROUPS) {
+    if (trimmed === g) return g;
+  }
+
+  // 2. Dạng bắt đầu bằng "Khác"
+  if (/^khác/i.test(trimmed)) {
+    return "Khác (Nhập chi tiết cụ thể)";
+  }
+
+  // 3. Khớp theo phần tên nhóm trước dấu ngoặc đơn
+  for (const g of CANCELLATION_REASON_GROUPS.slice(0, 5)) {
+    const baseName = g.split(" (")[0];
+    if (trimmed === baseName || trimmed.startsWith(g) || trimmed.startsWith(baseName)) {
+      return g;
+    }
+  }
+
+  // 4. Ánh xạ tương thích ngược từ dữ liệu tự do cũ
+  const lower = trimmed.toLowerCase();
+  if (lower.includes("chủ hàng") || lower.includes("kế hoạch") || lower.includes("chờ sếp") || lower.includes("cho sep") || lower.includes("sếp")) {
+    return "Chủ hàng & Kế hoạch (Hoãn lấy cont, hủy đóng hàng)";
+  }
+  if (lower.includes("hãng tàu") || lower.includes("hãn tàu") || lower.includes("hạng tàu") || lower.includes("booking") || lower.includes("book") || lower.includes("gia hạn") || lower.includes("đủ số lượng") || lower.includes("dk đủ")) {
+    return "Hãng tàu & Booking (Hết hạn, hủy booking, đủ số lượng)";
+  }
+  if (lower.includes("depot") || lower.includes("hết cont") || lower.includes("cont xấu") || lower.includes("vỏ") || lower.includes("bãi") || lower.includes("rỗng") || lower.includes("rổng")) {
+    return "Depot & Vỏ Container (Chuyển depot, hết cont, cont xấu)";
+  }
+  if (lower.includes("đặt lại") || lower.includes("chứng từ") || lower.includes("đặt lệnh") || lower.includes("khai nhầm") || lower.includes("sai số") || lower.includes("mst") || lower.includes("nhầm")) {
+    return "Chứng từ & Đặt lệnh (Sai booking, khai nhầm, trùng đơn)";
+  }
+  if (lower.includes("thanh toán") || lower.includes("tài xế") || lower.includes("hạ tầng") || lower.includes("vận chuyển") || lower.includes("xe hư") || lower.includes("chờ tài")) {
+    return "Thanh toán & Vận chuyển (Chưa đóng phí, lỗi cổng, xe hư)";
+  }
+
+  return "Khác (Nhập chi tiết cụ thể)";
+}
+
 // Render Bảng Thống Kê Top Depot & Hãng Tàu Có Số Lượng Đơn Hủy Nhiều Nhất Kèm Lý Do Phổ Biến
 function renderTopDepotLineCancelTable(records = []) {
   const tbody = document.getElementById("tbodyTopDepotLineCancel");
@@ -2217,7 +2276,7 @@ function renderTopDepotLineCancelTable(records = []) {
     const key = `${depot}___${hangTau}`;
     const teus = Number(r.sizeTeus) || 0;
 
-    // Trích xuất chính xác theo cột dữ liệu Giải Trình (giaiTrinh)
+    // Trích xuất chính xác theo Nhóm Giải Trình (giaiTrinh)
     let rawExp = (r.giaiTrinh || r.giai_trinh || r.explanation || "").trim();
     if (!rawExp && r.rowKey && savedNotes[r.rowKey] && savedNotes[r.rowKey].giaiTrinh) {
       rawExp = String(savedNotes[r.rowKey].giaiTrinh).trim();
@@ -2227,11 +2286,7 @@ function renderTopDepotLineCancelTable(records = []) {
       rawExp = String(savedNotes[kFallback].giaiTrinh).trim();
     }
 
-    let cleanExp = "";
-    if (rawExp && rawExp !== "null" && rawExp !== "undefined" && rawExp !== "-" && rawExp.toLowerCase() !== "none") {
-      cleanExp = rawExp.replace(/\s+/g, " ");
-      cleanExp = cleanExp.charAt(0).toUpperCase() + cleanExp.slice(1);
-    }
+    const groupExp = getExplanationGroup(rawExp);
 
     if (!groupMap.has(key)) {
       groupMap.set(key, {
@@ -2247,9 +2302,9 @@ function renderTopDepotLineCancelTable(records = []) {
     const item = groupMap.get(key);
     item.cancelCount += 1;
     item.teus += teus;
-    if (cleanExp) {
+    if (groupExp) {
       item.explainedCount += 1;
-      item.explanationsMap.set(cleanExp, (item.explanationsMap.get(cleanExp) || 0) + 1);
+      item.explanationsMap.set(groupExp, (item.explanationsMap.get(groupExp) || 0) + 1);
     }
   });
 
@@ -3155,9 +3210,10 @@ function renderMatrixTable(records) {
         let lineCells = allStatuses.map(st => {
           const cnt = lineData.statusCounts[st] || 0;
           if (cnt === 0) return `<td class="matrix-val-empty" style="text-align: right;">-</td>`;
-          let heatCls = "badge-heat-low";
-          if (cnt >= 9) heatCls = "badge-heat-high";
-          else if (cnt >= 4) heatCls = "badge-heat-med";
+          let heatCls = "badge-heat-lvl1";
+          if (cnt >= 15) heatCls = "badge-heat-lvl4";
+          else if (cnt >= 10) heatCls = "badge-heat-lvl3";
+          else if (cnt >= 5) heatCls = "badge-heat-lvl2";
 
           return `
             <td class="matrix-cell-clickable" style="text-align: right;" onclick="onMatrixCellClick('${lineKey}', '${depotKey}', this, '${st}')" title="Bấm xem ${cnt} đơn của Hãng ${lineKey} tại Depot ${depotKey} (${st})">
@@ -3458,9 +3514,10 @@ function renderContactStatusMatrixTable(records) {
     const cellsHtml = allContactStatuses.map(cskh => {
       const cnt = stData.counts[cskh] || 0;
       if (cnt === 0) return `<td class="matrix-val-empty" style="text-align: right;">-</td>`;
-      let heatCls = "badge-heat-low";
-      if (cnt >= 9) heatCls = "badge-heat-high";
-      else if (cnt >= 4) heatCls = "badge-heat-med";
+      let heatCls = "badge-heat-lvl1";
+      if (cnt >= 15) heatCls = "badge-heat-lvl4";
+      else if (cnt >= 10) heatCls = "badge-heat-lvl3";
+      else if (cnt >= 5) heatCls = "badge-heat-lvl2";
 
       const escapedStatus = orderStatus.replace(/'/g, "\\'");
       const escapedCskh = cskh.replace(/'/g, "\\'");
