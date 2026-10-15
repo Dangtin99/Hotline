@@ -67,11 +67,19 @@ function hashPassword(password, salt) {
   return crypto.pbkdf2Sync(password, salt, 1000, 64, "sha512").toString("hex");
 }
 
-// 7 Tài khoản chuẩn theo yêu cầu của hệ thống kèm phân quyền Depot trực thuộc
+// 8 Tài khoản chuẩn theo yêu cầu của hệ thống kèm phân quyền Depot trực thuộc
 const SEED_ACCOUNTS = [
   {
     fullName: "ADMIN",
     username: "admin",
+    password: "123456789@",
+    role: "admin",
+    assignedDepots: ["ALL"],
+    isActive: 1
+  },
+  {
+    fullName: "ADMIN 01",
+    username: "admin_01",
     password: "123456789@",
     role: "admin",
     assignedDepots: ["ALL"],
@@ -130,52 +138,75 @@ const SEED_ACCOUNTS = [
 // Khởi tạo bảng người dùng ban đầu
 function seedDefaultUsers() {
   const now = new Date().toISOString().replace("T", " ").substring(0, 19);
-  const users = [];
+  const existingUsers = [];
+  try {
+    if (fs.existsSync(USERS_FILE)) {
+      const data = fs.readFileSync(USERS_FILE, "utf8");
+      const list = JSON.parse(data);
+      if (Array.isArray(list)) existingUsers.push(...list);
+    }
+  } catch (e) {}
+
+  const usersMap = new Map();
+  for (const u of existingUsers) {
+    if (u && u.username) {
+      usersMap.set(u.username.toLowerCase(), u);
+    }
+  }
 
   for (const acc of SEED_ACCOUNTS) {
-    const salt = crypto.randomBytes(16).toString("hex");
-    const passwordHash = hashPassword(acc.password, salt);
-    const depots = parseDepots(acc.assignedDepots);
-    users.push({
-      id: acc.username,
-      fullName: acc.fullName,
-      username: acc.username,
-      passwordHash,
-      salt,
-      role: acc.role,
-      assignedDepots: depots,
-      isActive: 1,
-      createdAt: now,
-      updatedAt: now
-    });
+    const key = acc.username.toLowerCase();
+    if (!usersMap.has(key)) {
+      const salt = crypto.randomBytes(16).toString("hex");
+      const passwordHash = hashPassword(acc.password, salt);
+      const depots = parseDepots(acc.assignedDepots);
+      const newUser = {
+        id: String(Date.now() + Math.floor(Math.random() * 1000)),
+        fullName: acc.fullName,
+        username: acc.username,
+        passwordHash,
+        salt,
+        role: acc.role,
+        assignedDepots: depots,
+        isActive: 1,
+        createdAt: now,
+        updatedAt: now
+      };
+      usersMap.set(key, newUser);
 
-    if (sqliteEngine) {
-      try {
-        const stmt = sqliteEngine.prepare(`
-          INSERT INTO users (full_name, username, password_hash, salt, role, assigned_depots, is_active, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(username) DO UPDATE SET
-            full_name = excluded.full_name,
-            password_hash = excluded.password_hash,
-            salt = excluded.salt,
-            role = excluded.role,
-            assigned_depots = excluded.assigned_depots,
-            updated_at = excluded.updated_at;
-        `);
-        stmt.run(acc.fullName, acc.username, passwordHash, salt, acc.role, depots.join(","), 1, now, now);
-      } catch (err) {
-        console.warn("Lỗi seed SQLite user:", err.message);
+      if (sqliteEngine) {
+        try {
+          const stmt = sqliteEngine.prepare(`
+            INSERT INTO users (full_name, username, password_hash, salt, role, assigned_depots, is_active, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(username) DO UPDATE SET
+              full_name = excluded.full_name,
+              role = excluded.role,
+              assigned_depots = excluded.assigned_depots,
+              updated_at = excluded.updated_at;
+          `);
+          stmt.run(acc.fullName, acc.username, passwordHash, salt, acc.role, depots.join(","), 1, now, now);
+        } catch (err) {
+          console.warn("Lỗi seed SQLite user:", err.message);
+        }
+      }
+
+      if (tursoClient && tursoClient.isTursoAvailable()) {
+        tursoClient.syncUserToTurso(newUser).catch(err => {
+          console.warn("[Turso] Lỗi đồng bộ new user lên Turso:", err.message);
+        });
       }
     }
   }
 
+  const finalUsers = Array.from(usersMap.values());
   try {
-    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), "utf8");
+    fs.writeFileSync(USERS_FILE, JSON.stringify(finalUsers, null, 2), "utf8");
   } catch (err) {
     console.error("Lỗi lưu users.json:", err.message);
   }
 
-  return users;
+  return finalUsers;
 }
 
 // Đọc danh sách tài khoản từ Memory Cache, SQLite hoặc File JSON

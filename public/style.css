@@ -63,14 +63,86 @@ body {
   z-index: 100;
   box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
   color: #ffffff;
+  transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar-collapsed .app-sidebar {
+  margin-left: -250px;
 }
 
 .sidebar-brand {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  padding: 18px 18px 16px;
+  padding: 16px 14px 16px 18px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-brand-text {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Nút Thu Gọn / Ẩn Thanh Tab */
+.sidebar-collapse-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #e2e8f0;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.sidebar-collapse-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.35);
+  transform: translateX(-2px);
+}
+
+/* Nút Mở / Hiện Lại Thanh Tab ở Header */
+.sidebar-header-toggle-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  color: #0a2558;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
+  margin-right: 12px;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: all 0.15s ease;
+}
+
+.sidebar-header-toggle-btn:hover {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+}
+
+.sidebar-collapsed .sidebar-header-toggle-btn {
+  display: inline-flex;
+}
+
+/* Nút Nổi Ở Mép Trái Khi Cuộn Trang (Ẩn vĩnh viễn theo yêu cầu, chỉ giữ lại ô 3 gạch ở header) */
+.sidebar-float-toggle-btn {
+  display: none !important;
+}
+
+.sidebar-collapsed .sidebar-float-toggle-btn {
+  display: none !important;
 }
 
 .brand-title {
@@ -3228,6 +3300,65 @@ html.non-admin-user #navUpload,
 html.non-admin-user #sidebarHeadingUpload,
 html.non-admin-user [data-admin-only="true"] {
   display: none !important;
+}
+
+/* Dashboard Line 24h Theo Depot */
+.depot-tabs-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.depot-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  outline: none;
+}
+
+.depot-tab-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.depot-tab-btn.active {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #ffffff;
+  box-shadow: 0 2px 4px rgba(29, 78, 216, 0.25);
+}
+
+.depot-tab-btn .depot-tab-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.depot-tab-btn.active .depot-tab-badge {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
+.hourly-chart-card {
+  transition: box-shadow 0.2s ease;
+}
+
+.hourly-chart-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 

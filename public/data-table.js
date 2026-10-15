@@ -801,22 +801,36 @@ window.onStatusSelectChange = function(selectElem) {
     body: JSON.stringify({ rowKey, status: newStatus })
   }).catch(() => {});
 
-  // Cập nhật tức thì ô Hạn Hủy Đơn trên tất cả các dòng hiển thị tương ứng
-  const tbody = document.getElementById("tbodyMainOrders");
+  // Cập nhật tức thì ô Hạn Hủy Đơn trên dòng hiện tại mà người dùng vừa thao tác
+  const currentTr = selectElem ? selectElem.closest("tr") : null;
+  const targetR = matchedRecs[0] || {};
+  const isUnpaidOrExpired = isUnpaidOrder(targetR) || Boolean(targetR.isAutoCancelledBy3h);
+  const isCancelled = isCancelledOrder(targetR);
+  if (currentTr) {
+    const cdCell = currentTr.querySelector(".cell-countdown-3h");
+    if (cdCell) {
+      cdCell.innerHTML = renderCountdownCell(targetR.ngayDuocDuyet, isUnpaidOrExpired, newStatus, isCancelled);
+    }
+  }
+
+  // Cập nhật tức thì ô Hạn Hủy Đơn trên tất cả các dòng hiển thị tương ứng trong bảng dữ liệu
+  const tbody = document.getElementById("tbodyFullData") || document.getElementById("tbodyMainOrders");
   if (tbody) {
     matchedRecs.forEach(rec => {
       const k = rec.rowKey || getRowKey(rec);
-      const rowTr = tbody.querySelector(`tr[data-rowkey="${k}"]`);
-      if (rowTr) {
+      const rowTrs = tbody.querySelectorAll(`tr[data-rowkey="${CSS.escape ? CSS.escape(k) : k}"]`);
+      rowTrs.forEach(rowTr => {
         const cdCell = rowTr.querySelector(".cell-countdown-3h");
         if (cdCell) {
-          const isUnpaidOrExpired = isUnpaidOrder(rec) || rec.isAutoCancelledBy3h;
-          const isCancelled = isCancelledOrder(rec);
-          cdCell.innerHTML = renderCountdownCell(rec.ngayDuocDuyet, isUnpaidOrExpired, rec.trangThaiXuLy, isCancelled);
+          const recUnpaid = isUnpaidOrder(rec) || Boolean(rec.isAutoCancelledBy3h);
+          const recCancelled = isCancelledOrder(rec);
+          cdCell.innerHTML = renderCountdownCell(rec.ngayDuocDuyet, recUnpaid, rec.trangThaiXuLy, recCancelled);
         }
-      }
+      });
     });
   }
+
+  updateTabCounts();
 };
 
 // Xử lý nhập Giải Trình (tự động debounce lưu)
@@ -1575,7 +1589,7 @@ function applyOperationalUpdatesToUI(updates) {
   if (!updates || Object.keys(updates).length === 0) return;
 
   let hasChanged = false;
-  const tbody = document.getElementById("tbodyMainOrders");
+  const tbody = document.getElementById("tbodyFullData") || document.getElementById("tbodyMainOrders");
 
   Object.entries(updates).forEach(([rowKey, item]) => {
     // Tìm tất cả bản ghi tương ứng trong mảng allRecords
@@ -1593,10 +1607,11 @@ function applyOperationalUpdatesToUI(updates) {
 
         // Cập nhật trực tiếp lên dòng DOM nếu đang hiển thị trên trang hiện tại
         if (tbody) {
-          const tr = tbody.querySelector(`tr[data-rowkey="${rowKey}"]`);
+          const escapedKey = CSS.escape ? CSS.escape(rowKey) : rowKey;
+          const tr = tbody.querySelector(`tr[data-rowkey="${escapedKey}"]`);
           if (tr) {
             // 1. Cập nhật ô Dropdown CSKH
-            const selectElem = tr.querySelector(".select-status");
+            const selectElem = tr.querySelector(".status-badge-select, .select-status");
             if (selectElem && selectElem.value !== newStatus) {
               selectElem.value = newStatus;
               selectElem.setAttribute("data-status", newStatus);
@@ -1612,7 +1627,7 @@ function applyOperationalUpdatesToUI(updates) {
             // 3. Cập nhật ô Đếm Ngược Hạn 3h (Dừng tính giờ ngay lập tức nếu đã xử lý)
             const cdCell = tr.querySelector(".cell-countdown-3h");
             if (cdCell) {
-              const isUnpaid = isUnpaidOrder(rec);
+              const isUnpaid = isUnpaidOrder(rec) || Boolean(rec.isAutoCancelledBy3h);
               const isCancelled = isCancelledOrder(rec);
               cdCell.innerHTML = renderCountdownCell(rec.ngayDuocDuyet, isUnpaid, rec.trangThaiXuLy, isCancelled);
             }

@@ -100,5 +100,19 @@
     "isActive": true,
     "createdAt": "2026-10-12 13:17:39",
     "updatedAt": "2026-10-12 13:17:39"
+  },
+  {
+    "id": "1792032460909",
+    "fullName": "ADMIN 01",
+    "username": "admin_01",
+    "passwordHash": "db5d06bd889671577aec50880f6389280e167870e2dbd82d531cf5899b3088201f8bc73367691bba0b293bb9df70f6bd224bebd5aaeea29d952fd8a64c7ead08",
+    "salt": "926b8c9ff1f06a2ff0ca22e7d32e6a21",
+    "role": "admin",
+    "assignedDepots": [
+      "ALL"
+    ],
+    "isActive": 1,
+    "createdAt": "2026-10-15 02:47:40",
+    "updatedAt": "2026-10-15 02:47:40"
   }
 ]

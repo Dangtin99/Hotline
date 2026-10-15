@@ -3,6 +3,8 @@
 let chartReasonsInstance = null;
 let chartDepotsInstance = null;
 let chartLinesInstance = null;
+let chartHourlyDepotInstance = null;
+let currentHourlyDepot = "";
 let currentAnalyticsData = null;
 let currentRecords = [];
 let currentMatrixStatus = "ALL";
@@ -1467,6 +1469,7 @@ function renderDashboardViews(data, records = [], comparisonInfo = null) {
   renderReasonsChart(topCancelReasons);
   renderDepotsChart(byDepot);
   renderShippingLinesChart(byShippingLine);
+  renderHourlyDashboardSection(records);
 
   // 3. Anomalies
   if (anomalies) renderAnomalies(anomalies);
@@ -1628,6 +1631,324 @@ function renderShippingLinesChart(lines) {
       },
       plugins: {
         legend: { display: false }
+      }
+    }
+  });
+}
+
+// =========================================================================
+// DASHBOARD LINE 24H: ĐƠN HỦY & CHƯA THANH TOÁN THEO DEPOT PHÂN QUYỀN
+// =========================================================================
+
+// Lấy danh sách depot mà user hiện tại được phân quyền truy cập
+function getUserAuthorizedDepots(records = []) {
+  let userDepots = [];
+  let isRestricted = false;
+  try {
+    const userStr = localStorage.getItem("gpg_auth_user");
+    if (userStr) {
+      const u = JSON.parse(userStr);
+      if (u) {
+        if (Array.isArray(u.assignedDepots)) {
+          userDepots = u.assignedDepots.map(d => String(d).trim().toUpperCase()).filter(Boolean);
+        } else if (typeof u.assignedDepots === "string") {
+          userDepots = u.assignedDepots.split(",").map(d => String(d).trim().toUpperCase()).filter(Boolean);
+        }
+        if (u.role !== "admin" && userDepots.length > 0 && !userDepots.includes("ALL")) {
+          isRestricted = true;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("Lỗi đọc phân quyền depot:", e);
+  }
+
+  // Thu thập danh sách tất cả depot từ records hiện tại và hệ thống
+  const allDepotsSet = new Set();
+  if (Array.isArray(records)) {
+    records.forEach(r => {
+      if (r && r.depot) allDepotsSet.add(String(r.depot).trim().toUpperCase());
+    });
+  }
+  if (Array.isArray(masterDashboardRecords)) {
+    masterDashboardRecords.forEach(r => {
+      if (r && r.depot) allDepotsSet.add(String(r.depot).trim().toUpperCase());
+    });
+  }
+  const sysList = window.SYSTEM_DEPOTS_LIST || ["BSD", "SLD", "THT", "PMCM", "ETD", "AIC", "SCD", "GKP", "EPD", "EAD", "RCS"];
+  sysList.forEach(d => allDepotsSet.add(d));
+
+  let finalDepots = [];
+  if (isRestricted) {
+    // Chỉ lấy các depot mà user được phân quyền cụ thể
+    finalDepots = userDepots.filter(d => d !== "ALL");
+  } else {
+    // Toàn quyền truy cập tất cả depot
+    finalDepots = Array.from(allDepotsSet).sort();
+  }
+  return { depots: finalDepots, isRestricted };
+}
+
+// Lọc bản ghi dữ liệu dành riêng cho Depot được chọn trên Hourly Dashboard
+function getRecordsForHourlyDepot(depot, records = []) {
+  if (!depot) return [];
+  const targetDepot = String(depot).trim().toUpperCase();
+
+  // Ưu tiên lọc từ tập records hiện tại
+  let list = (records || []).filter(r => r && String(r.depot || "").trim().toUpperCase() === targetDepot);
+
+  // Fallback an toàn: nếu list rỗng nhưng masterDashboardRecords có (ví dụ do filter multi-select ở trên đang bỏ chọn depot này),
+  // ta lấy các bản ghi từ masterDashboardRecords có cùng bộ lọc ngày giờ
+  if (list.length === 0 && Array.isArray(masterDashboardRecords) && masterDashboardRecords.length > 0) {
+    const dateTypeVal = filterDateType ? filterDateType.value : "ngayHuy";
+    const dateFromVal = filterDateFrom ? filterDateFrom.value : "";
+    const dateToVal = filterDateTo ? filterDateTo.value : "";
+    const hourFromVal = filterHourFrom ? filterHourFrom.value : "";
+    const hourToVal = filterHourTo ? filterHourTo.value : "";
+
+    list = masterDashboardRecords.filter(r => {
+      if (!r || String(r.depot || "").trim().toUpperCase() !== targetDepot) return false;
+      if (dateFromVal || dateToVal || hourFromVal || hourToVal) {
+        const rawDate = dateTypeVal === "ngayDuyet" ? r.ngayDuocDuyet : r.ngayHuyDon;
+        const recDateTime = extractDateTime(rawDate);
+        if (!recDateTime) return false;
+        if (dateFromVal) {
+          const fromTime = hourFromVal ? `${hourFromVal}:00` : "00:00:00";
+          if (recDateTime < `${dateFromVal} ${fromTime}`) return false;
+        }
+        if (dateToVal) {
+          const toTime = hourToVal ? `${hourToVal}:59` : "23:59:59";
+          if (recDateTime > `${dateToVal} ${toTime}`) return false;
+        }
+      }
+      return true;
+    });
+  }
+  return list;
+}
+
+// Khởi tạo & Render thanh Tab danh sách Depot phân quyền + vẽ biểu đồ
+function renderHourlyDashboardSection(records = []) {
+  const tabsContainer = document.getElementById("hourlyDepotTabsList");
+  if (!tabsContainer) return;
+
+  const { depots, isRestricted } = getUserAuthorizedDepots(records);
+  if (!depots || depots.length === 0) {
+    tabsContainer.innerHTML = `<span style="font-size: 13px; color: #ef4444; font-weight: 500;">Không có Depot nào được phân quyền</span>`;
+    return;
+  }
+
+  // Nếu chưa có depot nào được chọn, hoặc depot đang chọn không còn nằm trong quyền:
+  if (!currentHourlyDepot || !depots.includes(currentHourlyDepot)) {
+    currentHourlyDepot = depots[0];
+  }
+
+  // Render các nút tab cho từng Depot
+  tabsContainer.innerHTML = depots.map(d => {
+    const dRecords = getRecordsForHourlyDepot(d, records);
+    const cancelCount = dRecords.filter(isCancelledOrder).length;
+    const unpaidCount = dRecords.filter(isUnpaidOrder).length;
+    const totalCount = cancelCount + unpaidCount;
+    const isActive = d === currentHourlyDepot;
+
+    return `
+      <button type="button" 
+        class="depot-tab-btn ${isActive ? 'active' : ''}" 
+        data-depot="${d}" 
+        title="Nhấn để xem biểu đồ 24h của Depot ${d}">
+        <span>Depot ${d}</span>
+        <span class="depot-tab-badge">${totalCount}</span>
+      </button>
+    `;
+  }).join("");
+
+  // Gán sự kiện click cho các nút
+  tabsContainer.querySelectorAll(".depot-tab-btn").forEach(btn => {
+    btn.onclick = () => {
+      const targetDepot = btn.getAttribute("data-depot");
+      if (!targetDepot || targetDepot === currentHourlyDepot) return;
+      currentHourlyDepot = targetDepot;
+
+      // Cập nhật class active
+      tabsContainer.querySelectorAll(".depot-tab-btn").forEach(b => {
+        b.classList.toggle("active", b.getAttribute("data-depot") === currentHourlyDepot);
+      });
+
+      // Tính toán & render lại biểu đồ cho Depot mới
+      renderHourlyDepotChart(currentHourlyDepot, records);
+    };
+  });
+
+  // Render biểu đồ cho depot hiện tại
+  renderHourlyDepotChart(currentHourlyDepot, records);
+}
+
+// Tính toán dữ liệu 24 khung giờ và vẽ biểu đồ Line Chart
+function renderHourlyDepotChart(selectedDepot, records = []) {
+  const canvasEl = document.getElementById("chartHourlyDepot");
+  if (!canvasEl) return;
+  const ctx = canvasEl.getContext("2d");
+
+  // Cập nhật nhãn Depot trên header
+  const scopeBadge = document.getElementById("hourlyChartScopeBadge");
+  if (scopeBadge) {
+    scopeBadge.textContent = selectedDepot ? `Depot: ${selectedDepot}` : "Chưa chọn Depot";
+  }
+
+  const depotRecords = getRecordsForHourlyDepot(selectedDepot, records);
+
+  // Mốc 24 khung giờ (00:00 -> 23:00)
+  const hourLabels = [
+    "00:00", "01:00", "02:00", "03:00", "04:00", "05:00",
+    "06:00", "07:00", "08:00", "09:00", "10:00", "11:00",
+    "12:00", "13:00", "14:00", "15:00", "16:00", "17:00",
+    "18:00", "19:00", "20:00", "21:00", "22:00", "23:00"
+  ];
+
+  const cancelledHours = Array(24).fill(0);
+  const unpaidHours = Array(24).fill(0);
+
+  const dateTypeVal = (filterDateType && filterDateType.value) || "ngayHuy";
+
+  depotRecords.forEach(r => {
+    if (!r) return;
+    const rawDate = dateTypeVal === "ngayDuyet" ? (r.ngayDuocDuyet || r.ngayHuyDon) : (r.ngayHuyDon || r.ngayDuocDuyet);
+    const h = extractHour(rawDate);
+    if (h !== null && h >= 0 && h <= 23) {
+      if (isCancelledOrder(r)) {
+        cancelledHours[h]++;
+      }
+      if (isUnpaidOrder(r)) {
+        unpaidHours[h]++;
+      }
+    }
+  });
+
+  // Tính số liệu tóm tắt
+  const totalCancelled = cancelledHours.reduce((a, b) => a + b, 0);
+  const totalUnpaid = unpaidHours.reduce((a, b) => a + b, 0);
+
+  let peakHourStr = "-";
+  let maxTotalInHour = 0;
+  let peakIndex = -1;
+  for (let i = 0; i < 24; i++) {
+    const totalInHour = cancelledHours[i] + unpaidHours[i];
+    if (totalInHour > maxTotalInHour) {
+      maxTotalInHour = totalInHour;
+      peakIndex = i;
+    }
+  }
+  if (peakIndex >= 0 && maxTotalInHour > 0) {
+    const nextH = (peakIndex + 1).toString().padStart(2, "0");
+    peakHourStr = `${hourLabels[peakIndex]} - ${nextH}:00 (${maxTotalInHour} đơn)`;
+  }
+
+  // Cập nhật các badge số liệu tóm tắt
+  const elCancel = document.getElementById("hourlyDepotTotalCancelled");
+  const elUnpaid = document.getElementById("hourlyDepotTotalUnpaid");
+  const elPeak = document.getElementById("hourlyDepotPeakHour");
+  if (elCancel) elCancel.textContent = `${totalCancelled} đơn`;
+  if (elUnpaid) elUnpaid.textContent = `${totalUnpaid} đơn`;
+  if (elPeak) elPeak.textContent = peakHourStr;
+
+  // Hủy biểu đồ cũ nếu có
+  if (chartHourlyDepotInstance) {
+    chartHourlyDepotInstance.destroy();
+  }
+
+  // Vẽ biểu đồ Line mới
+  chartHourlyDepotInstance = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: hourLabels,
+      datasets: [
+        {
+          label: "Số đơn hủy",
+          data: cancelledHours,
+          borderColor: "#dc2626",
+          backgroundColor: "rgba(220, 38, 38, 0.10)",
+          borderWidth: 2.5,
+          tension: 0.35,
+          fill: true,
+          pointBackgroundColor: "#dc2626",
+          pointBorderColor: "#ffffff",
+          pointBorderWidth: 1.5,
+          pointRadius: 4,
+          pointHoverRadius: 6
+        },
+        {
+          label: "Số đơn chưa thanh toán",
+          data: unpaidHours,
+          borderColor: "#d97706",
+          backgroundColor: "rgba(217, 119, 6, 0.10)",
+          borderWidth: 2.5,
+          tension: 0.35,
+          fill: true,
+          pointBackgroundColor: "#d97706",
+          pointBorderColor: "#ffffff",
+          pointBorderWidth: 1.5,
+          pointRadius: 4,
+          pointHoverRadius: 6
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false
+      },
+      plugins: {
+        legend: {
+          position: "top",
+          labels: {
+            boxWidth: 14,
+            padding: 16,
+            font: { size: 12, weight: "600" },
+            color: "#334155"
+          }
+        },
+        tooltip: {
+          padding: 10,
+          callbacks: {
+            title: (items) => {
+              if (!items || items.length === 0) return "";
+              const hLabel = items[0].label;
+              const nextHour = (parseInt(hLabel, 10) + 1).toString().padStart(2, "0");
+              return `Khung giờ: ${hLabel} - ${nextHour}:00 (Depot ${selectedDepot})`;
+            },
+            footer: (items) => {
+              let sum = 0;
+              items.forEach(it => { sum += (Number(it.raw) || 0); });
+              return `Tổng phát sinh: ${sum} đơn`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: {
+            color: "rgba(226, 232, 240, 0.6)",
+            tickColor: "transparent"
+          },
+          ticks: {
+            color: "#64748b",
+            font: { size: 11, weight: "500" }
+          }
+        },
+        y: {
+          beginAtZero: true,
+          ticks: {
+            stepSize: 1,
+            precision: 0,
+            color: "#64748b",
+            font: { size: 11 }
+          },
+          grid: {
+            color: "rgba(226, 232, 240, 0.6)"
+          }
+        }
       }
     }
   });

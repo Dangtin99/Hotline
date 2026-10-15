@@ -14,10 +14,15 @@
     <!-- Thanh Tab Bên Trái (Left Sidebar) -->
     <aside class="app-sidebar">
       <div class="sidebar-brand">
-                <div>
+        <div class="sidebar-brand-text">
           <div class="brand-title">GPG LOGISTICS</div>
           <div class="brand-subtitle">Quản Trị Đơn Hủy 24/7</div>
         </div>
+        <button type="button" class="sidebar-collapse-btn" id="btnCollapseSidebar" title="Ẩn thanh tab" aria-label="Ẩn thanh tab">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
       </div>
 
       <nav class="sidebar-nav">
@@ -78,7 +83,14 @@
       <!-- Header -->
       <header class="app-header">
         <div class="header-brand">
-                    <div>
+          <button type="button" class="sidebar-header-toggle-btn" id="headerSidebarToggleBtn" title="Hiện thanh tab" aria-label="Hiện thanh tab">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+          <div>
             <h1>HỆ THỐNG TRỢ LÝ AI - PHÂN TÍCH ĐƠN HỦY 24/7</h1>
             <p class="subtitle">Bảng Điều Hành Quản Trị Logistics, Vận Hành Bãi Depot & Hãng Tàu</p>
           </div>
@@ -378,6 +390,58 @@
           <h3>Phân Bố Theo Hãng Tàu</h3>
           <div class="chart-container">
             <canvas id="chartShippingLines"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- Dashboard Line: Biến Động Đơn Hủy & Chưa Thanh Toán 24 Giờ Theo Depot -->
+      <section class="hourly-dashboard-section" style="margin-bottom: 24px;">
+        <div class="chart-card hourly-chart-card" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);">
+          <!-- Header: Tiêu đề + Thống kê tóm tắt nhanh -->
+          <div class="hourly-chart-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; margin-bottom: 16px; border-bottom: 1px solid #f1f5f9; padding-bottom: 14px;">
+            <div>
+              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+                <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: #0f172a;">Biến Động Đơn Hủy & Chưa Thanh Toán 24 Giờ Theo Depot</h3>
+                <span id="hourlyChartScopeBadge" class="badge" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 9999px;">Depot: -</span>
+              </div>
+              <p style="margin: 0; font-size: 13px; color: #64748b;">
+                Theo dõi số lượng đơn hủy và đơn chưa thanh toán phát sinh theo từng khung giờ trong 24 tiếng. Bấm vào Depot bên dưới để xem chi tiết.
+              </p>
+            </div>
+
+            <!-- Thống kê tóm tắt theo Depot đang chọn -->
+            <div class="hourly-summary-badges" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 6px 14px; min-width: 110px; text-align: right;">
+                <div style="font-size: 11px; font-weight: 700; color: #991b1b; text-transform: uppercase; letter-spacing: 0.3px;">Đơn Hủy</div>
+                <div id="hourlyDepotTotalCancelled" style="font-size: 16px; font-weight: 800; color: #dc2626;">0 đơn</div>
+              </div>
+              <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 6px 14px; min-width: 110px; text-align: right;">
+                <div style="font-size: 11px; font-weight: 700; color: #92400e; text-transform: uppercase; letter-spacing: 0.3px;">Chưa Thanh Toán</div>
+                <div id="hourlyDepotTotalUnpaid" style="font-size: 16px; font-weight: 800; color: #d97706;">0 đơn</div>
+              </div>
+              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 14px; min-width: 120px; text-align: right;">
+                <div style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.3px;">Giờ Cao Điểm</div>
+                <div id="hourlyDepotPeakHour" style="font-size: 16px; font-weight: 800; color: #0f172a;">-</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Danh sách Depot User Được Phân Quyền Truy Cập -->
+          <div class="hourly-depot-selector-row" style="margin-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <span style="font-size: 13px; font-weight: 700; color: #334155; white-space: nowrap;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 4px; color: #1d4ed8;"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                Depot phân quyền:
+              </span>
+              <div id="hourlyDepotTabsList" class="depot-tabs-list" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                <!-- Render động các nút chọn depot -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Chart Canvas -->
+          <div class="chart-container" style="position: relative; height: 350px; width: 100%;">
+            <canvas id="chartHourlyDepot"></canvas>
           </div>
         </div>
       </section>

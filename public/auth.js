@@ -19,6 +19,9 @@
 
   // Phân quyền sớm từ localStorage để bảo vệ trang và áp dụng class ẩn
   try {
+    if (localStorage.getItem("gpg_sidebar_collapsed") === "true") {
+      document.documentElement.classList.add("sidebar-collapsed");
+    }
     const userStr = localStorage.getItem("gpg_auth_user");
     if (userStr) {
       const u = JSON.parse(userStr);
@@ -880,7 +883,96 @@ function openChangePasswordModal() {
 
 window.openChangePasswordModal = openChangePasswordModal;
 
+// Quản trị ẩn / hiện thanh tab bên trái (Left Sidebar Toggle)
+function initSidebarToggle() {
+  const isCollapsed = localStorage.getItem("gpg_sidebar_collapsed") === "true";
+  if (isCollapsed) {
+    document.documentElement.classList.add("sidebar-collapsed");
+    document.body.classList.add("sidebar-collapsed");
+  }
+
+  // 1. Kiểm tra hoặc gắn nút thu gọn trên sidebar-brand
+  const sidebarBrand = document.querySelector(".sidebar-brand");
+  if (sidebarBrand && !document.getElementById("btnCollapseSidebar")) {
+    const brandChild = sidebarBrand.firstElementChild;
+    if (brandChild && !brandChild.classList.contains("sidebar-brand-text")) {
+      brandChild.classList.add("sidebar-brand-text");
+    }
+    const btnCollapse = document.createElement("button");
+    btnCollapse.type = "button";
+    btnCollapse.className = "sidebar-collapse-btn";
+    btnCollapse.id = "btnCollapseSidebar";
+    btnCollapse.title = "Ẩn thanh tab";
+    btnCollapse.setAttribute("aria-label", "Ẩn thanh tab");
+    btnCollapse.innerHTML = `
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 18 9 12 15 6"></polyline>
+      </svg>
+    `;
+    sidebarBrand.appendChild(btnCollapse);
+  }
+
+  // 2. Kiểm tra hoặc gắn nút toggle ở app-header
+  const appHeader = document.querySelector(".app-header");
+  if (appHeader && !document.getElementById("headerSidebarToggleBtn")) {
+    const btnHeaderToggle = document.createElement("button");
+    btnHeaderToggle.type = "button";
+    btnHeaderToggle.className = "sidebar-header-toggle-btn";
+    btnHeaderToggle.id = "headerSidebarToggleBtn";
+    btnHeaderToggle.title = "Hiện thanh tab";
+    btnHeaderToggle.setAttribute("aria-label", "Hiện thanh tab");
+    btnHeaderToggle.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="3" y1="12" x2="21" y2="12"></line>
+        <line x1="3" y1="6" x2="21" y2="6"></line>
+        <line x1="3" y1="18" x2="21" y2="18"></line>
+      </svg>
+    `;
+    appHeader.insertBefore(btnHeaderToggle, appHeader.firstChild);
+  }
+
+  // 3. Tự động gỡ bỏ nút nổi ở mép trái nếu có (chỉ giữ lại ô 3 gạch ở header theo yêu cầu)
+  const existingFloatBtn = document.getElementById("floatSidebarToggleBtn");
+  if (existingFloatBtn) {
+    existingFloatBtn.remove();
+  }
+
+  // 4. Hàm chuyển đổi trạng thái
+  function setSidebarState(collapsed) {
+    if (collapsed) {
+      document.documentElement.classList.add("sidebar-collapsed");
+      document.body.classList.add("sidebar-collapsed");
+      localStorage.setItem("gpg_sidebar_collapsed", "true");
+    } else {
+      document.documentElement.classList.remove("sidebar-collapsed");
+      document.body.classList.remove("sidebar-collapsed");
+      localStorage.setItem("gpg_sidebar_collapsed", "false");
+    }
+    // Kích hoạt event resize để các bảng biểu Chart.js tự động co dãn layout
+    setTimeout(() => {
+      window.dispatchEvent(new Event("resize"));
+    }, 260);
+  }
+
+  // 5. Gắn sự kiện click
+  document.addEventListener("click", (e) => {
+    const btnCollapse = e.target.closest("#btnCollapseSidebar");
+    if (btnCollapse) {
+      e.preventDefault();
+      setSidebarState(true);
+      return;
+    }
+    const btnExpand = e.target.closest("#headerSidebarToggleBtn, #floatSidebarToggleBtn");
+    if (btnExpand) {
+      e.preventDefault();
+      setSidebarState(false);
+      return;
+    }
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+  initSidebarToggle();
   initAuthProfile();
 
   const btnLogout = document.getElementById("btnLogout");

@@ -12,10 +12,15 @@
     <!-- Thanh Tab Bên Trái (Left Sidebar) -->
     <aside class="app-sidebar">
       <div class="sidebar-brand">
-                <div>
+        <div class="sidebar-brand-text">
           <div class="brand-title">GPG LOGISTICS</div>
           <div class="brand-subtitle">Quản Trị Đơn Hủy 24/7</div>
         </div>
+        <button type="button" class="sidebar-collapse-btn" id="btnCollapseSidebar" title="Ẩn thanh tab" aria-label="Ẩn thanh tab">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
       </div>
 
       <nav class="sidebar-nav">
@@ -75,9 +80,17 @@
     <div class="main-content">
       <!-- Header -->
       <header class="app-header">
-        <div>
-          <h1>BẢNG DỮ LIỆU CHI TIẾT</h1>
-         
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <button type="button" class="sidebar-header-toggle-btn" id="headerSidebarToggleBtn" title="Hiện thanh tab" aria-label="Hiện thanh tab">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+          <div>
+            <h1>BẢNG DỮ LIỆU CHI TIẾT</h1>
+          </div>
         </div>
         <div class="header-user-dropdown-container" id="headerUserMenu">
           <button type="button" class="user-chip-btn" id="userChipBtn" aria-haspopup="true" aria-expanded="false" title="Menu người dùng">
