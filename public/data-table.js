@@ -1240,6 +1240,15 @@ document.addEventListener("DOMContentLoaded", () => {
         applyFilters();
         return;
       }
+
+      // 3. Highlight dòng dữ liệu khi người dùng click vào dòng
+      const clickedRow = e.target.closest("tr");
+      if (clickedRow && clickedRow.parentElement === tbodyFullData && !clickedRow.querySelector("td[colspan]")) {
+        tbodyFullData.querySelectorAll("tr.row-highlighted").forEach(r => {
+          if (r !== clickedRow) r.classList.remove("row-highlighted");
+        });
+        clickedRow.classList.add("row-highlighted");
+      }
     });
   }
 
@@ -1634,8 +1643,8 @@ document.addEventListener("DOMContentLoaded", () => {
     };
   }
 
-  // Tự động đóng cả 2 dropdown khi click ra ngoài
-  document.addEventListener("click", () => {
+  // Tự động đóng cả 2 dropdown khi click ra ngoài & bỏ highlight dòng khi click ở chỗ khác
+  document.addEventListener("click", (e) => {
     if (depotDropdownPanel) {
       depotDropdownPanel.classList.remove("show");
       if (depotDropdownBtn) {
@@ -1648,6 +1657,13 @@ document.addEventListener("DOMContentLoaded", () => {
       if (statusDropdownBtn) {
         statusDropdownBtn.classList.remove("active");
         statusDropdownBtn.setAttribute("aria-expanded", "false");
+      }
+    }
+
+    // Bỏ highlight dòng khi click ở chỗ khác ngoài các dòng dữ liệu của bảng
+    if (!e.target.closest("#tbodyFullData tr")) {
+      if (tbodyFullData) {
+        tbodyFullData.querySelectorAll("tr.row-highlighted").forEach(r => r.classList.remove("row-highlighted"));
       }
     }
   });

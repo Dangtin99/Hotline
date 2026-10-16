@@ -1953,6 +1953,39 @@ body {
   padding: 10px 14px;
 }
 
+/* Highlight dòng dữ liệu khi người dùng click chọn */
+.full-excel-table tbody tr {
+  cursor: pointer;
+}
+
+.full-excel-table tbody tr.row-highlighted,
+.full-excel-table tbody tr.row-highlighted td,
+.data-table tbody tr.row-highlighted,
+.data-table tbody tr.row-highlighted td {
+  background-color: #dbeafe !important;
+}
+
+.full-excel-table tbody tr.row-highlighted td:first-child,
+.data-table tbody tr.row-highlighted td:first-child {
+  border-left: 4px solid var(--blue-primary) !important;
+}
+
+.full-excel-table tbody tr.row-highlighted td.frozen-col,
+.full-excel-table tbody tr:nth-child(even).row-highlighted td.frozen-col,
+.full-excel-table tbody tr.row-highlighted:hover td.frozen-col,
+.full-excel-table tbody tr:nth-child(even).row-highlighted:hover td.frozen-col,
+.inline-detail-table tbody tr.row-highlighted td.frozen-col,
+.inline-detail-table tbody tr:nth-child(even).row-highlighted td.frozen-col {
+  background-color: #dbeafe !important;
+}
+
+.full-excel-table tbody tr.row-highlighted:hover,
+.full-excel-table tbody tr.row-highlighted:hover td,
+.data-table tbody tr.row-highlighted:hover,
+.data-table tbody tr.row-highlighted:hover td {
+  background-color: #bfdbfe !important;
+}
+
 /* Định dạng Cột Trạng Thái (Pill Badge Dropdown) & Giải Trình */
 .status-badge-select {
   appearance: none;
