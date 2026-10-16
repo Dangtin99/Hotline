@@ -229,9 +229,9 @@ function isUnpaidOrder(r) {
 function isCancelledStatus(val) {
   if (!val) return false;
   const raw = String(val).trim().toLowerCase();
-  if (raw === "đã hủy" || raw === "đã huỷ" || raw === "hủy" || raw === "huỷ" || raw === "từ chối duyệt" || raw.includes("hoàn tiền") || raw.includes("hoan tien")) return true;
+  if (raw === "đã hủy" || raw === "đã huỷ" || raw === "hủy" || raw === "huỷ") return true;
   const s = raw.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").trim();
-  return s === "da huy" || s === "huy" || s.includes("da huy") || s.includes("tu choi duyet") || s.includes("hoan tien");
+  return s === "da huy" || s === "huy" || s.includes("da huy") || s.includes("huy");
 }
 
 // Kiểm tra xem đơn hàng có trạng thái Đã Hủy hay không
