@@ -3024,12 +3024,15 @@ body {
 .inline-table-container {
   max-height: 480px;
   overflow-y: auto;
+  overflow-x: auto;
+  scrollbar-width: thin;
   border: 1px solid var(--border-light);
   border-radius: 8px;
 }
 
 .inline-detail-table {
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
   font-size: 13px;
 }
@@ -3232,10 +3235,13 @@ body {
 .modal-table-container {
   max-height: 52vh;
   overflow-y: auto;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
 .modal-data-table {
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
   font-size: 13px;
 }
@@ -3249,12 +3255,14 @@ body {
   color: #334155;
   border-bottom: 2px solid var(--border-color);
   padding: 10px 14px;
+  white-space: nowrap;
 }
 
 .modal-data-table td {
   padding: 10px 14px;
   border-bottom: 1px solid var(--border-light);
   vertical-align: middle;
+  white-space: nowrap;
 }
 
 .modal-data-table tbody tr:hover {
@@ -3784,3 +3792,112 @@ html.non-admin-user [data-admin-only="true"] {
   border-top: 2px solid #cbd5e1;
   color: #0f172a;
 }
+
+/* ========================================================
+   BẢNG PHÂN TÍCH ĐƠN HỦY THEO NGUỒN & XU HƯỚNG ĐẶT LẠI
+   ======================================================== */
+.source-cancellation-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.source-cancellation-table th,
+.source-cancellation-table td {
+  padding: 10px 12px;
+  vertical-align: middle;
+  border: 1px solid #e2e8f0;
+}
+
+.source-cancellation-table thead th {
+  background: #f8fafc;
+  color: #1e293b;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.source-cancellation-table .col-divider-left {
+  border-left: 2px solid #cbd5e1 !important;
+}
+
+.source-cancellation-table tr.source-summary-row {
+  background: #f8fafc;
+  font-weight: 700;
+}
+
+.source-cancellation-table tr.source-summary-row td {
+  border-bottom: 2px solid #cbd5e1;
+  padding: 12px;
+}
+
+.source-cancellation-table tr.source-section-header-row th {
+  background: #f1f5f9;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 8px 12px;
+  border-top: 2px solid #cbd5e1;
+  border-bottom: 2px solid #cbd5e1;
+}
+
+.source-cancellation-table tbody tr.source-detail-row:hover {
+  background-color: #f8fafc;
+}
+
+.source-rebook-badge {
+  display: inline-block;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.source-norebook-badge {
+  display: inline-block;
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.source-empty-badge {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.source-cell-clickable {
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.source-cell-clickable:hover {
+  text-decoration: underline;
+}
+
+.source-rebook-badge.source-cell-clickable:hover {
+  background: #dbeafe !important;
+  border-color: #93c5fd !important;
+  text-decoration: none;
+  box-shadow: 0 1px 3px rgba(29, 78, 216, 0.25);
+  transform: translateY(-1px);
+}
+
+.source-norebook-badge.source-cell-clickable:hover {
+  background: #fee2e2 !important;
+  border-color: #fca5a5 !important;
+  text-decoration: none;
+  box-shadow: 0 1px 3px rgba(185, 28, 28, 0.25);
+  transform: translateY(-1px);
+}
+

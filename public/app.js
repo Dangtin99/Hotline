@@ -1683,6 +1683,7 @@ function renderDashboardViews(data, records = [], comparisonInfo = null) {
     masterDashboardRecords ? masterDashboardRecords.length : (records ? records.length : 0),
     comparisonInfo || currentComparisonInfo
   );
+  renderSourceCancellationTable(records);
   renderTopDepotLineCancelTable(records);
   renderDepotTable(byDepot, kpis.totalOrders);
   renderReasonsTable(topCancelReasons);
@@ -2695,6 +2696,467 @@ function formatRateDiff(curRate, prevRate, curCalls, prevCalls, hasComp, isIncre
   }
 }
 
+// Biến lưu trữ dữ liệu phân tích nguồn hủy phục vụ xuất CSV và drill-down
+let currentSourceCancelExportData = null;
+let currentSourceCancelRecords = [];
+
+/**
+ * Render Bảng Phân Tích Đơn Hủy Theo Nguồn & Xu Hướng Đặt Lại
+ * - Chỉ xét các đơn hàng có lý do giải trình khác null / không rỗng
+ * - Phân loại: Nhóm 1, 2, 3, 4 -> Hủy từ Khách; Nhóm 5, 6, 7 -> Hủy từ Trung tâm
+ * - Dự đoán đặt lại: Trạng thái = Đã liên hệ - Chờ
+ * - Không đặt lại: Lấy cứng trạng thái = Đã liên hệ - Không đặt lại
+ * - Hỗ trợ click vào bất kỳ ô / badge để mở màn hình thống kê danh sách đơn tương ứng
+ */
+function renderSourceCancellationTable(records = []) {
+  const tbody = document.getElementById("tbodySourceCancellation");
+  if (!tbody) return;
+
+  const totalInView = (records || []).length;
+  const countTotalEl = document.getElementById("sourceCancelTotalCount");
+  const countExplEl = document.getElementById("sourceCancelExplainedCount");
+  if (countTotalEl) countTotalEl.textContent = totalInView.toLocaleString("vi-VN");
+
+  const savedNotes = typeof getSavedNotes === "function" ? getSavedNotes() : {};
+
+  // Lọc chỉ các bản ghi có giải trình khác null / không rỗng
+  const validRecords = [];
+  (records || []).forEach(r => {
+    let rawExp = (r.giaiTrinh || r.giai_trinh || "").trim();
+    if (!rawExp && r.rowKey && savedNotes[r.rowKey] && savedNotes[r.rowKey].giaiTrinh) {
+      rawExp = String(savedNotes[r.rowKey].giaiTrinh).trim();
+    }
+    const kFallback = `${r.stt}_${r.soBooking || ''}_${r.soContainer || ''}`;
+    if (!rawExp && savedNotes[kFallback] && savedNotes[kFallback].giaiTrinh) {
+      rawExp = String(savedNotes[kFallback].giaiTrinh).trim();
+    }
+
+    if (!rawExp || rawExp === "null" || rawExp === "undefined" || rawExp === "-" || rawExp.toLowerCase() === "none") {
+      return;
+    }
+
+    const groupExp = getExplanationGroup(rawExp);
+    if (!groupExp) return;
+
+    const groupIdx = CANCELLATION_REASON_GROUPS.indexOf(groupExp);
+    if (groupIdx === -1) return;
+
+    // Lấy trạng thái xử lý CSKH
+    let rawStatus = (r.trangThaiXuLy || "").trim();
+    if (!rawStatus && r.rowKey && savedNotes[r.rowKey] && savedNotes[r.rowKey].status) {
+      rawStatus = String(savedNotes[r.rowKey].status).trim();
+    }
+    if (!rawStatus && savedNotes[kFallback] && savedNotes[kFallback].status) {
+      rawStatus = String(savedNotes[kFallback].status).trim();
+    }
+    const normStatus = normalizeCskhStatus(rawStatus, isUnpaidOrder(r));
+
+    // 1. Cột dự đoán đặt lại: Trạng thái = Đã liên hệ - Chờ
+    const isRebookWait = normStatus === "Đã liên hệ - Chờ" || 
+                         rawStatus === "Đã liên hệ - Chờ" || 
+                         rawStatus === "Đã liên hệ - Chờ đặt lại" || 
+                         rawStatus === "Đã liên hệ - Đang chờ";
+
+    // 2. Cột không đặt lại: Lấy cứng trạng thái = Đã liên hệ - Không đặt lại
+    const isNoRebook = normStatus === "Đã liên hệ - Không đặt lại" || 
+                       rawStatus === "Đã liên hệ - Không đặt lại" || 
+                       rawStatus === "Đã Liên hệ - Không đặt lại" || 
+                       rawStatus === "Đã Liện hệ - Không đặt lại";
+
+    validRecords.push({
+      record: r,
+      groupExp,
+      groupIdx, // 0..3: Khách (1-4), 4..6: Trung tâm (5-7)
+      groupNumber: groupIdx + 1,
+      isCustomer: groupIdx < 4,
+      isRebookWait,
+      isNoRebook,
+      normStatus,
+      rawStatus
+    });
+  });
+
+  currentSourceCancelRecords = validRecords;
+  if (countExplEl) countExplEl.textContent = validRecords.length.toLocaleString("vi-VN");
+
+  if (validRecords.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6" class="text-center text-muted" style="padding: 24px;">
+          Không có đơn hàng nào có lý do giải trình trong bộ lọc hiện tại.
+        </td>
+      </tr>
+    `;
+    currentSourceCancelExportData = null;
+    return;
+  }
+
+  // Khởi tạo các nhóm:
+  // Nhóm khách (0..3): 1. Thay đổi kế hoạch vận chuyển, 2. Thay đổi hoặc không còn nhu cầu đặt đơn, 3. Không đáp ứng điều kiện thực hiện đơn, 4. Lý do khác từ khách hàng
+  // Nhóm trung tâm (4..6): 5. Không đáp ứng điều kiện xử lý đơn, 6. Không thể thực hiện do điều kiện Depot/Container, 7. Lý do khác từ Trung tâm
+  const customerGroups = [0, 1, 2, 3].map(idx => ({
+    groupNumber: idx + 1,
+    groupName: CANCELLATION_REASON_GROUPS[idx],
+    total: 0,
+    rebookWait: 0,
+    noRebook: 0
+  }));
+
+  const centerGroups = [4, 5, 6].map(idx => ({
+    groupNumber: idx + 1,
+    groupName: CANCELLATION_REASON_GROUPS[idx],
+    total: 0,
+    rebookWait: 0,
+    noRebook: 0
+  }));
+
+  let totalCustomer = 0;
+  let totalCustomerRebookWait = 0;
+  let totalCustomerNoRebook = 0;
+
+  let totalCenter = 0;
+  let totalCenterRebookWait = 0;
+  let totalCenterNoRebook = 0;
+
+  validRecords.forEach(item => {
+    if (item.isCustomer) {
+      // Nhánh Khách hàng (Nhóm 1 - 4)
+      totalCustomer += 1;
+      if (item.isRebookWait) totalCustomerRebookWait += 1;
+      if (item.isNoRebook) totalCustomerNoRebook += 1;
+
+      const g = customerGroups[item.groupIdx];
+      if (g) {
+        g.total += 1;
+        if (item.isRebookWait) g.rebookWait += 1;
+        if (item.isNoRebook) g.noRebook += 1;
+      }
+    } else {
+      // Nhánh Trung tâm (Nhóm 5 - 7)
+      totalCenter += 1;
+      if (item.isRebookWait) totalCenterRebookWait += 1;
+      if (item.isNoRebook) totalCenterNoRebook += 1;
+
+      const g = centerGroups[item.groupIdx - 4];
+      if (g) {
+        g.total += 1;
+        if (item.isRebookWait) g.rebookWait += 1;
+        if (item.isNoRebook) g.noRebook += 1;
+      }
+    }
+  });
+
+  const custRebookPct = totalCustomer > 0 ? ((totalCustomerRebookWait / totalCustomer) * 100).toFixed(1) : "0.0";
+  const custNoRebookPct = totalCustomer > 0 ? ((totalCustomerNoRebook / totalCustomer) * 100).toFixed(1) : "0.0";
+
+  const centerRebookPct = totalCenter > 0 ? ((totalCenterRebookWait / totalCenter) * 100).toFixed(1) : "0.0";
+  const centerNoRebookPct = totalCenter > 0 ? ((totalCenterNoRebook / totalCenter) * 100).toFixed(1) : "0.0";
+
+  // Lưu snapshot dữ liệu phục vụ xuất CSV
+  currentSourceCancelExportData = {
+    totalCustomer,
+    totalCustomerRebookWait,
+    custRebookPct,
+    totalCustomerNoRebook,
+    custNoRebookPct,
+    totalCenter,
+    totalCenterRebookWait,
+    centerRebookPct,
+    totalCenterNoRebook,
+    centerNoRebookPct,
+    customerGroups,
+    centerGroups
+  };
+
+  // Render HTML cấu trúc 6 cột chuẩn Excel với sự kiện click
+  // Dòng 1: Dòng Tổng Cộng
+  let html = `
+    <tr class="source-summary-row">
+      <td class="source-cell-clickable" onclick="window.openSourceCancelDetailModal('CUSTOMER_ALL')" title="Bấm để xem danh sách ${totalCustomer} đơn hủy từ khách hàng" style="text-align: right; background: #f0fdf4;">
+        <div style="font-size: 15px; font-weight: 800; color: #166534;">${totalCustomer.toLocaleString("vi-VN")} đơn</div>
+      </td>
+      <td style="text-align: center; background: #f0fdf4;">
+        ${totalCustomerRebookWait > 0 ? `
+          <span class="source-rebook-badge source-cell-clickable" onclick="window.openSourceCancelDetailModal('CUSTOMER_REBOOK')" title="Bấm để xem ${totalCustomerRebookWait} đơn khách dự đoán đặt lại">${totalCustomerRebookWait} đơn (${custRebookPct}%)</span>
+        ` : `<span class="source-empty-badge">0 đơn (0.0%)</span>`}
+      </td>
+      <td style="text-align: center; background: #f0fdf4;">
+        ${totalCustomerNoRebook > 0 ? `
+          <span class="source-norebook-badge source-cell-clickable" onclick="window.openSourceCancelDetailModal('CUSTOMER_NOREBOOK')" title="Bấm để xem ${totalCustomerNoRebook} đơn khách không đặt lại">${totalCustomerNoRebook} đơn (${custNoRebookPct}%)</span>
+        ` : `<span class="source-empty-badge">0 đơn (0.0%)</span>`}
+      </td>
+      <td class="col-divider-left source-cell-clickable" onclick="window.openSourceCancelDetailModal('CENTER_ALL')" title="Bấm để xem danh sách ${totalCenter} đơn hủy từ trung tâm" style="text-align: right; background: #eff6ff;">
+        <div style="font-size: 15px; font-weight: 800; color: #1e40af;">${totalCenter.toLocaleString("vi-VN")} đơn</div>
+      </td>
+      <td style="text-align: center; background: #eff6ff;">
+        ${totalCenterRebookWait > 0 ? `
+          <span class="source-rebook-badge source-cell-clickable" onclick="window.openSourceCancelDetailModal('CENTER_REBOOK')" title="Bấm để xem ${totalCenterRebookWait} đơn trung tâm dự đoán đặt lại">${totalCenterRebookWait} đơn (${centerRebookPct}%)</span>
+        ` : `<span class="source-empty-badge">0 đơn (0.0%)</span>`}
+      </td>
+      <td style="text-align: center; background: #eff6ff;">
+        ${totalCenterNoRebook > 0 ? `
+          <span class="source-norebook-badge source-cell-clickable" onclick="window.openSourceCancelDetailModal('CENTER_NOREBOOK')" title="Bấm để xem ${totalCenterNoRebook} đơn trung tâm không đặt lại">${totalCenterNoRebook} đơn (${centerNoRebookPct}%)</span>
+        ` : `<span class="source-empty-badge">0 đơn (0.0%)</span>`}
+      </td>
+    </tr>
+    <tr class="source-section-header-row">
+      <th colspan="3" style="text-align: center;">Nguyên nhân</th>
+      <th colspan="3" class="col-divider-left" style="text-align: center;">Nguyên nhân</th>
+    </tr>
+  `;
+
+  // Dòng 3+: Chi tiết các Nguyên nhân (4 dòng: Nhóm 1-4 bên trái, Nhóm 5-7 bên phải)
+  const maxRows = Math.max(customerGroups.length, centerGroups.length); // 4 dòng
+  for (let i = 0; i < maxRows; i++) {
+    const cg = customerGroups[i] || null;
+    const tg = centerGroups[i] || null;
+
+    let custHtml = "";
+    if (cg) {
+      const rebPct = cg.total > 0 ? ((cg.rebookWait / cg.total) * 100).toFixed(1) : "0.0";
+      const noRebPct = cg.total > 0 ? ((cg.noRebook / cg.total) * 100).toFixed(1) : "0.0";
+      custHtml = `
+        <td class="source-cell-clickable" onclick="window.openSourceCancelDetailModal('GROUP_ALL', ${cg.groupNumber})" title="Bấm để xem toàn bộ ${cg.total} đơn thuộc ${cg.groupName}">
+          <div style="font-weight: 600; color: #0f172a; margin-bottom: 2px;">${cg.groupNumber}. ${cg.groupName}</div>
+          <div style="font-weight: 700; color: #166534; text-align: right; font-size: 13px;">${cg.total.toLocaleString("vi-VN")} đơn</div>
+        </td>
+        <td style="text-align: center;">
+          ${cg.rebookWait > 0 ? `
+            <span class="source-rebook-badge source-cell-clickable" onclick="window.openSourceCancelDetailModal('GROUP_REBOOK', ${cg.groupNumber})" title="Bấm để xem ${cg.rebookWait} đơn dự đoán đặt lại">${cg.rebookWait} đơn (${rebPct}%)</span>
+          ` : `<span class="source-empty-badge">0 đơn (0.0%)</span>`}
+        </td>
+        <td style="text-align: center;">
+          ${cg.noRebook > 0 ? `
+            <span class="source-norebook-badge source-cell-clickable" onclick="window.openSourceCancelDetailModal('GROUP_NOREBOOK', ${cg.groupNumber})" title="Bấm để xem ${cg.noRebook} đơn không đặt lại">${cg.noRebook} đơn (${noRebPct}%)</span>
+          ` : `<span class="source-empty-badge">0 đơn (0.0%)</span>`}
+        </td>
+      `;
+    } else {
+      custHtml = `
+        <td class="text-center text-muted" style="background: #fafafa;">-</td>
+        <td class="text-center text-muted" style="background: #fafafa;">-</td>
+        <td class="text-center text-muted" style="background: #fafafa;">-</td>
+      `;
+    }
+
+    let centerHtml = "";
+    if (tg) {
+      const rebPct = tg.total > 0 ? ((tg.rebookWait / tg.total) * 100).toFixed(1) : "0.0";
+      const noRebPct = tg.total > 0 ? ((tg.noRebook / tg.total) * 100).toFixed(1) : "0.0";
+      centerHtml = `
+        <td class="col-divider-left source-cell-clickable" onclick="window.openSourceCancelDetailModal('GROUP_ALL', ${tg.groupNumber})" title="Bấm để xem toàn bộ ${tg.total} đơn thuộc ${tg.groupName}">
+          <div style="font-weight: 600; color: #0f172a; margin-bottom: 2px;">${tg.groupNumber}. ${tg.groupName}</div>
+          <div style="font-weight: 700; color: #1e40af; text-align: right; font-size: 13px;">${tg.total.toLocaleString("vi-VN")} đơn</div>
+        </td>
+        <td style="text-align: center;">
+          ${tg.rebookWait > 0 ? `
+            <span class="source-rebook-badge source-cell-clickable" onclick="window.openSourceCancelDetailModal('GROUP_REBOOK', ${tg.groupNumber})" title="Bấm để xem ${tg.rebookWait} đơn dự đoán đặt lại">${tg.rebookWait} đơn (${rebPct}%)</span>
+          ` : `<span class="source-empty-badge">0 đơn (0.0%)</span>`}
+        </td>
+        <td style="text-align: center;">
+          ${tg.noRebook > 0 ? `
+            <span class="source-norebook-badge source-cell-clickable" onclick="window.openSourceCancelDetailModal('GROUP_NOREBOOK', ${tg.groupNumber})" title="Bấm để xem ${tg.noRebook} đơn không đặt lại">${tg.noRebook} đơn (${noRebPct}%)</span>
+          ` : `<span class="source-empty-badge">0 đơn (0.0%)</span>`}
+        </td>
+      `;
+    } else {
+      centerHtml = `
+        <td class="col-divider-left text-center text-muted" style="background: #fafafa;">-</td>
+        <td class="text-center text-muted" style="background: #fafafa;">-</td>
+        <td class="text-center text-muted" style="background: #fafafa;">-</td>
+      `;
+    }
+
+    html += `
+      <tr class="source-detail-row">
+        ${custHtml}
+        ${centerHtml}
+      </tr>
+    `;
+  }
+
+  tbody.innerHTML = html;
+}
+
+/**
+ * Xử lý mở màn hình thống kê chi tiết các đơn hàng khi người dùng chọn vào bất kỳ giá trị nào trên bảng
+ */
+window.openSourceCancelDetailModal = function(filterType, groupNumber = null) {
+  if (!currentSourceCancelRecords || currentSourceCancelRecords.length === 0) {
+    if (typeof showAlert === "function") {
+      showAlert("Không có dữ liệu đơn hàng để hiển thị.");
+    } else {
+      alert("Không có dữ liệu đơn hàng để hiển thị.");
+    }
+    return;
+  }
+
+  let filtered = [];
+  let titleStr = "";
+  let subtitleStr = "";
+
+  switch (filterType) {
+    case "CUSTOMER_ALL":
+      filtered = currentSourceCancelRecords.filter(item => item.isCustomer);
+      titleStr = "Thống Kê Đơn Hủy: Tất Cả Đơn Từ Khách Hàng (Nhóm 1 - 4)";
+      subtitleStr = `Phân loại: <strong>Hủy từ khách</strong> • Tổng số: <strong>${filtered.length}</strong> đơn hàng có giải trình`;
+      break;
+
+    case "CUSTOMER_REBOOK":
+      filtered = currentSourceCancelRecords.filter(item => item.isCustomer && item.isRebookWait);
+      titleStr = "Thống Kê Đơn Hủy: Khách Hàng • Dự Đoán Đặt Lại";
+      subtitleStr = `Phân loại: <strong>Hủy từ khách</strong> • Trạng thái: <strong>Đã liên hệ - Chờ</strong> • Tổng số: <strong>${filtered.length}</strong> đơn hàng`;
+      break;
+
+    case "CUSTOMER_NOREBOOK":
+      filtered = currentSourceCancelRecords.filter(item => item.isCustomer && item.isNoRebook);
+      titleStr = "Thống Kê Đơn Hủy: Khách Hàng • Không Đặt Lại";
+      subtitleStr = `Phân loại: <strong>Hủy từ khách</strong> • Trạng thái: <strong>Đã liên hệ - Không đặt lại</strong> • Tổng số: <strong>${filtered.length}</strong> đơn hàng`;
+      break;
+
+    case "CENTER_ALL":
+      filtered = currentSourceCancelRecords.filter(item => !item.isCustomer);
+      titleStr = "Thống Kê Đơn Hủy: Tất Cả Đơn Từ Trung Tâm (Nhóm 5 - 7)";
+      subtitleStr = `Phân loại: <strong>Hủy từ Trung tâm</strong> • Tổng số: <strong>${filtered.length}</strong> đơn hàng có giải trình`;
+      break;
+
+    case "CENTER_REBOOK":
+      filtered = currentSourceCancelRecords.filter(item => !item.isCustomer && item.isRebookWait);
+      titleStr = "Thống Kê Đơn Hủy: Trung Tâm • Dự Đoán Đặt Lại";
+      subtitleStr = `Phân loại: <strong>Hủy từ Trung tâm</strong> • Trạng thái: <strong>Đã liên hệ - Chờ</strong> • Tổng số: <strong>${filtered.length}</strong> đơn hàng`;
+      break;
+
+    case "CENTER_NOREBOOK":
+      filtered = currentSourceCancelRecords.filter(item => !item.isCustomer && item.isNoRebook);
+      titleStr = "Thống Kê Đơn Hủy: Trung Tâm • Không Đặt Lại";
+      subtitleStr = `Phân loại: <strong>Hủy từ Trung tâm</strong> • Trạng thái: <strong>Đã liên hệ - Không đặt lại</strong> • Tổng số: <strong>${filtered.length}</strong> đơn hàng`;
+      break;
+
+    case "GROUP_ALL": {
+      const num = Number(groupNumber) || 1;
+      const gName = CANCELLATION_REASON_GROUPS[num - 1] || `Nhóm ${num}`;
+      filtered = currentSourceCancelRecords.filter(item => item.groupNumber === num);
+      titleStr = `Chi Tiết Đơn Hủy: Nhóm ${num}. ${gName}`;
+      subtitleStr = `Tổng số: <strong>${filtered.length}</strong> đơn hàng thuộc lý do giải trình này`;
+      break;
+    }
+
+    case "GROUP_REBOOK": {
+      const num = Number(groupNumber) || 1;
+      const gName = CANCELLATION_REASON_GROUPS[num - 1] || `Nhóm ${num}`;
+      filtered = currentSourceCancelRecords.filter(item => item.groupNumber === num && item.isRebookWait);
+      titleStr = `Chi Tiết Đơn Hủy: Nhóm ${num}. ${gName} • Dự Đoán Đặt Lại`;
+      subtitleStr = `Trạng thái: <strong>Đã liên hệ - Chờ</strong> • Tổng số: <strong>${filtered.length}</strong> đơn hàng`;
+      break;
+    }
+
+    case "GROUP_NOREBOOK": {
+      const num = Number(groupNumber) || 1;
+      const gName = CANCELLATION_REASON_GROUPS[num - 1] || `Nhóm ${num}`;
+      filtered = currentSourceCancelRecords.filter(item => item.groupNumber === num && item.isNoRebook);
+      titleStr = `Chi Tiết Đơn Hủy: Nhóm ${num}. ${gName} • Không Đặt Lại`;
+      subtitleStr = `Trạng thái: <strong>Đã liên hệ - Không đặt lại</strong> • Tổng số: <strong>${filtered.length}</strong> đơn hàng`;
+      break;
+    }
+
+    default:
+      filtered = currentSourceCancelRecords;
+      titleStr = "Chi Tiết Đơn Hàng Có Lý Do Giải Trình";
+      subtitleStr = `Tổng số: <strong>${filtered.length}</strong> đơn hàng`;
+      break;
+  }
+
+  // Chuyển mảng về các bản ghi gốc
+  const rawRecords = filtered.map(item => item.record);
+
+  // 1. Cập nhật dữ liệu cho Modal màn hình chi tiết
+  const modal = document.getElementById("matrixDetailModal");
+  const modalTitle = document.getElementById("modalMatrixTitle");
+  const modalSubtitle = document.getElementById("modalMatrixSubtitle");
+  const searchInput = document.getElementById("modalMatrixSearch");
+  const btnOpenDataTable = document.getElementById("btnModalOpenDataTable");
+
+  modalActiveRecords = [...rawRecords];
+  modalFilteredRecords = [...rawRecords];
+
+  if (modalTitle) modalTitle.textContent = titleStr;
+  if (modalSubtitle) modalSubtitle.innerHTML = subtitleStr;
+  if (searchInput) searchInput.value = "";
+  if (btnOpenDataTable) {
+    btnOpenDataTable.href = "data-table.html";
+  }
+
+  renderModalTable(modalFilteredRecords);
+
+  if (modal) {
+    modal.hidden = false;
+    document.body.style.overflow = "hidden";
+  }
+
+  // 2. Đồng thời cập nhật Bảng Thống Kê Chi Tiết trên giao diện (Inline Detail Table)
+  if (typeof renderInlineDetailTable === "function") {
+    renderInlineDetailTable(rawRecords, "ALL", "ALL", titleStr, subtitleStr);
+  }
+};
+
+/**
+ * Xuất file CSV phân tích nguồn hủy
+ */
+function exportSourceCancelCsv() {
+  if (!currentSourceCancelExportData) {
+    if (typeof showToast === "function") {
+      showToast("Không có dữ liệu phân tích nguồn để xuất CSV", "warning");
+    } else {
+      alert("Không có dữ liệu phân tích nguồn để xuất CSV");
+    }
+    return;
+  }
+  const d = currentSourceCancelExportData;
+  const rows = [];
+  rows.push(["PHÂN TÍCH ĐƠN HỦY THEO NGUỒN & XU HƯỚNG ĐẶT LẠI"]);
+  rows.push(["(Chỉ xét các đơn hàng có lý do giải trình)"]);
+  rows.push([]);
+  rows.push(["HỦY TỪ KHÁCH (Nhóm 1 - 4)", "", "", "HỦY TỪ TRUNG TÂM (Nhóm 5 - 7)", "", ""]);
+  rows.push(["Tổng", "Dự đoán đặt lại", "Không đặt lại", "Tổng đơn", "Dự đoán đặt lại", "Không đặt lại"]);
+  rows.push([
+    `${d.totalCustomer} đơn`,
+    `${d.totalCustomerRebookWait} đơn (${d.custRebookPct}%)`,
+    `${d.totalCustomerNoRebook} đơn (${d.custNoRebookPct}%)`,
+    `${d.totalCenter} đơn`,
+    `${d.totalCenterRebookWait} đơn (${d.centerRebookPct}%)`,
+    `${d.totalCenterNoRebook} đơn (${d.centerNoRebookPct}%)`
+  ]);
+  rows.push(["Nguyên nhân", "", "", "Nguyên nhân", "", ""]);
+
+  const maxRows = Math.max(d.customerGroups.length, d.centerGroups.length);
+  for (let i = 0; i < maxRows; i++) {
+    const cg = d.customerGroups[i];
+    const tg = d.centerGroups[i];
+
+    const cName = cg ? `${cg.groupNumber}. ${cg.groupName}: ${cg.total} đơn` : "-";
+    const cReb = cg ? `${cg.rebookWait} đơn (${cg.total > 0 ? ((cg.rebookWait / cg.total) * 100).toFixed(1) : "0.0"}%)` : "-";
+    const cNoReb = cg ? `${cg.noRebook} đơn (${cg.total > 0 ? ((cg.noRebook / cg.total) * 100).toFixed(1) : "0.0"}%)` : "-";
+
+    const tName = tg ? `${tg.groupNumber}. ${tg.groupName}: ${tg.total} đơn` : "-";
+    const tReb = tg ? `${tg.rebookWait} đơn (${tg.total > 0 ? ((tg.rebookWait / tg.total) * 100).toFixed(1) : "0.0"}%)` : "-";
+    const tNoReb = tg ? `${tg.noRebook} đơn (${tg.total > 0 ? ((tg.noRebook / tg.total) * 100).toFixed(1) : "0.0"}%)` : "-";
+
+    rows.push([cName, cReb, cNoReb, tName, tReb, tNoReb]);
+  }
+
+  const csvContent = "\uFEFF" + rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\r\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const dateStr = new Date().toISOString().substring(0, 10);
+  link.setAttribute("href", url);
+  link.setAttribute("download", `phan_tich_nguon_huy_${dateStr}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 // Render Bảng Chỉ Số KPI Vận Hành & CSKH Kèm So Sánh Cùng Kỳ
 function renderKpiSummaryTable(records, totalMasterCount, comparisonInfo = null) {
   const tbody = document.getElementById("tbodyKpiSummary");
@@ -2976,6 +3438,8 @@ async function exportElementToPng(elementOrId, fileName = "bao_cao_thong_ke.png"
           ".modal-toolbar-actions",
           ".modal-search-box",
           "#btnExportKpiPng",
+          "#btnExportSourceCancelPng",
+          "#btnExportSourceCancelCsv",
           "#btnExportTopDepotLinePng",
           "#btnExportDepotPng",
           "#btnExportReasonsPng",
@@ -3023,6 +3487,22 @@ function initExportPngEvents() {
       const card = document.getElementById("kpiSummaryCard");
       const dateStr = new Date().toISOString().substring(0, 10);
       exportElementToPng(card, `bang_chi_so_kpi_${dateStr}.png`, btnKpiPng);
+    };
+  }
+
+  const btnSourceCancelPng = document.getElementById("btnExportSourceCancelPng");
+  if (btnSourceCancelPng) {
+    btnSourceCancelPng.onclick = () => {
+      const card = document.getElementById("sourceCancellationCard");
+      const dateStr = new Date().toISOString().substring(0, 10);
+      exportElementToPng(card, `phan_tich_nguon_huy_${dateStr}.png`, btnSourceCancelPng);
+    };
+  }
+
+  const btnSourceCancelCsv = document.getElementById("btnExportSourceCancelCsv");
+  if (btnSourceCancelCsv) {
+    btnSourceCancelCsv.onclick = () => {
+      exportSourceCancelCsv();
     };
   }
 
@@ -3169,6 +3649,8 @@ async function exportDashboardOverviewPng(triggerBtn = null) {
           ".matrix-controls",
           ".matrix-detail-actions",
           "#btnExportKpiPng",
+          "#btnExportSourceCancelPng",
+          "#btnExportSourceCancelCsv",
           "#btnExportTopDepotLinePng",
           "#btnExportDepotPng",
           "#btnExportReasonsPng",
@@ -3947,6 +4429,8 @@ function initInlineDetailControls() {
             (r.hangTau && r.hangTau.toLowerCase().includes(q)) ||
             (r.lyDoHuy && r.lyDoHuy.toLowerCase().includes(q)) ||
             (r.lyDoTuChoi && r.lyDoTuChoi.toLowerCase().includes(q)) ||
+            (r.giaiTrinh && r.giaiTrinh.toLowerCase().includes(q)) ||
+            (r.giaiTrinhChiTiet && r.giaiTrinhChiTiet.toLowerCase().includes(q)) ||
             (r.tenTaiXe && r.tenTaiXe.toLowerCase().includes(q)) ||
             (r.tenNhaXe && r.tenNhaXe.toLowerCase().includes(q)) ||
             (r.trangThaiXuLy && r.trangThaiXuLy.toLowerCase().includes(q))
@@ -3975,19 +4459,34 @@ function initInlineDetailControls() {
   if (btnExportCsv) {
     btnExportCsv.onclick = () => {
       if (!currentInlineRecords || currentInlineRecords.length === 0) return;
-      const headers = ["STT", "Depot", "Hang Tau", "So Booking", "So Container", "Chieu", "Trang Thai", "Ngay Duyet", "Ly Do Huy", "Xu Ly CSKH"];
-      const rows = currentInlineRecords.map((r, i) => [
-        i + 1,
-        `"${r.depot || ""}"`,
-        `"${r.hangTau || ""}"`,
-        `"${r.soBooking || ""}"`,
-        `"${r.soContainer || ""}"`,
-        `"${r.loaiDonHang || ""}"`,
-        `"${r.trangThaiDonHang || ""}"`,
-        `"${r.ngayDuocDuyet || r.ngayHuyDon || ""}"`,
-        `"${(r.lyDoHuy || "").replace(/"/g, '""')}"`,
-        `"${(r.trangThaiXuLy || "").replace(/"/g, '""')}"`
-      ]);
+      const headers = ["STT", "Depot", "Hang Tau", "So Booking", "So Container", "Chieu", "Trang Thai", "Ngay Duyet", "Ly Do Huy", "Giai Trinh Chi Tiet", "Xu Ly CSKH"];
+      const savedNotes = typeof getSavedNotes === "function" ? getSavedNotes() : {};
+      const rows = currentInlineRecords.map((r, i) => {
+        let expDetail = (r.giaiTrinhChiTiet || r.giai_trinh_chi_tiet || "").trim();
+        if (!expDetail && r.rowKey && savedNotes[r.rowKey] && savedNotes[r.rowKey].giaiTrinhChiTiet) {
+          expDetail = String(savedNotes[r.rowKey].giaiTrinhChiTiet).trim();
+        }
+        const kFallback = `${r.stt}_${r.soBooking || ''}_${r.soContainer || ''}`;
+        if (!expDetail && savedNotes[kFallback] && savedNotes[kFallback].giaiTrinhChiTiet) {
+          expDetail = String(savedNotes[kFallback].giaiTrinhChiTiet).trim();
+        }
+        if (!expDetail && (r.giaiTrinh || r.giai_trinh)) {
+          expDetail = (r.giaiTrinh || r.giai_trinh).trim();
+        }
+        return [
+          i + 1,
+          `"${r.depot || ""}"`,
+          `"${r.hangTau || ""}"`,
+          `"${r.soBooking || ""}"`,
+          `"${r.soContainer || ""}"`,
+          `"${r.loaiDonHang || ""}"`,
+          `"${r.trangThaiDonHang || ""}"`,
+          `"${r.ngayDuocDuyet || r.ngayHuyDon || ""}"`,
+          `"${(r.lyDoHuy || "").replace(/"/g, '""')}"`,
+          `"${expDetail.replace(/"/g, '""')}"`,
+          `"${(r.trangThaiXuLy || "").replace(/"/g, '""')}"`
+        ];
+      });
 
       const csvContent = "\uFEFF" + [headers.join(","), ...rows.map(e => e.join(","))].join("\r\n");
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -4091,7 +4590,7 @@ function populateInlineDetailRows(records) {
   }
 
   if (totalCount === 0) {
-    tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4" style="color: var(--text-muted); font-size: 14px;">Không tìm thấy đơn hàng nào phù hợp với điều kiện hoặc từ khóa tìm kiếm.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="text-center py-4" style="color: var(--text-muted); font-size: 14px;">Không tìm thấy đơn hàng nào phù hợp với điều kiện hoặc từ khóa tìm kiếm.</td></tr>`;
     if (pageInfoEl) pageInfoEl.textContent = "Đang hiển thị 0 - 0 trong tổng số 0 đơn";
     if (curPageEl) curPageEl.textContent = "Trang 1 / 1";
     if (btnFirst) btnFirst.disabled = true;
@@ -4120,6 +4619,8 @@ function populateInlineDetailRows(records) {
   if (btnNext) btnNext.disabled = (inlineCurrentPage >= totalPages);
   if (btnLast) btnLast.disabled = (inlineCurrentPage >= totalPages);
 
+  const savedNotes = typeof getSavedNotes === "function" ? getSavedNotes() : {};
+
   tbody.innerHTML = pageRecords.map((r, pIdx) => {
     const globalIdx = startIdx + pIdx;
     // Badges cho chiều cont (IN/OUT)
@@ -4142,6 +4643,33 @@ function populateInlineDetailRows(records) {
     const reasonText = r.lyDoHuy || r.lyDoTuChoi || "-";
     const shortReason = reasonText.length > 40 ? reasonText.substring(0, 40) + "..." : reasonText;
 
+    // Giải trình chi tiết
+    let expDetail = (r.giaiTrinhChiTiet || r.giai_trinh_chi_tiet || "").trim();
+    if (!expDetail && r.rowKey && savedNotes[r.rowKey] && savedNotes[r.rowKey].giaiTrinhChiTiet) {
+      expDetail = String(savedNotes[r.rowKey].giaiTrinhChiTiet).trim();
+    }
+    const kFallback = `${r.stt}_${r.soBooking || ''}_${r.soContainer || ''}`;
+    if (!expDetail && savedNotes[kFallback] && savedNotes[kFallback].giaiTrinhChiTiet) {
+      expDetail = String(savedNotes[kFallback].giaiTrinhChiTiet).trim();
+    }
+
+    let expGroup = (r.giaiTrinh || r.giai_trinh || "").trim();
+    if (!expGroup && r.rowKey && savedNotes[r.rowKey] && savedNotes[r.rowKey].giaiTrinh) {
+      expGroup = String(savedNotes[r.rowKey].giaiTrinh).trim();
+    }
+    if (!expGroup && savedNotes[kFallback] && savedNotes[kFallback].giaiTrinh) {
+      expGroup = String(savedNotes[kFallback].giaiTrinh).trim();
+    }
+
+    let expDetailHtml = "-";
+    if (expDetail) {
+      expDetailHtml = `<span style="font-size: 13px; color: #0f172a; font-weight: 500; white-space: nowrap;">${expDetail}</span>`;
+    } else if (expGroup) {
+      expDetailHtml = `<span style="font-size: 12px; color: #64748b; font-style: italic; white-space: nowrap;">[${expGroup}]</span>`;
+    } else {
+      expDetailHtml = `<span style="color: var(--text-muted); font-size: 12px;">-</span>`;
+    }
+
     const contactStatus = r.trangThaiXuLy 
       ? `<span class="badge badge-success" style="font-size: 11px;">${r.trangThaiXuLy}</span>` 
       : `<span style="color: var(--text-muted); font-size: 12px;">Chưa xử lý</span>`;
@@ -4157,6 +4685,7 @@ function populateInlineDetailRows(records) {
         <td><span class="badge ${statusCls}">${status}</span></td>
         <td><span style="font-size: 12px; color: #475569;">${formatDateDisplay(r.ngayDuocDuyet || r.ngayHuyDon)}</span></td>
         <td title="${reasonText.replace(/"/g, '&quot;')}">${shortReason}</td>
+        <td title="${(expDetail || expGroup || '').replace(/"/g, '&quot;')}">${expDetailHtml}</td>
         <td>${contactStatus}</td>
       </tr>
     `;
@@ -4248,9 +4777,11 @@ function renderModalTable(records) {
   }
 
   if (records.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="10" class="text-center py-4" style="color: var(--text-muted);">Không tìm thấy đơn hàng nào phù hợp với từ khóa tìm kiếm.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="text-center py-4" style="color: var(--text-muted);">Không tìm thấy đơn hàng nào phù hợp với từ khóa tìm kiếm.</td></tr>`;
     return;
   }
+
+  const savedNotes = typeof getSavedNotes === "function" ? getSavedNotes() : {};
 
   tbody.innerHTML = records.map((r, idx) => {
     // Badges cho chiều cont (IN/OUT)
@@ -4272,6 +4803,33 @@ function renderModalTable(records) {
     const reasonText = r.lyDoHuy || r.lyDoTuChoi || "-";
     const shortReason = reasonText.length > 40 ? reasonText.substring(0, 40) + "..." : reasonText;
 
+    // Giải trình chi tiết
+    let expDetail = (r.giaiTrinhChiTiet || r.giai_trinh_chi_tiet || "").trim();
+    if (!expDetail && r.rowKey && savedNotes[r.rowKey] && savedNotes[r.rowKey].giaiTrinhChiTiet) {
+      expDetail = String(savedNotes[r.rowKey].giaiTrinhChiTiet).trim();
+    }
+    const kFallback = `${r.stt}_${r.soBooking || ''}_${r.soContainer || ''}`;
+    if (!expDetail && savedNotes[kFallback] && savedNotes[kFallback].giaiTrinhChiTiet) {
+      expDetail = String(savedNotes[kFallback].giaiTrinhChiTiet).trim();
+    }
+
+    let expGroup = (r.giaiTrinh || r.giai_trinh || "").trim();
+    if (!expGroup && r.rowKey && savedNotes[r.rowKey] && savedNotes[r.rowKey].giaiTrinh) {
+      expGroup = String(savedNotes[r.rowKey].giaiTrinh).trim();
+    }
+    if (!expGroup && savedNotes[kFallback] && savedNotes[kFallback].giaiTrinh) {
+      expGroup = String(savedNotes[kFallback].giaiTrinh).trim();
+    }
+
+    let expDetailHtml = "-";
+    if (expDetail) {
+      expDetailHtml = `<span style="font-size: 13px; color: #0f172a; font-weight: 500; white-space: nowrap;">${expDetail}</span>`;
+    } else if (expGroup) {
+      expDetailHtml = `<span style="font-size: 12px; color: #64748b; font-style: italic; white-space: nowrap;">[${expGroup}]</span>`;
+    } else {
+      expDetailHtml = `<span style="color: var(--text-muted); font-size: 12px;">-</span>`;
+    }
+
     const contactStatus = r.trangThaiXuLy 
       ? `<span class="badge badge-success" style="font-size: 11px;">${r.trangThaiXuLy}</span>` 
       : `<span style="color: var(--text-muted); font-size: 12px;">Chưa xử lý</span>`;
@@ -4287,6 +4845,7 @@ function renderModalTable(records) {
         <td><span class="badge ${statusCls}">${status}</span></td>
         <td><span style="font-size: 12px; color: #475569;">${formatDateDisplay(r.ngayDuocDuyet || r.ngayHuyDon)}</span></td>
         <td title="${reasonText.replace(/"/g, '&quot;')}">${shortReason}</td>
+        <td style="white-space: nowrap;">${expDetailHtml}</td>
         <td>${contactStatus}</td>
       </tr>
     `;
@@ -4342,6 +4901,8 @@ function initModalEvents() {
             (r.hangTau && r.hangTau.toLowerCase().includes(q)) ||
             (r.lyDoHuy && r.lyDoHuy.toLowerCase().includes(q)) ||
             (r.lyDoTuChoi && r.lyDoTuChoi.toLowerCase().includes(q)) ||
+            (r.giaiTrinh && r.giaiTrinh.toLowerCase().includes(q)) ||
+            (r.giaiTrinhChiTiet && r.giaiTrinhChiTiet.toLowerCase().includes(q)) ||
             (r.tenTaiXe && r.tenTaiXe.toLowerCase().includes(q)) ||
             (r.tenNhaXe && r.tenNhaXe.toLowerCase().includes(q)) ||
             (r.trangThaiXuLy && r.trangThaiXuLy.toLowerCase().includes(q))
@@ -4356,19 +4917,34 @@ function initModalEvents() {
   if (exportCsvBtn) {
     exportCsvBtn.onclick = () => {
       if (!modalActiveRecords || modalActiveRecords.length === 0) return;
-      const headers = ["STT", "Depot", "Hang Tau", "So Booking", "So Container", "Chieu", "Trang Thai", "Ngay Duyet", "Ly Do Huy", "Xu Ly CSKH"];
-      const rows = modalActiveRecords.map((r, i) => [
-        i + 1,
-        `"${r.depot || ""}"`,
-        `"${r.hangTau || ""}"`,
-        `"${r.soBooking || ""}"`,
-        `"${r.soContainer || ""}"`,
-        `"${r.loaiDonHang || ""}"`,
-        `"${r.trangThaiDonHang || ""}"`,
-        `"${r.ngayDuocDuyet || r.ngayHuyDon || ""}"`,
-        `"${(r.lyDoHuy || "").replace(/"/g, '""')}"`,
-        `"${(r.trangThaiXuLy || "").replace(/"/g, '""')}"`
-      ]);
+      const headers = ["STT", "Depot", "Hang Tau", "So Booking", "So Container", "Chieu", "Trang Thai", "Ngay Duyet", "Ly Do Huy", "Giai Trinh Chi Tiet", "Xu Ly CSKH"];
+      const savedNotes = typeof getSavedNotes === "function" ? getSavedNotes() : {};
+      const rows = modalActiveRecords.map((r, i) => {
+        let expDetail = (r.giaiTrinhChiTiet || r.giai_trinh_chi_tiet || "").trim();
+        if (!expDetail && r.rowKey && savedNotes[r.rowKey] && savedNotes[r.rowKey].giaiTrinhChiTiet) {
+          expDetail = String(savedNotes[r.rowKey].giaiTrinhChiTiet).trim();
+        }
+        const kFallback = `${r.stt}_${r.soBooking || ''}_${r.soContainer || ''}`;
+        if (!expDetail && savedNotes[kFallback] && savedNotes[kFallback].giaiTrinhChiTiet) {
+          expDetail = String(savedNotes[kFallback].giaiTrinhChiTiet).trim();
+        }
+        if (!expDetail && (r.giaiTrinh || r.giai_trinh)) {
+          expDetail = (r.giaiTrinh || r.giai_trinh).trim();
+        }
+        return [
+          i + 1,
+          `"${r.depot || ""}"`,
+          `"${r.hangTau || ""}"`,
+          `"${r.soBooking || ""}"`,
+          `"${r.soContainer || ""}"`,
+          `"${r.loaiDonHang || ""}"`,
+          `"${r.trangThaiDonHang || ""}"`,
+          `"${r.ngayDuocDuyet || r.ngayHuyDon || ""}"`,
+          `"${(r.lyDoHuy || "").replace(/"/g, '""')}"`,
+          `"${expDetail.replace(/"/g, '""')}"`,
+          `"${(r.trangThaiXuLy || "").replace(/"/g, '""')}"`
+        ];
+      });
 
       const csvContent = "\uFEFF" + [headers.join(","), ...rows.map(e => e.join(","))].join("\r\n");
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });

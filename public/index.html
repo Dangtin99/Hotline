@@ -383,6 +383,49 @@
         </div>
       </section>
 
+      <!-- Phân Tích Đơn Hủy Theo Nguồn & Xu Hướng Đặt Lại (Chỉ xét đơn có giải trình) -->
+      <section class="source-cancellation-section" style="margin-bottom: 24px;">
+        <div class="table-card" id="sourceCancellationCard">
+          <div class="d-flex-between" style="margin-bottom: 14px; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <div>
+              <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: #0f172a;">Phân Tích Đơn Hủy Theo Nguồn & Xu Hướng Đặt Lại</h3>
+              <span class="text-muted" style="font-size: 13px; font-weight: 500;">
+                Thống kê trên các đơn hàng có giải trình (<span id="sourceCancelExplainedCount" style="font-weight: 700; color: #1d4ed8;">0</span> / <span id="sourceCancelTotalCount">0</span> đơn)
+              </span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button type="button" class="btn btn-outline btn-sm" id="btnExportSourceCancelPng" title="Xuất ảnh PNG bảng phân tích nguồn hủy">In PNG</button>
+              <button type="button" class="btn btn-outline btn-sm" id="btnExportSourceCancelCsv" title="Xuất CSV bảng phân tích nguồn hủy">Xuất CSV</button>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table source-cancellation-table" id="tableSourceCancellation">
+              <thead>
+                <tr class="header-level-1">
+                  <th colspan="3" class="source-header-customer" style="text-align: center; background: #f0fdf4; border-bottom: 2px solid #bbf7d0; font-size: 14px; font-weight: 700; color: #166534; padding: 10px;">
+                    HỦY TỪ KHÁCH (Nhóm 1 - 4)
+                  </th>
+                  <th colspan="3" class="source-header-center" style="text-align: center; background: #eff6ff; border-bottom: 2px solid #bfdbfe; font-size: 14px; font-weight: 700; color: #1e40af; border-left: 2px solid #cbd5e1; padding: 10px;">
+                    HỦY TỪ TRUNG TÂM (Nhóm 5 - 7)
+                  </th>
+                </tr>
+                <tr class="header-level-2">
+                  <th style="width: 16%; text-align: right;">Tổng</th>
+                  <th style="width: 17%; text-align: center;">Dự đoán đặt lại<br/><span style="font-size: 11px; font-weight: 500; color: #64748b;">Tỷ lệ %</span></th>
+                  <th style="width: 17%; text-align: center;">Không đặt lại<br/><span style="font-size: 11px; font-weight: 500; color: #64748b;">Tỷ lệ %</span></th>
+                  <th style="width: 16%; text-align: right; border-left: 2px solid #cbd5e1;">Tổng đơn</th>
+                  <th style="width: 17%; text-align: center;">Dự đoán đặt lại<br/><span style="font-size: 11px; font-weight: 500; color: #64748b;">Tỷ lệ %</span></th>
+                  <th style="width: 17%; text-align: center;">Không đặt lại<br/><span style="font-size: 11px; font-weight: 500; color: #64748b;">Tỷ lệ %</span></th>
+                </tr>
+              </thead>
+              <tbody id="tbodySourceCancellation">
+                <!-- Sẽ được render động từ app.js -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
       <!-- Charts Row -->
       <section class="charts-grid">
         <div class="chart-card">
@@ -620,6 +663,7 @@
                   <th>Trạng Thái Đơn</th>
                   <th>Ngày Duyệt / Hủy</th>
                   <th>Lý Do Hủy / Từ Chối</th>
+                  <th>Giải Trình Chi Tiết</th>
                   <th>Xử Lý CSKH</th>
                 </tr>
               </thead>
@@ -777,6 +821,7 @@
                   <th>Trạng Thái Đơn</th>
                   <th>Ngày Duyệt</th>
                   <th>Lý Do Hủy</th>
+                  <th>Giải Trình Chi Tiết</th>
                   <th>Xử Lý CSKH</th>
                 </tr>
               </thead>
