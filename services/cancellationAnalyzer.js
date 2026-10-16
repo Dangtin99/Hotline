@@ -179,6 +179,40 @@ function parseCancellationFile(input) {
       }
     });
 
+    const getValFromItem = (candidates, excludeKeywords = []) => {
+      for (const cand of candidates) {
+        if (item[cand] !== undefined && cleanString(item[cand]) !== "") {
+          return cleanString(item[cand]);
+        }
+      }
+      const candNorms = candidates.map(c => c.toLowerCase().replace(/[\s_\-\/]+/g, ""));
+      for (const key of Object.keys(item)) {
+        const keyLower = key.toLowerCase();
+        if (excludeKeywords.some(ex => keyLower.includes(ex.toLowerCase()))) continue;
+        const keyNorm = keyLower.replace(/[\s_\-\/]+/g, "");
+        for (let idx = 0; idx < candidates.length; idx++) {
+          if (keyLower === candidates[idx].toLowerCase() || keyNorm === candNorms[idx]) {
+            if (cleanString(item[key]) !== "") {
+              return cleanString(item[key]);
+            }
+          }
+        }
+      }
+      for (const key of Object.keys(item)) {
+        const keyLower = key.toLowerCase();
+        if (excludeKeywords.some(ex => keyLower.includes(ex.toLowerCase()))) continue;
+        const keyNorm = keyLower.replace(/[\s_\-\/]+/g, "");
+        for (let idx = 0; idx < candidates.length; idx++) {
+          if (keyLower.includes(candidates[idx].toLowerCase()) || keyNorm.includes(candNorms[idx])) {
+            if (cleanString(item[key]) !== "") {
+              return cleanString(item[key]);
+            }
+          }
+        }
+      }
+      return "";
+    };
+
     if (item["STT"] || item["Depot"] || item["Số booking"]) {
       records.push({
         stt: item["STT"] || String(records.length + 1),
@@ -195,8 +229,48 @@ function parseCancellationFile(input) {
         loaiContainer: cleanString(item["Loại container"]),
         loaiDonHang: cleanString(item["Loại đơn hàng (IN/OUT)"]).toUpperCase() || "N/A",
         sizeTeus: Number(cleanString(item["SizeTEUS"])) || 0,
-        tenTaiXe: cleanString(item["Tên tài xế"]),
-        sdtTaiXe: cleanString(item["Số điện thoại tài xế"]),
+        tenTaiXe: cleanString(
+          item["Tên tài xế"] ||
+          item["Họ tên tài xế"] ||
+          item["Tài xế"] ||
+          getValFromItem(["Tên tài xế", "Họ tên tài xế", "Tài xế", "Ten tai xe", "Ho ten tai xe"], ["sđt", "sdt", "điện thoại", "phone"])
+        ),
+        sdtTaiXe: cleanString(
+          item["Số điện thoại tài xế"] ||
+          item["SĐT tài xế"] ||
+          item["SDT tài xế"] ||
+          item["SĐT"] ||
+          getValFromItem(["Số điện thoại tài xế", "SĐT tài xế", "SDT tài xế", "SĐT", "Điện thoại tài xế", "So dien thoai tai xe", "Sdt tai xe"], ["nhà xe", "nha xe", "công ty", "cong ty", "đơn vị", "don vi"])
+        ),
+        tenNhaXe: cleanString(
+          item["Tên nhà xe"] ||
+          item["Nhà xe"] ||
+          item["Đơn vị vận tải"] ||
+          item["Đơn vị vận chuyển"] ||
+          item["Công ty vận tải"] ||
+          item["Tên công ty"] ||
+          getValFromItem([
+            "Tên nhà xe", "Nhà xe", "Tên Nhà Xe", "Nhà Xe",
+            "Đơn vị vận tải", "Đơn vị vận chuyển", "Công ty vận tải", "Tên công ty",
+            "Ten nha xe", "Don vi van tai", "Nha xe", "Ten cong ty"
+          ], ["sđt", "sdt", "điện thoại", "phone", "tel", "tài xế", "tai xe"])
+        ),
+        sdtNhaXe: cleanString(
+          item["Số điện thoại nhà xe"] ||
+          item["SĐT nhà xe"] ||
+          item["SDT nhà xe"] ||
+          item["Số Điện Thoại Nhà Xe"] ||
+          item["SĐT Nhà Xe"] ||
+          item["SĐT đơn vị vận tải"] ||
+          item["SDT đơn vị vận tải"] ||
+          item["Điện thoại nhà xe"] ||
+          item["SĐT công ty"] ||
+          getValFromItem([
+            "Số điện thoại nhà xe", "SĐT nhà xe", "SDT nhà xe", "Số Điện Thoại Nhà Xe", "SĐT Nhà Xe",
+            "Số điện thoại đơn vị vận tải", "SĐT đơn vị vận tải", "SDT đơn vị vận tải",
+            "Điện thoại nhà xe", "SĐT công ty", "SDT cong ty", "So dien thoai nha xe", "Sdt nha xe"
+          ], ["tài xế", "tai xe"])
+        ),
         lyDoTuChoi: cleanString(
           item["Lý do đảo chuyển"] ||
           item["Lý do đảo chuyền"] ||
@@ -493,6 +567,15 @@ function validateAgainstSqlSchema(input) {
       if (col.key === "ly_do_tu_choi") {
         return h.includes("đảo chuyển") || h.includes("dao chuyen") || h.includes("từ chối") || h.includes("tu choi");
       }
+      if (col.key === "ten_nha_xe") {
+        if (h.includes("sđt") || h.includes("sdt") || h.includes("điện thoại") || h.includes("dien thoai") || h.includes("phone")) return false;
+        return h.includes("nhà xe") || h.includes("nha xe") || h.includes("vận tải") || h.includes("van tai") || h.includes("vận chuyển") || h.includes("công ty");
+      }
+      if (col.key === "sdt_nha_xe") {
+        const hasPhone = h.includes("sđt") || h.includes("sdt") || h.includes("điện thoại") || h.includes("dien thoai") || h.includes("phone") || h.includes("tel");
+        const hasNhaXe = h.includes("nhà xe") || h.includes("nha xe") || h.includes("vận tải") || h.includes("van tai") || h.includes("công ty");
+        return hasPhone && hasNhaXe;
+      }
       return false;
     });
     const found = idx !== -1;
@@ -588,11 +671,12 @@ function parseVerificationFile(input) {
 
   const headers = rawRows[headerIdx].map(h => cleanString(h));
 
-  const getVal = (row, keyKeywords) => {
+  const getVal = (row, keyKeywords, excludeKeywords = []) => {
     for (let k of keyKeywords) {
       const kNorm = k.toLowerCase().replace(/[\s_\-\/]+/g, "");
       const idx = headers.findIndex(h => {
         const hLower = h.toLowerCase();
+        if (excludeKeywords.some(ex => hLower.includes(ex.toLowerCase()))) return false;
         if (hLower.includes(k.toLowerCase())) return true;
         const hNorm = hLower.replace(/[\s_\-\/]+/g, "");
         return hNorm.includes(kNorm);
@@ -626,9 +710,10 @@ function parseVerificationFile(input) {
     const lyDoHuy = getVal(row, ["Lý do Huỷ"]);
     const lyDoTuChoi = getVal(row, ["Ghi chú (Lý do từ chối duyệt)", "Lý do đảo chuyển", "Lý do đảo chuyền", "Lý do từ chối", "Lý do từ chối duyệt"]);
     const lyDoCheck = getVal(row, ["Ghi chú thêm (Gate OUT)"]);
-    const taiXe = getVal(row, ["Họ tên tài xế"]);
-    const sdtTaiXe = getVal(row, ["SĐT"]);
-    const nhaXe = getVal(row, ["Đơn vị vận tải", "Tên công ty"]);
+    const taiXe = getVal(row, ["Họ tên tài xế", "Tên tài xế", "Tài xế"], ["sđt", "sdt", "điện thoại", "phone"]);
+    const sdtTaiXe = getVal(row, ["SĐT", "Số điện thoại tài xế", "SĐT tài xế", "Điện thoại tài xế"], ["nhà xe", "nha xe", "công ty", "đơn vị"]);
+    const nhaXe = getVal(row, ["Tên nhà xe", "Đơn vị vận tải", "Đơn vị vận chuyển", "Công ty vận tải", "Tên công ty", "Nhà xe", "Ten nha xe", "Don vi van tai"], ["sđt", "sdt", "điện thoại", "phone", "tel", "tài xế", "tai xe"]);
+    const sdtNhaXe = getVal(row, ["Số điện thoại nhà xe", "SĐT nhà xe", "SDT nhà xe", "Số điện thoại đơn vị vận tải", "SĐT đơn vị vận tải", "SDT đơn vị vận tải", "Điện thoại nhà xe", "SĐT công ty", "SDT cong ty", "So dien thoai nha xe", "Sdt nha xe"], ["tài xế", "tai xe"]);
 
     let loaiDonHang = "N/A";
     if (loaiDon.toUpperCase().includes("OUT")) loaiDonHang = "OUT";
@@ -664,7 +749,7 @@ function parseVerificationFile(input) {
       tenTaiXe: taiXe || null,
       sdtTaiXe: sdtTaiXe || null,
       tenNhaXe: nhaXe || null,
-      sdtNhaXe: null
+      sdtNhaXe: sdtNhaXe || null
     });
   }
 
