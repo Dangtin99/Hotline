@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dữ Liệu Chi Tiết Đơn Hủy - Báo Cáo Excel</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=20261016_1445">
   <script src="auth.js"></script>
 </head>
 <body>
@@ -203,7 +203,10 @@
             <label for="filterDateFrom">Từ ngày & Giờ</label>
             <div class="date-time-container">
               <input type="date" id="filterDateFrom" class="filter-select filter-date-input" title="Lọc từ ngày" placeholder="Từ ngày">
-              <input type="time" id="filterHourFrom" class="filter-select filter-time-input" title="Chọn giờ & phút bắt đầu (Mặc định 00:00)" onclick="try{this.showPicker()}catch(e){}">
+              <div class="timepicker-wrapper">
+                <input type="text" id="filterHourFrom" class="filter-select filter-time-input timepicker-24h" placeholder="00:00" title="Chọn giờ & phút bắt đầu (Hệ 24h)" readonly autocomplete="off">
+                <span class="timepicker-icon" title="Nhấn để chọn giờ & phút">🕒</span>
+              </div>
             </div>
           </div>
 
@@ -215,7 +218,10 @@
                 <input type="date" id="filterDateTo" class="filter-select filter-date-input" title="Lọc đến ngày" placeholder="Đến ngày" style="width: 100%;">
                 <button type="button" id="btnClearDateFilter" class="btn-clear-date" title="Xóa bộ lọc ngày & giờ" style="display: none; position: absolute; right: 28px; top: 50%; transform: translateY(-50%); z-index: 2;">×</button>
               </div>
-              <input type="time" id="filterHourTo" class="filter-select filter-time-input" title="Chọn giờ & phút kết thúc (Mặc định 23:59)" onclick="try{this.showPicker()}catch(e){}">
+              <div class="timepicker-wrapper">
+                <input type="text" id="filterHourTo" class="filter-select filter-time-input timepicker-24h" placeholder="23:59" title="Chọn giờ & phút kết thúc (Hệ 24h)" readonly autocomplete="off">
+                <span class="timepicker-icon" title="Nhấn để chọn giờ & phút">🕒</span>
+              </div>
             </div>
           </div>
 
@@ -481,6 +487,7 @@
       document.write('<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"><\\/script>');
     }
   </script>
-  <script src="data-table.js"></script>
+  <script src="timepicker-24h.js?v=20261016_1445"></script>
+  <script src="data-table.js?v=20261016_1445"></script>
 </body>
 </html>

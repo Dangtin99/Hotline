@@ -460,6 +460,7 @@ function insertRecords(records, metadata = {}, shouldPersist = true) {
   let insertedCount = 0;
   let updatedCount = 0;
   const nowStr = metadata.uploadedAt || formatVietnamDateTime(new Date());
+  const processedRecords = [];
 
   records.forEach(r => {
     const rowKey = generateOrderKey(r);
@@ -507,6 +508,7 @@ function insertRecords(records, metadata = {}, shouldPersist = true) {
       existingMap.set(rowKey, memoryOrders.length - 1);
       insertedCount++;
     }
+    processedRecords.push(orderData);
 
     // Nếu có SQLite engine, đồng bộ câu lệnh INSERT OR REPLACE
     if (sqliteEngine) {
@@ -554,7 +556,8 @@ function insertRecords(records, metadata = {}, shouldPersist = true) {
   return {
     inserted: insertedCount,
     updated: updatedCount,
-    total: memoryOrders.length
+    total: memoryOrders.length,
+    processedRecords
   };
 }
 
@@ -986,16 +989,18 @@ function loadVerificationFromStore() {
   return memoryVerificationOrders;
 }
 
-function persistVerificationStore() {
+function persistVerificationStore(options = {}) {
   try {
     if (fs.existsSync(DATA_DIR)) {
       fs.writeFileSync(VERIFICATION_JSON_PATH, JSON.stringify(memoryVerificationOrders, null, 2), "utf8");
-      generateVerificationSqlDumpFile();
+      if (options.generateDump !== false) {
+        generateVerificationSqlDumpFile();
+      }
     }
   } catch (err) {
     // Trên Vercel Serverless filesystem là read-only
   }
-  if (tursoClient) {
+  if (tursoClient && options.syncFullToTurso !== false) {
     tursoClient.syncVerificationOrdersToTurso(memoryVerificationOrders).catch(err => {
       console.warn("[Turso] Dong bo verification len Turso that bai:", err.message);
     });
@@ -1073,6 +1078,7 @@ function insertVerificationRecords(records, metadata = {}, shouldPersist = true)
   let insertedCount = 0;
   let updatedCount = 0;
   const nowStr = metadata.uploadedAt || formatVietnamDateTime(new Date());
+  const processedRecords = [];
 
   records.forEach(r => {
     const rowKey = generateVerificationKey(r);
@@ -1115,6 +1121,7 @@ function insertVerificationRecords(records, metadata = {}, shouldPersist = true)
       existingMap.set(rowKey, memoryVerificationOrders.length - 1);
       insertedCount++;
     }
+    processedRecords.push(orderData);
 
     if (sqliteEngine) {
       try {
@@ -1152,7 +1159,8 @@ function insertVerificationRecords(records, metadata = {}, shouldPersist = true)
   return {
     inserted: insertedCount,
     updated: updatedCount,
-    total: memoryVerificationOrders.length
+    total: memoryVerificationOrders.length,
+    processedRecords
   };
 }
 
@@ -1993,27 +2001,31 @@ async function getAllRecordsAsync(forceRefresh = false) {
 }
 
 async function insertRecordsAsync(records, metadata = {}) {
-  // 1. Đảm bảo nạp dữ liệu hiện tại từ Turso Cloud trước khi tích lũy file mới
-  if (tursoClient && tursoClient.isTursoAvailable()) {
-    try {
-      const existingTurso = await tursoClient.getAllOrdersFromTurso();
-      if (Array.isArray(existingTurso)) {
-        memoryOrders = existingTurso;
+  // 1. Chỉ nạp dữ liệu từ Turso Cloud/Local nếu memory chưa được khởi tạo
+  if (memoryOrders.length === 0) {
+    if (tursoClient && tursoClient.isTursoAvailable()) {
+      try {
+        const existingTurso = await tursoClient.getAllOrdersFromTurso();
+        if (Array.isArray(existingTurso) && existingTurso.length > 0) {
+          memoryOrders = existingTurso;
+        }
+      } catch (e) {
+        console.warn("[Turso] Không thể đọc từ Turso trước khi insert:", e.message);
       }
-    } catch (e) {
-      console.warn("[Turso] Không thể đọc từ Turso trước khi insert:", e.message);
     }
-  } else if (memoryOrders.length === 0) {
-    loadAllFromStore();
+    if (memoryOrders.length === 0) {
+      loadAllFromStore();
+    }
   }
 
   // 2. Thêm trực tiếp vào local store & memory
   const res = insertRecords(records, metadata, false);
 
-  // 3. Đồng bộ hóa toàn bộ danh sách đơn hàng đã tích lũy lên Turso Cloud
+  // 3. Đồng bộ hóa Delta (chỉ các đơn mới hoặc cập nhật từ file vừa nạp) lên Turso Cloud
   if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
-      await tursoClient.syncOrdersToTurso(memoryOrders);
+      const recordsToSync = (res.processedRecords && res.processedRecords.length > 0) ? res.processedRecords : records;
+      await tursoClient.syncOrdersToTurso(recordsToSync);
     } catch (e) {
       console.error("[Turso] Lỗi đồng bộ orders lên Turso:", e.message);
       throw new Error(`Lỗi đồng bộ lên CSDL đám mây Turso: ${e.message}`);
@@ -2021,7 +2033,7 @@ async function insertRecordsAsync(records, metadata = {}) {
   }
 
   try {
-    persistStore();
+    persistStore({ syncFullToTurso: false });
   } catch (e) {}
 
   bumpOperationalVersion();
@@ -2095,27 +2107,33 @@ async function getAllVerificationRecordsAsync(forceRefresh = false) {
 }
 
 async function insertVerificationRecordsAsync(records, metadata = {}) {
-  if (tursoClient && tursoClient.isTursoAvailable()) {
-    try {
-      const tursoRows = await tursoClient.getAllVerificationOrdersFromTurso();
-      if (Array.isArray(tursoRows) && tursoRows.length > 0) {
-        memoryVerificationOrders = tursoRows;
-      }
-    } catch (e) {}
+  if (memoryVerificationOrders.length === 0) {
+    if (tursoClient && tursoClient.isTursoAvailable()) {
+      try {
+        const tursoRows = await tursoClient.getAllVerificationOrdersFromTurso();
+        if (Array.isArray(tursoRows) && tursoRows.length > 0) {
+          memoryVerificationOrders = tursoRows;
+        }
+      } catch (e) {}
+    }
+    if (memoryVerificationOrders.length === 0) {
+      loadVerificationFromStore();
+    }
   }
 
   const res = insertVerificationRecords(records, metadata, false);
 
-  if (tursoClient) {
+  if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
-      await tursoClient.syncVerificationOrdersToTurso(memoryVerificationOrders);
+      const recordsToSync = (res.processedRecords && res.processedRecords.length > 0) ? res.processedRecords : records;
+      await tursoClient.syncVerificationOrdersToTurso(recordsToSync);
     } catch (e) {
       console.error("[Turso] Lỗi đồng bộ verification orders lên Turso:", e.message);
     }
   }
 
   try {
-    persistVerificationStore();
+    persistVerificationStore({ syncFullToTurso: false, generateDump: false });
   } catch (e) {}
 
   return {

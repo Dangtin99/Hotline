@@ -401,7 +401,7 @@ async function syncOrdersToTurso(orders) {
 
   await initTursoSchema();
 
-  const batchSize = 50;
+  const batchSize = 400;
   let synced = 0;
 
   for (let i = 0; i < orders.length; i += batchSize) {
@@ -657,7 +657,7 @@ async function syncVerificationOrdersToTurso(orders) {
 
   await initTursoSchema();
 
-  const batchSize = 50;
+  const batchSize = 400;
   let synced = 0;
 
   for (let i = 0; i < orders.length; i += batchSize) {
@@ -716,7 +716,7 @@ async function deleteVerificationOrderRowsInTurso(rowKeys) {
   const client = getTursoClient();
   if (!client) return;
   try {
-    const batchSize = 50;
+    const batchSize = 400;
     for (let i = 0; i < rowKeys.length; i += batchSize) {
       const chunk = rowKeys.slice(i, i + batchSize);
       const placeholders = chunk.map(() => "?").join(",");

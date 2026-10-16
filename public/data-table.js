@@ -2360,19 +2360,35 @@ function applyFilters() {
           if (recDateTime < fromDateTime) return false;
         }
         if (dateToVal) {
-          const toTime = hourToVal ? `${hourToVal}:59` : "23:59:59";
+          let toTime = "23:59:59";
+          if (hourToVal) {
+            if (hourToVal === "24:00") {
+              toTime = "23:59:59";
+            } else if (hourFromVal && hourToVal === hourFromVal) {
+              toTime = `${hourToVal.substring(0, 2)}:59:59`;
+            } else {
+              toTime = `${hourToVal}:59`;
+            }
+          }
           const toDateTime = `${dateToVal} ${toTime}`;
           if (recDateTime > toDateTime) return false;
         }
       } else {
-        // Chỉ chọn giờ & phút mà không chọn ngày
+        // Chỉ chọn giờ mà không chọn ngày
         const recTime = recDateTime.substring(11, 19);
         if (hourFromVal) {
           const fromTime = `${hourFromVal}:00`;
           if (recTime < fromTime) return false;
         }
         if (hourToVal) {
-          const toTime = `${hourToVal}:59`;
+          let toTime = "23:59:59";
+          if (hourToVal === "24:00") {
+            toTime = "23:59:59";
+          } else if (hourFromVal && hourToVal === hourFromVal) {
+            toTime = `${hourToVal.substring(0, 2)}:59:59`;
+          } else {
+            toTime = `${hourToVal}:59`;
+          }
           if (recTime > toTime) return false;
         }
       }
@@ -3096,8 +3112,8 @@ function exportFilteredToExcel() {
 
   let timeRangeText = "";
   if (dateFromVal || dateToVal) {
-    const fromStr = dateFromVal ? `${dateFromVal}${hourFromVal ? ` ${hourFromVal}:00` : ""}` : "Bắt đầu";
-    const toStr = dateToVal ? `${dateToVal}${hourToVal ? ` ${hourToVal}:59` : ""}` : "Hiện tại";
+    const fromStr = dateFromVal ? `${dateFromVal}${hourFromVal ? ` ${hourFromVal}` : ""}` : (hourFromVal ? `Từ ${hourFromVal}` : "Bắt đầu");
+    const toStr = dateToVal ? `${dateToVal}${hourToVal ? ` ${hourToVal}` : ""}` : (hourToVal ? `Đến ${hourToVal}` : "Hiện tại");
     timeRangeText = `Khoảng thời gian: Từ ${fromStr} đến ${toStr}`;
   } else {
     timeRangeText = "Khoảng thời gian: Toàn bộ dữ liệu";

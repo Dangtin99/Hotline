@@ -254,7 +254,15 @@ function saveVerificationHistory(historyList) {
 app.use(cors());
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(path.join(__dirname, "public"), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith(".css") || filePath.endsWith(".js") || filePath.endsWith(".html")) {
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
+    }
+  }
+}));
 app.use("/vendor/xlsx-style", express.static(path.join(__dirname, "node_modules", "xlsx-js-style", "dist")));
 app.use("/vendor/xlsx", express.static(path.join(__dirname, "node_modules", "xlsx", "dist")));
 

@@ -208,7 +208,7 @@ async function fetchDashboardDataByRange(dateFrom, dateTo, dateType = "ngayHuy",
       dateFrom,
       dateTo,
       hourFrom: hourFrom || "00:00",
-      hourTo: hourTo || "23:59"
+      hourTo: (hourTo === "24:00" ? "23:59" : (hourTo || "23:59"))
     });
 
     const res = await fetch(`/api/dashboard-data?${query.toString()}`);
@@ -982,12 +982,28 @@ function initDashboardFilterControls(records) {
     }
 
     if (filterHourFrom) {
-      filterHourFrom.onchange = applyDashboardFilters;
-      filterHourFrom.oninput = applyDashboardFilters;
+      filterHourFrom.onchange = () => {
+        if (filterDateFrom && filterDateFrom.value && filterDateTo && filterDateTo.value) {
+          const dtVal = filterDateType ? filterDateType.value : "ngayHuy";
+          const hFrom = filterHourFrom.value;
+          const hTo = filterHourTo ? filterHourTo.value : "";
+          fetchDashboardDataByRange(filterDateFrom.value, filterDateTo.value, dtVal, hFrom, hTo);
+        } else {
+          applyDashboardFilters();
+        }
+      };
     }
     if (filterHourTo) {
-      filterHourTo.onchange = applyDashboardFilters;
-      filterHourTo.oninput = applyDashboardFilters;
+      filterHourTo.onchange = () => {
+        if (filterDateFrom && filterDateFrom.value && filterDateTo && filterDateTo.value) {
+          const dtVal = filterDateType ? filterDateType.value : "ngayHuy";
+          const hFrom = filterHourFrom ? filterHourFrom.value : "";
+          const hTo = filterHourTo.value;
+          fetchDashboardDataByRange(filterDateFrom.value, filterDateTo.value, dtVal, hFrom, hTo);
+        } else {
+          applyDashboardFilters();
+        }
+      };
     }
     if (filterLine) filterLine.onchange = applyDashboardFilters;
     if (filterDirection) filterDirection.onchange = applyDashboardFilters;
@@ -1172,7 +1188,16 @@ function applyDashboardFilters() {
           if (recDateTime < fromDateTime) return false;
         }
         if (dateToVal) {
-          const toTime = hourToVal ? `${hourToVal}:59` : "23:59:59";
+          let toTime = "23:59:59";
+          if (hourToVal) {
+            if (hourToVal === "24:00") {
+              toTime = "23:59:59";
+            } else if (hourFromVal && hourToVal === hourFromVal) {
+              toTime = `${hourToVal.substring(0, 2)}:59:59`;
+            } else {
+              toTime = `${hourToVal}:59`;
+            }
+          }
           const toDateTime = `${dateToVal} ${toTime}`;
           if (recDateTime > toDateTime) return false;
         }
@@ -1184,7 +1209,14 @@ function applyDashboardFilters() {
           if (recTime < fromTime) return false;
         }
         if (hourToVal) {
-          const toTime = `${hourToVal}:59`;
+          let toTime = "23:59:59";
+          if (hourToVal === "24:00") {
+            toTime = "23:59:59";
+          } else if (hourFromVal && hourToVal === hourFromVal) {
+            toTime = `${hourToVal.substring(0, 2)}:59:59`;
+          } else {
+            toTime = `${hourToVal}:59`;
+          }
           if (recTime > toTime) return false;
         }
       }
@@ -1204,7 +1236,16 @@ function applyDashboardFilters() {
 
       const fromTime = hourFromVal ? `${hourFromVal}:00` : "00:00:00";
       const fromDateTime = `${compRange.prevFrom} ${fromTime}`;
-      const toTime = hourToVal ? `${hourToVal}:59` : "23:59:59";
+      let toTime = "23:59:59";
+      if (hourToVal) {
+        if (hourToVal === "24:00") {
+          toTime = "23:59:59";
+        } else if (hourFromVal && hourToVal === hourFromVal) {
+          toTime = `${hourToVal.substring(0, 2)}:59:59`;
+        } else {
+          toTime = `${hourToVal}:59`;
+        }
+      }
       const toDateTime = `${compRange.prevTo} ${toTime}`;
       if (recDateTime < fromDateTime || recDateTime > toDateTime) return false;
 
@@ -1865,7 +1906,16 @@ function getRecordsForHourlyDepot(depot, records = []) {
         if (recDateTime < `${dateFromVal} ${fromTime}`) return false;
       }
       if (dateToVal) {
-        const toTime = hourToVal ? `${hourToVal}:59` : "23:59:59";
+        let toTime = "23:59:59";
+        if (hourToVal) {
+          if (hourToVal === "24:00") {
+            toTime = "23:59:59";
+          } else if (hourFromVal && hourToVal === hourFromVal) {
+            toTime = `${hourToVal.substring(0, 2)}:59:59`;
+          } else {
+            toTime = `${hourToVal}:59`;
+          }
+        }
         if (recDateTime > `${dateToVal} ${toTime}`) return false;
       }
     }
