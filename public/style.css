@@ -1867,6 +1867,7 @@ body {
   z-index: 10;
   border-bottom: 2px solid var(--border-light);
   white-space: nowrap;
+  padding: 8px 10px;
 }
 
 /* Freeze / Pin Columns Controls & Styles */
@@ -1950,7 +1951,7 @@ body {
 
 .full-excel-table td {
   white-space: nowrap;
-  padding: 10px 14px;
+  padding: 8px 10px;
 }
 
 /* Highlight dòng dữ liệu khi người dùng click chọn */

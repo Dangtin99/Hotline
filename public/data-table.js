@@ -1462,7 +1462,7 @@ document.addEventListener("DOMContentLoaded", () => {
           </select>
         </td>
         <td>
-          <select id="manual_giaiTrinh_group" class="manual-row-select" title="Nhóm lý do giải trình" style="width: 100%; min-width: 210px;">
+          <select id="manual_giaiTrinh_group" class="manual-row-select" title="Nhóm lý do giải trình" style="width: 100%; min-width: 168px;">
             <option value="">-- Chọn nhóm lý do --</option>
             ${CANCELLATION_REASON_GROUPS.map((grp, idx) => `
               <option value="${grp}">${idx + 1}. ${grp}</option>
@@ -1470,7 +1470,7 @@ document.addEventListener("DOMContentLoaded", () => {
           </select>
         </td>
         <td>
-          <div style="display: flex; gap: 6px; align-items: center; min-width: 260px;">
+          <div style="display: flex; gap: 6px; align-items: center; min-width: 208px;">
             <input type="text" id="manual_giaiTrinh_detail" class="manual-row-input" placeholder="Chi tiết giải trình..." style="flex: 1;" title="Chi tiết giải trình (Xóa trống để lưu null)">
             <button type="button" class="btn btn-primary btn-sm" id="btnSaveManualRow" style="padding: 4px 10px; font-weight: 700; white-space: nowrap;">Lưu</button>
             <button type="button" class="btn btn-outline btn-sm" id="btnCancelManualRow" style="padding: 4px 8px; white-space: nowrap;">Hủy</button>
@@ -2756,7 +2756,7 @@ function renderTable(records) {
       : (parsedExp.detail || "");
 
     const expGroupSelectHtml = `
-      <select class="select-reason-group" data-rowkey="${rowKey}" onchange="onReasonGroupChange(this)" title="Chọn nhóm lý do giải trình" style="width: 100%; min-width: 210px; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12.5px; background-color: #ffffff; cursor: pointer;">
+      <select class="select-reason-group" data-rowkey="${rowKey}" onchange="onReasonGroupChange(this)" title="Chọn nhóm lý do giải trình" style="width: 100%; min-width: 168px; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12.5px; background-color: #ffffff; cursor: pointer;">
         <option value="" ${!selectedGroup ? "selected" : ""}>-- Chọn nhóm lý do --</option>
         ${CANCELLATION_REASON_GROUPS.map((grp, idx) => `
           <option value="${grp}" ${selectedGroup === grp ? "selected" : ""}>
@@ -2775,7 +2775,7 @@ function renderTable(records) {
              oninput="onReasonDetailInput(this)" 
              onblur="onReasonDetailBlur(this)" 
              title="Nhập chi tiết giải trình (Xóa trống để lưu null)"
-             style="width: 100%; min-width: 260px; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12.5px; background: #ffffff;">
+             style="width: 100%; min-width: 208px; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12.5px; background: #ffffff;">
     `;
 
     // Cột Đếm Ngược Hạn Hủy 3 Giờ
@@ -2802,7 +2802,7 @@ function renderTable(records) {
         <td style="font-size: 12.5px; color: var(--text-muted);">${formatDateDisplay(r.ngayDuocDuyet)}</td>
         <td>${actBadge}</td>
         <td style="font-size: 12.5px; color: var(--text-muted);">${formatDateDisplay(r.thoiGianKichHoat)}</td>
-        <td style="max-width: 280px; white-space: normal; line-height: 1.4;">${r.lyDoHuy || "-"}</td>
+        <td style="max-width: 224px; white-space: normal; line-height: 1.4;">${r.lyDoHuy || "-"}</td>
         <td style="font-size: 13px;">${r.loaiContainer || "-"}</td>
         <td class="text-center">${dirBadge}</td>
         <td class="text-center"><strong>${r.sizeTeus || 0}</strong></td>
@@ -2810,7 +2810,7 @@ function renderTable(records) {
         <td style="font-size: 12.5px; font-family: monospace;">${r.sdtTaiXe || "-"}</td>
         <td>${r.tenNhaXe || "-"}</td>
         <td style="font-size: 12.5px; font-family: monospace;">${r.sdtNhaXe || "-"}</td>
-        <td style="max-width: 280px; white-space: normal; color: #b45309; font-size: 13px; line-height: 1.4;">${r.lyDoTuChoi || "-"}</td>
+        <td style="max-width: 224px; white-space: normal; color: #b45309; font-size: 13px; line-height: 1.4;">${r.lyDoTuChoi || "-"}</td>
         ${currentTab === "cancelled" ? `
           <td class="col-pending-action text-center" style="padding: 6px 8px; vertical-align: middle;">
             ${isRowInPending ? `
