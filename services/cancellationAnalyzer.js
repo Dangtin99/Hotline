@@ -197,9 +197,18 @@ function parseCancellationFile(input) {
         sizeTeus: Number(cleanString(item["SizeTEUS"])) || 0,
         tenTaiXe: cleanString(item["Tên tài xế"]),
         sdtTaiXe: cleanString(item["Số điện thoại tài xế"]),
-        tenNhaXe: cleanString(item["Tên nhà xe"]),
-        sdtNhaXe: cleanString(item["Số điện thoại nhà xe"]),
-        lyDoTuChoi: cleanString(item["Lý do từ chối"]),
+        lyDoTuChoi: cleanString(
+          item["Lý do đảo chuyển"] ||
+          item["Lý do đảo chuyền"] ||
+          item["Lý do từ chối"] ||
+          item["Lý do từ chối duyệt"] ||
+          item["Ghi chú (Lý do từ chối duyệt)"] ||
+          item["Ghi chú (Lý do từ chối)"] ||
+          item["Lý do đảo chuyển cont"] ||
+          item["Ly do dao chuyen"] ||
+          item["Ly do tu choi"] ||
+          item["Lý do chuyển cont"]
+        ),
         lyDoHuyCheck: cleanString(item["Lý do hủy_Check"]),
         giaiTrinh: cleanString(item["Giải trình"] || item["Giải trình lý do"] || item["Giai trinh"] || item["Ghi chú giải trình"])
       });
@@ -479,7 +488,13 @@ function validateAgainstSqlSchema(input) {
   const missingRequired = [];
 
   EXPECTED_COLUMNS.forEach(col => {
-    const idx = headerRowLower.findIndex(h => h.includes(col.excelHeader.toLowerCase()) || col.excelHeader.toLowerCase().includes(h));
+    const idx = headerRowLower.findIndex(h => {
+      if (h.includes(col.excelHeader.toLowerCase()) || col.excelHeader.toLowerCase().includes(h)) return true;
+      if (col.key === "ly_do_tu_choi") {
+        return h.includes("đảo chuyển") || h.includes("dao chuyen") || h.includes("từ chối") || h.includes("tu choi");
+      }
+      return false;
+    });
     const found = idx !== -1;
     if (!found && col.required) {
       missingRequired.push(col.excelHeader);
@@ -609,7 +624,7 @@ function parseVerificationFile(input) {
     const trangThaiDon = getVal(row, ["Trạng thái đơn hàng"]);
     const thoiDiemXepTai = normalizeDate(getVal(row, ["Thời điểm xếp tài"]));
     const lyDoHuy = getVal(row, ["Lý do Huỷ"]);
-    const lyDoTuChoi = getVal(row, ["Ghi chú (Lý do từ chối duyệt)"]);
+    const lyDoTuChoi = getVal(row, ["Ghi chú (Lý do từ chối duyệt)", "Lý do đảo chuyển", "Lý do đảo chuyền", "Lý do từ chối", "Lý do từ chối duyệt"]);
     const lyDoCheck = getVal(row, ["Ghi chú thêm (Gate OUT)"]);
     const taiXe = getVal(row, ["Họ tên tài xế"]);
     const sdtTaiXe = getVal(row, ["SĐT"]);
