@@ -583,8 +583,13 @@ app.get("/api/dashboard-data", authRequired, async (req, res) => {
       dateFrom,
       dateTo,
       hourFrom = "00:00",
-      hourTo = "23:59"
+      hourTo = "23:59",
+      refresh
     } = req.query;
+
+    if (refresh === "1" || refresh === "true") {
+      await getAllRecordsAsync(true);
+    }
 
     const result = await getDashboardDataAsync({
       dateType,

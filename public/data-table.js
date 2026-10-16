@@ -38,6 +38,7 @@ const filterHourTo = document.getElementById("filterHourTo");
 const btnClearDateFilter = document.getElementById("btnClearDateFilter");
 const tableDateFilterGroup = document.getElementById("tableDateFilterGroup");
 const btnResetFilter = document.getElementById("btnResetFilter");
+const btnReloadData = document.getElementById("btnReloadData");
 const btnExportCsv = document.getElementById("btnExportCsv");
 const btnExportExcel = document.getElementById("btnExportExcel");
 const btnSyncTurso = document.getElementById("btnSyncTurso") || document.getElementById("btnSyncSupabase");
@@ -1740,6 +1741,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (filterWarning3h) filterWarning3h.onchange = applyFilters;
   if (filterContactStatus) filterContactStatus.onchange = applyFilters;
   if (btnResetFilter) btnResetFilter.onclick = resetFilters;
+  if (btnReloadData) btnReloadData.onclick = reloadTableDataPreservingFilters;
   if (btnExportCsv) btnExportCsv.onclick = exportFilteredToCsv;
   if (btnExportExcel) btnExportExcel.onclick = exportFilteredToExcel;
   if (btnSyncTurso) btnSyncTurso.onclick = triggerTursoSync;
@@ -2471,6 +2473,137 @@ function resetFilters() {
 
   currentPage = 1;
   applyFilters();
+}
+
+// Tải lại dữ liệu Bảng Chi Tiết mới nhất từ hệ thống mà không làm mất các điều kiện lọc hiện tại
+async function reloadTableDataPreservingFilters() {
+  if (btnReloadData) {
+    btnReloadData.classList.add("btn-reloading");
+    btnReloadData.disabled = true;
+  }
+
+  // 1. Lưu snapshot toàn bộ trạng thái bộ lọc và tab hiện tại
+  const savedSnapshot = {
+    currentTab: currentTab,
+    selectedDepots: [...selectedDepots],
+    selectedStatuses: [...selectedStatuses],
+    line: filterLine ? filterLine.value : "",
+    direction: filterDirection ? filterDirection.value : "",
+    approvedHour: filterApprovedHour ? filterApprovedHour.value : "",
+    warning3h: filterWarning3h ? filterWarning3h.value : "",
+    contactStatus: filterContactStatus ? filterContactStatus.value : "",
+    dateType: filterDateType ? filterDateType.value : "ngayHuy",
+    dateFrom: filterDateFrom ? filterDateFrom.value : "",
+    dateTo: filterDateTo ? filterDateTo.value : "",
+    hourFrom: filterHourFrom ? filterHourFrom.value : "",
+    hourTo: filterHourTo ? filterHourTo.value : "",
+    search: searchInput ? searchInput.value : ""
+  };
+
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const uploadId = urlParams.get("id");
+    let dataset = null;
+
+    if (uploadId && uploadId !== "all") {
+      const res = await fetch(`/api/history/${encodeURIComponent(uploadId)}?refresh=1&_t=${Date.now()}`);
+      const result = await res.json();
+      if (!res.ok || result.status !== "success") {
+        throw new Error(result.message || "Không thể tải đợt này.");
+      }
+      dataset = result.data;
+      allRecords = dataset.records || [];
+    } else {
+      const resAll = await fetch(`/api/all-data?refresh=1&_t=${Date.now()}`);
+      const resultAll = await resAll.json();
+      if (resAll.ok && resultAll.status === "success" && resultAll.totalRecords > 0) {
+        dataset = resultAll.data;
+        allRecords = resultAll.records || (dataset && dataset.records) || [];
+      } else {
+        const resSample = await fetch("/api/sample");
+        const resultSample = await resSample.json();
+        if (resSample.ok && resultSample.status === "success") {
+          dataset = resultSample.data;
+          allRecords = dataset.records || [];
+        }
+      }
+    }
+
+    currentDatasetId = uploadId || "sql_all";
+
+    // Nạp trạng thái và giải trình
+    const savedNotes = getSavedNotes();
+    allRecords.forEach(r => {
+      const k1 = getRowKey(r);
+      const k2 = `${r.stt}_${r.soBooking || ''}_${r.soContainer || ''}`;
+      const note = savedNotes[k1] || (k2 ? savedNotes[k2] : null) || {};
+      let st = (r.trangThaiXuLy !== undefined && r.trangThaiXuLy !== null) ? r.trangThaiXuLy : (note.status || "");
+      r.trangThaiXuLy = normalizeCskhStatus(st, isUnpaidOrder(r));
+      r.giaiTrinh = (r.giaiTrinh !== undefined && r.giaiTrinh !== null) ? r.giaiTrinh : (note.giaiTrinh || "");
+      r.giaiTrinhChiTiet = (r.giaiTrinhChiTiet !== undefined && r.giaiTrinhChiTiet !== null && r.giaiTrinhChiTiet !== "")
+        ? r.giaiTrinhChiTiet
+        : ((note.giaiTrinhChiTiet !== undefined && note.giaiTrinhChiTiet !== null && note.giaiTrinhChiTiet !== "") ? note.giaiTrinhChiTiet : null);
+    });
+
+    // Cập nhật các đơn Chưa thanh toán quá 3h thành Đã hủy
+    applyExpired3hCancellation(allRecords);
+
+    // Đồng bộ danh sách đơn Chờ Xử Lý (Pending) từ CSDL
+    allRecords.forEach(r => {
+      const rid = r.id || r._rowId || r.soEir || r.soContainer;
+      if (r.isPending && rid && !pendingRows.includes(rid)) {
+        pendingRows.push(rid);
+      }
+    });
+    sessionStorage.setItem("gpg_pending_rows", JSON.stringify(pendingRows));
+
+    // Nạp lại danh mục dropdowns
+    populateFilterDropdowns(allRecords);
+
+    // 2. Khôi phục chính xác các điều kiện lọc từ snapshot
+    if (savedSnapshot.selectedDepots && savedSnapshot.selectedDepots.length > 0) {
+      selectedDepots = allDepotValues.filter(d => savedSnapshot.selectedDepots.includes(d));
+      if (depotOptionsList) {
+        const checkboxes = depotOptionsList.querySelectorAll(".depot-cb");
+        checkboxes.forEach(cb => { cb.checked = selectedDepots.includes(cb.value); });
+      }
+      updateDepotButtonLabel();
+    }
+
+    if (savedSnapshot.selectedStatuses && savedSnapshot.selectedStatuses.length > 0) {
+      selectedStatuses = allStatusValues.filter(s => savedSnapshot.selectedStatuses.includes(s));
+      if (statusOptionsList) {
+        const checkboxes = statusOptionsList.querySelectorAll(".status-cb");
+        checkboxes.forEach(cb => { cb.checked = selectedStatuses.includes(cb.value); });
+      }
+      updateStatusButtonLabel();
+    }
+
+    if (filterLine) filterLine.value = savedSnapshot.line;
+    if (filterDirection) filterDirection.value = savedSnapshot.direction;
+    if (filterApprovedHour) filterApprovedHour.value = savedSnapshot.approvedHour;
+    if (filterWarning3h) filterWarning3h.value = savedSnapshot.warning3h;
+    if (filterContactStatus) filterContactStatus.value = savedSnapshot.contactStatus;
+    if (filterDateType) filterDateType.value = savedSnapshot.dateType;
+    if (filterDateFrom) filterDateFrom.value = savedSnapshot.dateFrom;
+    if (filterDateTo) filterDateTo.value = savedSnapshot.dateTo;
+    if (filterHourFrom) filterHourFrom.value = savedSnapshot.hourFrom;
+    if (filterHourTo) filterHourTo.value = savedSnapshot.hourTo;
+    if (searchInput) searchInput.value = savedSnapshot.search;
+
+    updateTabCounts();
+    switchTab(savedSnapshot.currentTab || "all", false);
+  } catch (err) {
+    console.error("Lỗi reloadTableDataPreservingFilters:", err);
+    showAlert(err.message || "Lỗi khi tải lại dữ liệu bảng.");
+  } finally {
+    if (btnReloadData) {
+      setTimeout(() => {
+        btnReloadData.classList.remove("btn-reloading");
+        btnReloadData.disabled = false;
+      }, 350);
+    }
+  }
 }
 
 // Render dữ liệu bảng kết hợp phân trang máy chủ (Tối đa 200 dòng/trang)

@@ -58,6 +58,7 @@ const filterHourTo = document.getElementById("filterHourTo");
 const btnClearDateFilter = document.getElementById("btnClearDateFilter");
 const dashboardDateFilterGroup = document.getElementById("dashboardDateFilterGroup");
 const btnResetFilter = document.getElementById("btnResetFilter");
+const btnReloadData = document.getElementById("btnReloadData");
 
 document.addEventListener("DOMContentLoaded", () => {
   if (btnExportMarkdown) btnExportMarkdown.onclick = copyMarkdownReport;
@@ -994,6 +995,7 @@ function initDashboardFilterControls(records) {
     if (filterWarning3h) filterWarning3h.onchange = applyDashboardFilters;
     if (filterContactStatus) filterContactStatus.onchange = applyDashboardFilters;
     if (btnResetFilter) btnResetFilter.onclick = resetDashboardFilters;
+    if (btnReloadData) btnReloadData.onclick = reloadDashboardDataPreservingFilters;
 
     const searchInputEl = document.getElementById("dashboardSearchInput");
     if (searchInputEl) {
@@ -1272,6 +1274,144 @@ function resetDashboardFilters() {
   document.querySelectorAll(".btn-quick-range").forEach(b => b.classList.remove("active"));
 
   applyDashboardFilters();
+}
+
+// Tải lại dữ liệu Dashboard mới nhất từ hệ thống mà không làm mất các điều kiện lọc hiện tại
+async function reloadDashboardDataPreservingFilters() {
+  if (btnReloadData) {
+    btnReloadData.classList.add("btn-reloading");
+    btnReloadData.disabled = true;
+  }
+
+  // 1. Lưu snapshot toàn bộ trạng thái bộ lọc hiện tại
+  const searchInputEl = document.getElementById("dashboardSearchInput");
+  const savedSnapshot = {
+    dateType: filterDateType ? filterDateType.value : "ngayHuy",
+    dateFrom: filterDateFrom ? filterDateFrom.value : "",
+    dateTo: filterDateTo ? filterDateTo.value : "",
+    hourFrom: filterHourFrom ? filterHourFrom.value : "",
+    hourTo: filterHourTo ? filterHourTo.value : "",
+    selectedDepots: [...selectedDashboardDepots],
+    selectedStatuses: [...selectedDashboardStatuses],
+    line: filterLine ? filterLine.value : "",
+    direction: filterDirection ? filterDirection.value : "",
+    approvedHour: filterApprovedHour ? filterApprovedHour.value : "",
+    warning3h: filterWarning3h ? filterWarning3h.value : "",
+    contactStatus: filterContactStatus ? filterContactStatus.value : "",
+    search: searchInputEl ? searchInputEl.value : ""
+  };
+
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const uploadId = urlParams.get("id");
+
+    if (uploadId && uploadId !== "all") {
+      const res = await fetch(`/api/history/${encodeURIComponent(uploadId)}?refresh=1&_t=${Date.now()}`);
+      const result = await res.json();
+      if (!res.ok || result.status !== "success") {
+        throw new Error(result.message || "Không tìm thấy dữ liệu đợt này.");
+      }
+      currentRecords = (result.data && result.data.records) || [];
+      masterDashboardRecords = [...currentRecords];
+    } else {
+      const targetFrom = savedSnapshot.dateFrom || getVietnamTodayYmd();
+      const targetTo = savedSnapshot.dateTo || getVietnamTodayYmd();
+      const query = new URLSearchParams({
+        dateType: savedSnapshot.dateType,
+        dateFrom: targetFrom,
+        dateTo: targetTo,
+        hourFrom: savedSnapshot.hourFrom || "00:00",
+        hourTo: savedSnapshot.hourTo || "23:59",
+        refresh: "1",
+        _t: Date.now()
+      });
+
+      const res = await fetch(`/api/dashboard-data?${query.toString()}`);
+      const contentType = res.headers.get("content-type") || "";
+
+      if (res.status === 404 || !contentType.includes("application/json")) {
+        const resAll = await fetch(`/api/all-data?refresh=1&_t=${Date.now()}`);
+        if (resAll.ok) {
+          const resultAll = await resAll.json();
+          if (resultAll.status === "success") {
+            currentRecords = resultAll.records || (resultAll.data && resultAll.data.records) || [];
+            masterDashboardRecords = [...currentRecords];
+          }
+        }
+      } else {
+        const result = await res.json();
+        if (!res.ok || result.status !== "success") {
+          throw new Error(result.message || "Không thể tải lại dữ liệu dashboard.");
+        }
+        currentRecords = result.currentRecords || [];
+        masterDashboardRecords = [...currentRecords, ...(result.previousRecords || [])];
+        currentComparisonInfo = {
+          hasComparison: true,
+          ...result.filter,
+          previousRecords: result.previousRecords || []
+        };
+      }
+    }
+
+    applyExpired3hCancellation(masterDashboardRecords);
+
+    // Đồng bộ ghi chú CSKH
+    const savedNotes = getSavedNotes();
+    masterDashboardRecords.forEach(r => {
+      const k = `${r.stt}_${r.soBooking || ''}_${r.soContainer || ''}`;
+      const note = (r.rowKey && savedNotes[r.rowKey]) ? savedNotes[r.rowKey] : (savedNotes[k] || {});
+      let st = r.trangThaiXuLy || note.status || "";
+      r.trangThaiXuLy = normalizeCskhStatus(st, isUnpaidOrder(r));
+      if (note.giaiTrinh && !r.giaiTrinh) r.giaiTrinh = note.giaiTrinh;
+    });
+
+    // Cập nhật lại danh mục filter options
+    initDashboardFilterControls(masterDashboardRecords);
+
+    // 2. Khôi phục chính xác các điều kiện lọc đã chọn từ snapshot
+    if (savedSnapshot.selectedDepots && savedSnapshot.selectedDepots.length > 0) {
+      selectedDashboardDepots = allDashboardDepots.filter(d => savedSnapshot.selectedDepots.includes(d));
+      if (depotOptionsList) {
+        const checkboxes = depotOptionsList.querySelectorAll(".depot-dashboard-cb");
+        checkboxes.forEach(cb => { cb.checked = selectedDashboardDepots.includes(cb.value); });
+      }
+      updateDashboardDepotLabel();
+    }
+
+    if (savedSnapshot.selectedStatuses && savedSnapshot.selectedStatuses.length > 0) {
+      selectedDashboardStatuses = allDashboardStatuses.filter(s => savedSnapshot.selectedStatuses.includes(s));
+      if (statusOptionsList) {
+        const checkboxes = statusOptionsList.querySelectorAll(".status-dashboard-cb");
+        checkboxes.forEach(cb => { cb.checked = selectedDashboardStatuses.includes(cb.value); });
+      }
+      updateDashboardStatusLabel();
+    }
+
+    if (filterLine) filterLine.value = savedSnapshot.line;
+    if (filterDirection) filterDirection.value = savedSnapshot.direction;
+    if (filterApprovedHour) filterApprovedHour.value = savedSnapshot.approvedHour;
+    if (filterWarning3h) filterWarning3h.value = savedSnapshot.warning3h;
+    if (filterContactStatus) filterContactStatus.value = savedSnapshot.contactStatus;
+    if (filterDateType) filterDateType.value = savedSnapshot.dateType;
+    if (filterDateFrom) filterDateFrom.value = savedSnapshot.dateFrom;
+    if (filterDateTo) filterDateTo.value = savedSnapshot.dateTo;
+    if (filterHourFrom) filterHourFrom.value = savedSnapshot.hourFrom;
+    if (filterHourTo) filterHourTo.value = savedSnapshot.hourTo;
+    if (searchInputEl) searchInputEl.value = savedSnapshot.search;
+
+    // Áp dụng lại toàn bộ bộ lọc với dữ liệu tươi
+    applyDashboardFilters();
+  } catch (err) {
+    console.error("Lỗi reloadDashboardDataPreservingFilters:", err);
+    showAlert(err.message || "Lỗi khi tải lại dữ liệu dashboard.");
+  } finally {
+    if (btnReloadData) {
+      setTimeout(() => {
+        btnReloadData.classList.remove("btn-reloading");
+        btnReloadData.disabled = false;
+      }, 350);
+    }
+  }
 }
 
 // Cố định cột cho bảng chi tiết đơn hàng trực tiếp trên Dashboard
