@@ -850,66 +850,79 @@ window.onStatusSelectChange = function(selectElem) {
 // CHUẨN HÓA DANH MỤC LÝ DO GIẢI TRÌNH HỦY ĐƠN
 // ==========================================
 const CANCELLATION_REASON_GROUPS = [
-  "Chủ hàng & Kế hoạch (Hoãn lấy cont, hủy đóng hàng)",
-  "Hãng tàu & Booking (Hết hạn, hủy booking, đủ số lượng)",
-  "Depot & Vỏ Container (Chuyển depot, hết cont, cont xấu)",
-  "Chứng từ & Đặt lệnh (Sai booking, khai nhầm, trùng đơn)",
-  "Thanh toán & Vận chuyển (Chưa đóng phí, lỗi cổng, xe hư)",
-  "Khác (Nhập chi tiết cụ thể)"
+  "Thay đổi kế hoạch vận chuyển",
+  "Thay đổi hoặc không còn nhu cầu đặt đơn",
+  "Không đáp ứng điều kiện thực hiện đơn",
+  "Lý do khác từ khách hàng",
+  "Không đáp ứng điều kiện xử lý đơn",
+  "Không thể thực hiện do điều kiện Depot/Container",
+  "Lý do khác từ Trung tâm"
 ];
 
 /**
  * Phân tích chuỗi giải trình thành Nhóm và Chi tiết
- * Đảm bảo tương thích ngược 100% với dữ liệu tự do cũ
+ * Đảm bảo tương thích ngược 100% với dữ liệu cũ
  */
 function parseExplanationValue(rawVal) {
   if (!rawVal || typeof rawVal !== "string") {
     return { group: "", detail: "" };
   }
   const trimmed = rawVal.trim();
-  if (!trimmed) return { group: "", detail: "" };
+  if (!trimmed || trimmed === "null" || trimmed === "undefined" || trimmed === "-") {
+    return { group: "", detail: "" };
+  }
 
-  // Dạng "Khác: [chi tiết]" hoặc "Khác (Nhập chi tiết cụ thể): [chi tiết]" hoặc "Khác"
-  if (/^khác/i.test(trimmed)) {
+  // 1. Khớp chính xác 1 trong 7 nhóm mới
+  for (const g of CANCELLATION_REASON_GROUPS) {
+    if (trimmed === g) {
+      return { group: g, detail: "" };
+    }
+  }
+
+  // 2. Khớp theo tiền tố nhóm
+  for (const g of CANCELLATION_REASON_GROUPS) {
+    if (trimmed.startsWith(g)) {
+      let detail = trimmed.substring(g.length).trim();
+      if (detail.startsWith(":") || detail.startsWith("-")) {
+        detail = detail.substring(1).trim();
+      }
+      return { group: g, detail };
+    }
+  }
+
+  // 3. Tương thích ngược dữ liệu tự do / danh mục cũ
+  const lower = trimmed.toLowerCase();
+  if (lower.includes("thay đổi kế hoạch") || lower.includes("kế hoạch") || lower.includes("hoãn lấy cont") || lower.includes("chủ hàng & kế hoạch") || lower.includes("chủ hàng")) {
+    return { group: "Thay đổi kế hoạch vận chuyển", detail: "" };
+  }
+  if (lower.includes("không còn nhu cầu") || lower.includes("hủy đóng hàng") || lower.includes("không lấy cont")) {
+    return { group: "Thay đổi hoặc không còn nhu cầu đặt đơn", detail: "" };
+  }
+  if (lower.includes("thực hiện đơn") || lower.includes("booking") || lower.includes("hết hạn") || lower.includes("chứng từ") || lower.includes("đặt lệnh") || lower.includes("sai booking") || lower.includes("khai nhầm") || lower.includes("trùng đơn") || lower.includes("chưa đóng phí")) {
+    return { group: "Không đáp ứng điều kiện thực hiện đơn", detail: "" };
+  }
+  if (lower.includes("xử lý đơn") || lower.includes("lỗi cổng") || lower.includes("hệ thống")) {
+    return { group: "Không đáp ứng điều kiện xử lý đơn", detail: "" };
+  }
+  if (lower.includes("depot") || lower.includes("container") || lower.includes("hết cont") || lower.includes("cont xấu") || lower.includes("chuyển depot") || lower.includes("vỏ") || lower.includes("bãi")) {
+    return { group: "Không thể thực hiện do điều kiện Depot/Container", detail: "" };
+  }
+  if (lower.includes("trung tâm") || lower.includes("điều hành")) {
+    return { group: "Lý do khác từ Trung tâm", detail: "" };
+  }
+  if (lower.includes("khách hàng") || lower.includes("chờ sếp") || lower.includes("xe hư") || lower.includes("tài xế") || lower.startsWith("khác")) {
     let detail = "";
     if (trimmed.includes(":")) {
       detail = trimmed.substring(trimmed.indexOf(":") + 1).trim();
     } else if (trimmed.includes(" - ")) {
       detail = trimmed.substring(trimmed.indexOf(" - ") + 3).trim();
-    } else if (trimmed !== "Khác" && trimmed !== "Khác (Nhập chi tiết cụ thể)") {
+    } else {
       detail = trimmed.replace(/^khác\s*(\(.*\))?\s*/i, "").trim();
     }
-    return { group: "Khác (Nhập chi tiết cụ thể)", detail };
+    return { group: "Lý do khác từ khách hàng", detail: detail || trimmed };
   }
 
-  // Khớp chính xác hoặc khớp phần đầu với 5 nhóm đầu
-  for (const g of CANCELLATION_REASON_GROUPS.slice(0, 5)) {
-    const baseName = g.split(" (")[0];
-    if (trimmed === g || trimmed === baseName || trimmed.startsWith(g) || trimmed.startsWith(baseName)) {
-      return { group: g, detail: "" };
-    }
-  }
-
-  // Tương thích ngược dữ liệu tự do cũ: ánh xạ sang nhóm chuẩn
-  const lower = trimmed.toLowerCase();
-  if (lower.includes("chủ hàng") || lower.includes("kế hoạch") || lower.includes("chờ sếp") || lower.includes("cho sep") || lower.includes("sếp")) {
-    return { group: "Chủ hàng & Kế hoạch (Hoãn lấy cont, hủy đóng hàng)", detail: "" };
-  }
-  if (lower.includes("hãng tàu") || lower.includes("hãn tàu") || lower.includes("hạng tàu") || lower.includes("booking") || lower.includes("gia hạn") || lower.includes("đủ số lượng")) {
-    return { group: "Hãng tàu & Booking (Hết hạn, hủy booking, đủ số lượng)", detail: "" };
-  }
-  if (lower.includes("depot") || lower.includes("hết cont") || lower.includes("cont xấu") || lower.includes("vỏ") || lower.includes("bãi")) {
-    return { group: "Depot & Vỏ Container (Chuyển depot, hết cont, cont xấu)", detail: "" };
-  }
-  if (lower.includes("đặt lại") || lower.includes("chứng từ") || lower.includes("đặt lệnh") || lower.includes("khai nhầm") || lower.includes("sai số") || lower.includes("mst")) {
-    return { group: "Chứng từ & Đặt lệnh (Sai booking, khai nhầm, trùng đơn)", detail: "" };
-  }
-  if (lower.includes("thanh toán") || lower.includes("tài xế") || lower.includes("hạ tầng") || lower.includes("vận chuyển") || lower.includes("xe hư") || lower.includes("chờ tài")) {
-    return { group: "Thanh toán & Vận chuyển (Chưa đóng phí, lỗi cổng, xe hư)", detail: "" };
-  }
-
-  // Nếu là ghi chú tự do khác, tự động xếp vào nhóm "Khác" và gán nội dung vào ô chi tiết
-  return { group: "Khác (Nhập chi tiết cụ thể)", detail: trimmed };
+  return { group: "", detail: trimmed };
 }
 
 /**
@@ -917,9 +930,9 @@ function parseExplanationValue(rawVal) {
  */
 function buildExplanationString(group, detail) {
   if (!group) return "";
-  if (group.startsWith("Khác")) {
+  if (group.includes("Lý do khác") || group.includes("Khác") || group.includes("khác")) {
     const d = (detail || "").trim();
-    return d ? `Khác: ${d}` : group;
+    return d ? `${group}: ${d}` : group;
   }
   return group;
 }
@@ -2774,6 +2787,9 @@ function renderTable(records) {
     const expGroupSelectHtml = `
       <select class="select-reason-group" data-rowkey="${rowKey}" onchange="onReasonGroupChange(this)" title="Chọn nhóm lý do giải trình" style="width: 100%; min-width: 168px; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12.5px; background-color: #ffffff; cursor: pointer;">
         <option value="" ${!selectedGroup ? "selected" : ""}>-- Chọn nhóm lý do --</option>
+        ${selectedGroup && !CANCELLATION_REASON_GROUPS.includes(selectedGroup) ? `
+          <option value="${selectedGroup.replace(/"/g, '&quot;')}" selected>${selectedGroup}</option>
+        ` : ""}
         ${CANCELLATION_REASON_GROUPS.map((grp, idx) => `
           <option value="${grp}" ${selectedGroup === grp ? "selected" : ""}>
             ${idx + 1}. ${grp}

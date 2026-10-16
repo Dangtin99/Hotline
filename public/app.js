@@ -2378,18 +2378,19 @@ function renderReasonsTable(reasons) {
   `).join("");
 }
 
-// Chuẩn hóa danh mục 6 nhóm lý do giải trình hủy đơn
+// Chuẩn hóa danh mục 7 nhóm lý do giải trình hủy đơn
 const CANCELLATION_REASON_GROUPS = [
-  "Chủ hàng & Kế hoạch (Hoãn lấy cont, hủy đóng hàng)",
-  "Hãng tàu & Booking (Hết hạn, hủy booking, đủ số lượng)",
-  "Depot & Vỏ Container (Chuyển depot, hết cont, cont xấu)",
-  "Chứng từ & Đặt lệnh (Sai booking, khai nhầm, trùng đơn)",
-  "Thanh toán & Vận chuyển (Chưa đóng phí, lỗi cổng, xe hư)",
-  "Khác (Nhập chi tiết cụ thể)"
+  "Thay đổi kế hoạch vận chuyển",
+  "Thay đổi hoặc không còn nhu cầu đặt đơn",
+  "Không đáp ứng điều kiện thực hiện đơn",
+  "Lý do khác từ khách hàng",
+  "Không đáp ứng điều kiện xử lý đơn",
+  "Không thể thực hiện do điều kiện Depot/Container",
+  "Lý do khác từ Trung tâm"
 ];
 
 /**
- * Phân tích và chuẩn hóa giá trị giải trình thành một trong 6 Nhóm Giải Trình chuẩn
+ * Phân tích và chuẩn hóa giá trị giải trình thành một trong 7 Nhóm Giải Trình chuẩn
  */
 function getExplanationGroup(rawVal) {
   if (!rawVal || typeof rawVal !== "string") return "";
@@ -2398,43 +2399,41 @@ function getExplanationGroup(rawVal) {
     return "";
   }
 
-  // 1. Khớp chính xác 6 nhóm chuẩn
+  // 1. Khớp chính xác 7 nhóm chuẩn mới
   for (const g of CANCELLATION_REASON_GROUPS) {
     if (trimmed === g) return g;
   }
 
-  // 2. Dạng bắt đầu bằng "Khác"
-  if (/^khác/i.test(trimmed)) {
-    return "Khác (Nhập chi tiết cụ thể)";
+  // 2. Khớp theo tiền tố nhóm
+  for (const g of CANCELLATION_REASON_GROUPS) {
+    if (trimmed.startsWith(g)) return g;
   }
 
-  // 3. Khớp theo phần tên nhóm trước dấu ngoặc đơn
-  for (const g of CANCELLATION_REASON_GROUPS.slice(0, 5)) {
-    const baseName = g.split(" (")[0];
-    if (trimmed === baseName || trimmed.startsWith(g) || trimmed.startsWith(baseName)) {
-      return g;
-    }
-  }
-
-  // 4. Ánh xạ tương thích ngược từ dữ liệu tự do cũ
+  // 3. Ánh xạ tương thích ngược từ dữ liệu cũ
   const lower = trimmed.toLowerCase();
-  if (lower.includes("chủ hàng") || lower.includes("kế hoạch") || lower.includes("chờ sếp") || lower.includes("cho sep") || lower.includes("sếp")) {
-    return "Chủ hàng & Kế hoạch (Hoãn lấy cont, hủy đóng hàng)";
+  if (lower.includes("thay đổi kế hoạch") || lower.includes("kế hoạch") || lower.includes("hoãn lấy cont") || lower.includes("chủ hàng & kế hoạch") || lower.includes("chủ hàng")) {
+    return "Thay đổi kế hoạch vận chuyển";
   }
-  if (lower.includes("hãng tàu") || lower.includes("hãn tàu") || lower.includes("hạng tàu") || lower.includes("booking") || lower.includes("book") || lower.includes("gia hạn") || lower.includes("đủ số lượng") || lower.includes("dk đủ")) {
-    return "Hãng tàu & Booking (Hết hạn, hủy booking, đủ số lượng)";
+  if (lower.includes("không còn nhu cầu") || lower.includes("hủy đóng hàng") || lower.includes("không lấy cont")) {
+    return "Thay đổi hoặc không còn nhu cầu đặt đơn";
   }
-  if (lower.includes("depot") || lower.includes("hết cont") || lower.includes("cont xấu") || lower.includes("vỏ") || lower.includes("bãi") || lower.includes("rỗng") || lower.includes("rổng")) {
-    return "Depot & Vỏ Container (Chuyển depot, hết cont, cont xấu)";
+  if (lower.includes("thực hiện đơn") || lower.includes("booking") || lower.includes("book") || lower.includes("hết hạn") || lower.includes("chứng từ") || lower.includes("đặt lệnh") || lower.includes("sai booking") || lower.includes("khai nhầm") || lower.includes("trùng đơn") || lower.includes("chưa đóng phí")) {
+    return "Không đáp ứng điều kiện thực hiện đơn";
   }
-  if (lower.includes("đặt lại") || lower.includes("chứng từ") || lower.includes("đặt lệnh") || lower.includes("khai nhầm") || lower.includes("sai số") || lower.includes("mst") || lower.includes("nhầm")) {
-    return "Chứng từ & Đặt lệnh (Sai booking, khai nhầm, trùng đơn)";
+  if (lower.includes("xử lý đơn") || lower.includes("lỗi cổng") || lower.includes("hệ thống")) {
+    return "Không đáp ứng điều kiện xử lý đơn";
   }
-  if (lower.includes("thanh toán") || lower.includes("tài xế") || lower.includes("hạ tầng") || lower.includes("vận chuyển") || lower.includes("xe hư") || lower.includes("chờ tài")) {
-    return "Thanh toán & Vận chuyển (Chưa đóng phí, lỗi cổng, xe hư)";
+  if (lower.includes("depot") || lower.includes("container") || lower.includes("hết cont") || lower.includes("cont xấu") || lower.includes("chuyển depot") || lower.includes("vỏ") || lower.includes("bãi") || lower.includes("rỗng") || lower.includes("rổng")) {
+    return "Không thể thực hiện do điều kiện Depot/Container";
+  }
+  if (lower.includes("trung tâm") || lower.includes("điều hành")) {
+    return "Lý do khác từ Trung tâm";
+  }
+  if (lower.includes("khách hàng") || lower.includes("chờ sếp") || lower.includes("xe hư") || lower.includes("tài xế") || lower.startsWith("khác")) {
+    return "Lý do khác từ khách hàng";
   }
 
-  return "Khác (Nhập chi tiết cụ thể)";
+  return "";
 }
 
 // Render Bảng Thống Kê Top Depot & Hãng Tàu Có Số Lượng Đơn Hủy Nhiều Nhất Kèm Lý Do Phổ Biến
