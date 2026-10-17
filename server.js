@@ -2,6 +2,7 @@ const path = require("path");
 const fs = require("fs");
 const express = require("express");
 const cors = require("cors");
+const compression = require("compression");
 const multer = require("multer");
 const {
   parseCancellationFile,
@@ -255,6 +256,7 @@ function saveVerificationHistory(historyList) {
 })();
 
 // Cấu hình Middleware
+app.use(compression());
 app.use(cors());
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
@@ -565,20 +567,30 @@ app.get("/api/all-data", authRequired, async (req, res) => {
     // Lọc theo phân quyền Depot trực thuộc của User
     allRecords = filterRecordsByDepotPermission(allRecords, req.user);
 
-    const analytics = aggregateCancellationData(allRecords);
     const stats = getDatabaseStats();
     const userAuthorizedDepots = getUserAuthorizedDepotsList(req.user);
+
+    // Tính tổng TEUS nhanh chóng không cần dựng biểu đồ khổng lồ
+    let totalTeus = 0;
+    for (let i = 0; i < allRecords.length; i++) {
+      totalTeus += Number(allRecords[i].sizeTeus) || 0;
+    }
 
     return res.json({
       status: "success",
       isAllData: true,
       fileName: `Toàn bộ CSDL SQL (${stats.fileCount} file đã tải, ${allRecords.length} đơn)`,
       totalRecords: allRecords.length,
-      totalTeus: analytics.kpis?.totalTeus || 0,
+      totalTeus: Number(totalTeus.toFixed(2)),
       stats,
       allDepots: userAuthorizedDepots,
       records: allRecords,
-      data: analytics
+      data: {
+        kpis: {
+          totalRecords: allRecords.length,
+          totalTeus: Number(totalTeus.toFixed(2))
+        }
+      }
     });
   } catch (err) {
     return res.status(500).json({ status: "error", message: err.message });

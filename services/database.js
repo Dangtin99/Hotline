@@ -231,8 +231,11 @@ try {
 
 // Quản lý bộ nhớ đệm và dữ liệu đồng bộ
 let memoryOrders = [];
+let memoryOpMap = {};
 let operationalVersion = Date.now();
 let lastVersionFetchTime = 0;
+let lastOrdersCachedVersion = 0;
+let lastOpMapCachedVersion = 0;
 const VERSION_CACHE_TTL_MS = 2500; // Bộ đệm 2.5s giảm tải I/O Turso khi polling 5s
 
 function bumpOperationalVersion() {
@@ -2021,16 +2024,29 @@ async function getAllRecordsAsync(forceRefresh = false) {
   // 1. Nếu Turso Cloud khả dụng -> Turso là Nguồn Chân Lý duy nhất (Source of Truth) trên Vercel & Web
   if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
-      const tursoRows = await tursoClient.getAllOrdersFromTurso();
-      if (Array.isArray(tursoRows)) {
-        memoryOrders = tursoRows;
-        applyExpired3hCancellation(memoryOrders);
+      const currentVer = await getOperationalVersionAsync();
+      const hasValidCache = !forceRefresh && memoryOrders.length > 0 && lastOrdersCachedVersion === currentVer;
 
-        // Lấy trạng thái tác nghiệp từ bảng order_operational_state nếu có
-        let opMap = {};
-        try {
-          opMap = await tursoClient.getAllOperationalStatesFromTurso();
-        } catch (opErr) {}
+      if (!hasValidCache) {
+        const tursoRows = await tursoClient.getAllOrdersFromTurso();
+        if (Array.isArray(tursoRows)) {
+          memoryOrders = tursoRows;
+          applyExpired3hCancellation(memoryOrders);
+          lastOrdersCachedVersion = currentVer;
+        }
+      }
+
+      if (Array.isArray(memoryOrders) && memoryOrders.length > 0) {
+        // Lấy trạng thái tác nghiệp từ bảng order_operational_state nếu có (sử dụng cache nếu version không đổi)
+        if (lastOpMapCachedVersion !== currentVer || !memoryOpMap || Object.keys(memoryOpMap).length === 0) {
+          try {
+            memoryOpMap = await tursoClient.getAllOperationalStatesFromTurso() || {};
+            lastOpMapCachedVersion = currentVer;
+          } catch (opErr) {
+            memoryOpMap = memoryOpMap || {};
+          }
+        }
+        const opMap = memoryOpMap;
 
         return memoryOrders.map((o, idx) => {
           const op = opMap[o.rowKey];

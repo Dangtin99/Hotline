@@ -2168,15 +2168,20 @@ function stopVietnamClock() {
   }
 }
 
-// Cập nhật số lượng hiển thị trên các thẻ tab
+// Cập nhật số lượng hiển thị trên các thẻ tab (Tối ưu không tạo mảng tạm)
 function updateTabCounts() {
   const totalCount = allRecords.length;
-  const unpaidCount = allRecords.filter(isUnpaidOrder).length;
-  const cancelledCount = allRecords.filter(isCancelledOrder).length;
-  if (tabCountAll) tabCountAll.textContent = totalCount;
-  if (tabCountUnpaid) tabCountUnpaid.textContent = unpaidCount;
-  if (tabCountCancelled) tabCountCancelled.textContent = cancelledCount;
-  if (tabCountPending) tabCountPending.textContent = pendingRows.length;
+  let unpaidCount = 0;
+  let cancelledCount = 0;
+  for (let i = 0; i < allRecords.length; i++) {
+    const r = allRecords[i];
+    if (isUnpaidOrder(r)) unpaidCount++;
+    if (isCancelledOrder(r)) cancelledCount++;
+  }
+  if (tabCountAll) tabCountAll.textContent = totalCount.toLocaleString();
+  if (tabCountUnpaid) tabCountUnpaid.textContent = unpaidCount.toLocaleString();
+  if (tabCountCancelled) tabCountCancelled.textContent = cancelledCount.toLocaleString();
+  if (tabCountPending) tabCountPending.textContent = pendingRows.length.toLocaleString();
 }
 
 function showAlert(msg, isError = true) {
@@ -2250,7 +2255,9 @@ async function loadDataset() {
     
     // Nạp trạng thái và giải trình: Ưu tiên tuyệt đối dữ liệu từ CSDL Máy Chủ, localStorage chỉ dùng làm fallback
     const savedNotes = getSavedNotes();
-    allRecords.forEach(r => {
+    const pendingSet = new Set(pendingRows);
+    for (let i = 0; i < allRecords.length; i++) {
+      const r = allRecords[i];
       const k1 = getRowKey(r);
       const k2 = `${r.stt}_${r.soBooking || ''}_${r.soContainer || ''}`;
       const note = savedNotes[k1] || (k2 ? savedNotes[k2] : null) || {};
@@ -2260,18 +2267,16 @@ async function loadDataset() {
       r.giaiTrinhChiTiet = (r.giaiTrinhChiTiet !== undefined && r.giaiTrinhChiTiet !== null && r.giaiTrinhChiTiet !== "")
         ? r.giaiTrinhChiTiet
         : ((note.giaiTrinhChiTiet !== undefined && note.giaiTrinhChiTiet !== null && note.giaiTrinhChiTiet !== "") ? note.giaiTrinhChiTiet : null);
-    });
+
+      const rid = r.id || r._rowId || r.soEir || r.soContainer;
+      if (r.isPending && rid && !pendingSet.has(rid)) {
+        pendingSet.add(rid);
+        pendingRows.push(rid);
+      }
+    }
 
     // Cập nhật các đơn Chưa thanh toán quá 3h thành Đã hủy
     applyExpired3hCancellation(allRecords);
-
-    // Đồng bộ danh sách đơn Chờ Xử Lý (Pending) từ Cơ sở dữ liệu máy chủ
-    allRecords.forEach(r => {
-      const rid = r.id || r._rowId || r.soEir || r.soContainer;
-      if (r.isPending && rid && !pendingRows.includes(rid)) {
-        pendingRows.push(rid);
-      }
-    });
     sessionStorage.setItem("gpg_pending_rows", JSON.stringify(pendingRows));
 
     populateFilterDropdowns(allRecords);
@@ -2292,16 +2297,23 @@ const loadTableData = loadDataset;
 // Điền các option cho bộ lọc
 function populateFilterDropdowns(records) {
   const baseDepots = new Set(window.SYSTEM_DEPOTS_LIST || SYSTEM_DEPOTS_FALLBACK);
+  const linesSet = new Set();
+  const statusesSet = new Set();
+
   if (Array.isArray(records)) {
-    records.forEach(r => {
-      if (r && r.depot) baseDepots.add(String(r.depot).trim().toUpperCase());
-    });
+    for (let i = 0; i < records.length; i++) {
+      const r = records[i];
+      if (r) {
+        if (r.depot) baseDepots.add(String(r.depot).trim().toUpperCase());
+        if (r.hangTau) linesSet.add(r.hangTau);
+        if (r.trangThaiDonHang) {
+          const norm = normalizeStr(r.trangThaiDonHang);
+          if (norm) statusesSet.add(norm);
+        }
+      }
+    }
   }
-  if (Array.isArray(allRecords)) {
-    allRecords.forEach(r => {
-      if (r && r.depot) baseDepots.add(String(r.depot).trim().toUpperCase());
-    });
-  }
+
   let depots = Array.from(baseDepots).filter(Boolean).sort();
   try {
     const userStr = localStorage.getItem("gpg_auth_user");
@@ -2322,7 +2334,7 @@ function populateFilterDropdowns(records) {
 
   initDepotMultiSelect(depots);
 
-  const lines = [...new Set(records.map(r => r.hangTau).filter(Boolean))].sort();
+  const lines = Array.from(linesSet).filter(Boolean).sort();
   filterLine.innerHTML = `<option value="">Hãng tàu</option>`;
   lines.forEach(l => {
     const opt = document.createElement("option");
@@ -2332,8 +2344,7 @@ function populateFilterDropdowns(records) {
   });
 
   // Quét toàn bộ dữ liệu cột Trạng Thái Đơn: có bao nhiêu trạng thái thì thêm bấy nhiêu vào bộ lọc đa chọn
-  const rawStatuses = records.map(r => normalizeStr(r.trangThaiDonHang)).filter(Boolean);
-  const statuses = [...new Set(rawStatuses)].sort();
+  const statuses = Array.from(statusesSet).filter(Boolean).sort();
   initStatusMultiSelect(statuses);
 }
 
