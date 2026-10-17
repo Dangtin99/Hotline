@@ -2066,7 +2066,117 @@ body {
   border-bottom: 2px solid var(--border-light);
   white-space: nowrap;
   padding: 8px 10px;
+  user-select: none;
 }
+
+/* Nút Thu Gọn / Ẩn Cột Header (-) / (+) */
+.th-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+}
+
+.th-title-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.col-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  min-width: 17px;
+  padding: 0;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #64748b;
+  border-radius: 3px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: all 0.15s ease-in-out;
+  margin-left: 4px;
+}
+
+.full-excel-table thead th:hover .col-toggle-btn {
+  opacity: 1;
+}
+
+.col-toggle-btn:hover {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #2563eb;
+  transform: scale(1.1);
+}
+
+/* Khi cột bị thu gọn / ẩn (Phương án A) */
+.full-excel-table th.col-collapsed {
+  width: 32px !important;
+  min-width: 32px !important;
+  max-width: 32px !important;
+  padding: 8px 2px !important;
+  text-align: center !important;
+  background-color: #f1f5f9 !important;
+  cursor: pointer;
+}
+
+.full-excel-table th.col-collapsed .th-header-inner {
+  justify-content: center;
+}
+
+.full-excel-table th.col-collapsed .th-title-text {
+  display: none !important;
+}
+
+.full-excel-table th.col-collapsed .col-toggle-btn {
+  opacity: 1 !important;
+  background: #e0f2fe !important;
+  border-color: #38bdf8 !important;
+  color: #0284c7 !important;
+  font-weight: 900;
+  margin-left: 0;
+  width: 19px;
+  height: 19px;
+}
+
+.full-excel-table th.col-collapsed .col-toggle-btn:hover {
+  background: #2563eb !important;
+  border-color: #1d4ed8 !important;
+  color: #ffffff !important;
+}
+
+.full-excel-table td.col-collapsed {
+  width: 32px !important;
+  min-width: 32px !important;
+  max-width: 32px !important;
+  padding: 8px 2px !important;
+  text-align: center !important;
+  color: #94a3b8 !important;
+  background-color: #fafafa !important;
+  overflow: hidden !important;
+  text-overflow: clip !important;
+  white-space: nowrap !important;
+}
+
+.full-excel-table td.col-collapsed > * {
+  display: none !important;
+}
+
+.full-excel-table td.col-collapsed::after {
+  content: "·";
+  font-size: 14px;
+  color: #cbd5e1;
+  font-weight: 800;
+}
+
 
 /* Freeze / Pin Columns Controls & Styles */
 .freeze-control {

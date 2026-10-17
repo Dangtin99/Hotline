@@ -382,6 +382,9 @@
                 <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
               </svg>Tải Lại
             </button>
+            <button id="btnUnhideAllCols" class="btn btn-outline btn-sm" type="button" title="Hiện lại tất cả các cột đang bị ẩn" style="display: none;">
+              Hiện Tất Cả Cột
+            </button>
             <button id="btnResetFilter" class="btn btn-outline btn-sm" type="button" title="Đặt lại bộ lọc về mặc định">Đặt Lại</button>
             <button id="btnExportExcel" class="btn btn-sm btn-export-excel" type="button" title="Xuất toàn bộ dữ liệu đang lọc ra tệp Excel (.xlsx)">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -404,34 +407,162 @@
         <table class="data-table full-excel-table">
           <thead>
             <tr>
-              <th style="width: 44px; min-width: 44px; text-align: center;">STT</th>
-              <th style="width: 64px; min-width: 64px;">Depot</th>
-              <th style="width: 72px; min-width: 72px;">Hãng Tàu</th>
-              <th style="width: 104px; min-width: 104px;">Số Booking</th>
-              <th style="width: 112px; min-width: 112px;">Số EIR</th>
-              <th style="width: 120px; min-width: 120px;">Số Container</th>
-              <th style="width: 140px; min-width: 140px; text-align: center;" title="Quy tắc: Tự động hủy sau 3h từ khi duyệt. >1h: Cảnh báo vàng, >2h: Cảnh báo đỏ">
-                Hạn Hủy Đơn (3h)
+              <th data-col-idx="0" data-col-name="STT" style="width: 52px; min-width: 52px; text-align: center;">
+                <div class="th-header-inner">
+                  <span class="th-title-text">STT</span>
+                  <button type="button" class="col-toggle-btn" title="Thu gọn cột STT">–</button>
+                </div>
               </th>
-              <th style="width: 104px; min-width: 104px;">Trạng Thái Đơn</th>
-              <th style="width: 120px; min-width: 120px;">Ngày Hủy Đơn</th>
-              <th style="width: 120px; min-width: 120px;">Ngày Được Duyệt</th>
-              <th style="width: 112px; min-width: 112px;">Kích Hoạt Vào Bãi</th>
-              <th style="width: 120px; min-width: 120px;">Thời Gian Kích Hoạt</th>
-              <th style="min-width: 200px;">Lý Do Hủy</th>
-              <th style="width: 120px; min-width: 120px;">Loại Container</th>
-              <th style="width: 72px; min-width: 72px; text-align: center;">Chiều</th>
-              <th style="width: 60px; min-width: 60px; text-align: center;">TEUS</th>
-              <th style="width: 120px; min-width: 120px;">Tên Tài Xế</th>
-              <th style="width: 96px; min-width: 96px;">SĐT Tài Xế</th>
-              <th style="width: 144px; min-width: 144px;">Tên Nhà Xe</th>
-              <th style="width: 96px; min-width: 96px;">SĐT Nhà Xe</th>
-              <th style="min-width: 200px;">Lý Do Từ Chối Duyệt</th>
-              <th id="thColPending" class="col-pending-action" style="width: 88px; min-width: 88px; background: #fff7ed; color: #c2410c; text-align: center; display: none;">Chuyển Chờ</th>
-              <th style="width: 160px; min-width: 160px; background: #e0f2fe; color: var(--blue-primary); text-align: center;">Trạng Thái</th>
-              <th style="width: 184px; min-width: 184px; background: #e0f2fe; color: var(--blue-primary);">Giải Trình</th>
-              <th style="width: 224px; min-width: 224px; background: #e0f2fe; color: var(--blue-primary);">Giải Trình Chi Tiết</th>
-              <th id="thColPendingRemove" class="col-pending-remove-action" style="width: 64px; min-width: 64px; background: #fee2e2; color: #b91c1c; text-align: center; display: none;">Thao Tác</th>
+              <th data-col-idx="1" data-col-name="Depot" style="width: 76px; min-width: 76px;">
+                <div class="th-header-inner">
+                  <span class="th-title-text">Depot</span>
+                  <button type="button" class="col-toggle-btn" title="Thu gọn cột Depot">–</button>
+                </div>
+              </th>
+              <th data-col-idx="2" data-col-name="Hãng Tàu" style="width: 84px; min-width: 84px;">
+                <div class="th-header-inner">
+                  <span class="th-title-text">Hãng Tàu</span>
+                  <button type="button" class="col-toggle-btn" title="Thu gọn cột Hãng Tàu">–</button>
+                </div>
+              </th>
+              <th data-col-idx="3" data-col-name="Số Booking" style="width: 116px; min-width: 116px;">
+                <div class="th-header-inner">
+                  <span class="th-title-text">Số Booking</span>
+                  <button type="button" class="col-toggle-btn" title="Thu gọn cột Số Booking">–</button>
+                </div>
+              </th>
+              <th data-col-idx="4" data-col-name="Số EIR" style="width: 124px; min-width: 124px;">
+                <div class="th-header-inner">
+                  <span class="th-title-text">Số EIR</span>
+                  <button type="button" class="col-toggle-btn" title="Thu gọn cột Số EIR">–</button>
+                </div>
+              </th>
+              <th data-col-idx="5" data-col-name="Số Container" style="width: 132px; min-width: 132px;">
+                <div class="th-header-inner">
+                  <span class="th-title-text">Số Container</span>
+                  <button type="button" class="col-toggle-btn" title="Thu gọn cột Số Container">–</button>
+                </div>
+              </th>
+              <th data-col-idx="6" data-col-name="Hạn Hủy Đơn (3h)" style="width: 152px; min-width: 152px; text-align: center;" title="Quy tắc: Tự động hủy sau 3h từ khi duyệt. >1h: Cảnh báo vàng, >2h: Cảnh báo đỏ">
+                <div class="th-header-inner">
+                  <span class="th-title-text">Hạn Hủy Đơn (3h)</span>
+                  <button type="button" class="col-toggle-btn" title="Thu gọn cột Hạn Hủy Đơn">–</button>
+                </div>
+              </th>
+              <th data-col-idx="7" data-col-name="Trạng Thái Đơn" style="width: 116px; min-width: 116px;">
+                <div class="th-header-inner">
+                  <span class="th-title-text">Trạng Thái Đơn</span>
+                  <button type="button" class="col-toggle-btn" title="Thu gọn cột Trạng Thái Đơn">–</button>
+                </div>
+              </th>
+              <th data-col-idx="8" data-col-name="Ngày Hủy Đơn" style="width: 132px; min-width: 132px;">
+                <div class="th-header-inner">
+                  <span class="th-title-text">Ngày Hủy Đơn</span>
+                  <button type="button" class="col-toggle-btn" title="Thu gọn cột Ngày Hủy Đơn">–</button>
+                </div>
+              </th>
+              <th data-col-idx="9" data-col-name="Ngày Được Duyệt" style="width: 132px; min-width: 132px;">
+                <div class="th-header-inner">
+                  <span class="th-title-text">Ngày Được Duyệt</span>
+                  <button type="button" class="col-toggle-btn" title="Thu gọn cột Ngày Được Duyệt">–</button>
+                </div>
+              </th>
+              <th data-col-idx="10" data-col-name="Kích Hoạt Vào Bãi" style="width: 124px; min-width: 124px;">
+                <div class="th-header-inner">
+                  <span class="th-title-text">Kích Hoạt Vào Bãi</span>
+                  <button type="button" class="col-toggle-btn" title="Thu gọn cột Kích Hoạt Vào Bãi">–</button>
+                </div>
+              </th>
+              <th data-col-idx="11" data-col-name="Thời Gian Kích Hoạt" style="width: 132px; min-width: 132px;">
+                <div class="th-header-inner">
+                  <span class="th-title-text">Thời Gian Kích Hoạt</span>
+                  <button type="button" class="col-toggle-btn" title="Thu gọn cột Thời Gian Kích Hoạt">–</button>
+                </div>
+              </th>
+              <th data-col-idx="12" data-col-name="Lý Do Hủy" style="min-width: 200px;">
+                <div class="th-header-inner">
+                  <span class="th-title-text">Lý Do Hủy</span>
+                  <button type="button" class="col-toggle-btn" title="Thu gọn cột Lý Do Hủy">–</button>
+                </div>
+              </th>
+              <th data-col-idx="13" data-col-name="Loại Container" style="width: 132px; min-width: 132px;">
+                <div class="th-header-inner">
+                  <span class="th-title-text">Loại Container</span>
+                  <button type="button" class="col-toggle-btn" title="Thu gọn cột Loại Container">–</button>
+                </div>
+              </th>
+              <th data-col-idx="14" data-col-name="Chiều" style="width: 80px; min-width: 80px; text-align: center;">
+                <div class="th-header-inner">
+                  <span class="th-title-text">Chiều</span>
+                  <button type="button" class="col-toggle-btn" title="Thu gọn cột Chiều">–</button>
+                </div>
+              </th>
+              <th data-col-idx="15" data-col-name="TEUS" style="width: 72px; min-width: 72px; text-align: center;">
+                <div class="th-header-inner">
+                  <span class="th-title-text">TEUS</span>
+                  <button type="button" class="col-toggle-btn" title="Thu gọn cột TEUS">–</button>
+                </div>
+              </th>
+              <th data-col-idx="16" data-col-name="Tên Tài Xế" style="width: 132px; min-width: 132px;">
+                <div class="th-header-inner">
+                  <span class="th-title-text">Tên Tài Xế</span>
+                  <button type="button" class="col-toggle-btn" title="Thu gọn cột Tên Tài Xế">–</button>
+                </div>
+              </th>
+              <th data-col-idx="17" data-col-name="SĐT Tài Xế" style="width: 108px; min-width: 108px;">
+                <div class="th-header-inner">
+                  <span class="th-title-text">SĐT Tài Xế</span>
+                  <button type="button" class="col-toggle-btn" title="Thu gọn cột SĐT Tài Xế">–</button>
+                </div>
+              </th>
+              <th data-col-idx="18" data-col-name="Tên Nhà Xe" style="width: 156px; min-width: 156px;">
+                <div class="th-header-inner">
+                  <span class="th-title-text">Tên Nhà Xe</span>
+                  <button type="button" class="col-toggle-btn" title="Thu gọn cột Tên Nhà Xe">–</button>
+                </div>
+              </th>
+              <th data-col-idx="19" data-col-name="SĐT Nhà Xe" style="width: 108px; min-width: 108px;">
+                <div class="th-header-inner">
+                  <span class="th-title-text">SĐT Nhà Xe</span>
+                  <button type="button" class="col-toggle-btn" title="Thu gọn cột SĐT Nhà Xe">–</button>
+                </div>
+              </th>
+              <th data-col-idx="20" data-col-name="Lý Do Từ Chối Duyệt" style="min-width: 200px;">
+                <div class="th-header-inner">
+                  <span class="th-title-text">Lý Do Từ Chối Duyệt</span>
+                  <button type="button" class="col-toggle-btn" title="Thu gọn cột Lý Do Từ Chối Duyệt">–</button>
+                </div>
+              </th>
+              <th id="thColPending" class="col-pending-action" data-col-idx="21" data-col-name="Chuyển Chờ" style="width: 96px; min-width: 96px; background: #fff7ed; color: #c2410c; text-align: center; display: none;">
+                <div class="th-header-inner">
+                  <span class="th-title-text">Chuyển Chờ</span>
+                  <button type="button" class="col-toggle-btn" title="Thu gọn cột Chuyển Chờ">–</button>
+                </div>
+              </th>
+              <th data-col-idx="22" data-col-name="Trạng Thái CSKH" style="width: 168px; min-width: 168px; background: #e0f2fe; color: var(--blue-primary); text-align: center;">
+                <div class="th-header-inner">
+                  <span class="th-title-text">Trạng Thái</span>
+                  <button type="button" class="col-toggle-btn" title="Thu gọn cột Trạng Thái CSKH">–</button>
+                </div>
+              </th>
+              <th data-col-idx="23" data-col-name="Giải Trình" style="width: 196px; min-width: 196px; background: #e0f2fe; color: var(--blue-primary);">
+                <div class="th-header-inner">
+                  <span class="th-title-text">Giải Trình</span>
+                  <button type="button" class="col-toggle-btn" title="Thu gọn cột Giải Trình">–</button>
+                </div>
+              </th>
+              <th data-col-idx="24" data-col-name="Giải Trình Chi Tiết" style="width: 236px; min-width: 236px; background: #e0f2fe; color: var(--blue-primary);">
+                <div class="th-header-inner">
+                  <span class="th-title-text">Giải Trình Chi Tiết</span>
+                  <button type="button" class="col-toggle-btn" title="Thu gọn cột Giải Trình Chi Tiết">–</button>
+                </div>
+              </th>
+              <th id="thColPendingRemove" class="col-pending-remove-action" data-col-idx="25" data-col-name="Thao Tác" style="width: 72px; min-width: 72px; background: #fee2e2; color: #b91c1c; text-align: center; display: none;">
+                <div class="th-header-inner">
+                  <span class="th-title-text">Thao Tác</span>
+                  <button type="button" class="col-toggle-btn" title="Thu gọn cột Thao Tác">–</button>
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody id="tbodyFullData">

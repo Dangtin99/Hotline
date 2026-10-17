@@ -2281,6 +2281,7 @@ async function loadDataset() {
 
     populateFilterDropdowns(allRecords);
     updateTabCounts();
+    loadHiddenColumns();
     const initUrlParams = new URLSearchParams(window.location.search);
     let initialTab = "all";
     if (initUrlParams.get("tab") === "unpaid") initialTab = "unpaid";
@@ -2894,8 +2895,10 @@ function renderTable(records) {
     `;
   }).join("");
 
-  // Kích hoạt cố định các cột theo số lượng đã chọn
+  // Kích hoạt thu gọn cột và cố định các cột theo số lượng đã chọn
   requestAnimationFrame(() => {
+    initColumnToggleEvents();
+    applyHiddenColumns();
     applyFrozenColumns();
   });
 }
@@ -2992,6 +2995,154 @@ function initPaginationEvents() {
       const container = document.querySelector(".full-table-container");
       if (container) container.scrollTop = 0;
     };
+  }
+}
+
+// =========================================================================
+// QUẢN LÝ THU GỌN / MỞ RỘNG CỘT TRÊN HEADER BẢNG DỮ LIỆU (-) / (+)
+// =========================================================================
+
+let hiddenColumnIndexes = new Set();
+
+function loadHiddenColumns() {
+  try {
+    const raw = localStorage.getItem("gpg_hidden_table_cols");
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) {
+        hiddenColumnIndexes = new Set(arr.map(Number));
+      }
+    }
+  } catch (e) {
+    hiddenColumnIndexes = new Set();
+  }
+}
+
+function saveHiddenColumns() {
+  try {
+    localStorage.setItem("gpg_hidden_table_cols", JSON.stringify(Array.from(hiddenColumnIndexes)));
+  } catch (e) {}
+}
+
+/**
+ * Ẩn hoặc hiện lại một cột theo chỉ số index (0-based)
+ */
+function toggleColumn(colIndex) {
+  colIndex = parseInt(colIndex, 10);
+  if (isNaN(colIndex)) return;
+
+  if (hiddenColumnIndexes.has(colIndex)) {
+    hiddenColumnIndexes.delete(colIndex);
+  } else {
+    hiddenColumnIndexes.add(colIndex);
+  }
+
+  saveHiddenColumns();
+  applyHiddenColumns();
+  applyFrozenColumns();
+}
+
+/**
+ * Áp dụng trạng thái thu gọn / mở lại cho tất cả các thẻ <th> và <td> tương ứng
+ */
+function applyHiddenColumns() {
+  const table = document.querySelector(".full-excel-table");
+  if (!table) return;
+
+  const thList = table.querySelectorAll("thead th");
+  thList.forEach((th, idx) => {
+    const btn = th.querySelector(".col-toggle-btn");
+    const colName = th.getAttribute("data-col-name") || "Cột";
+    if (hiddenColumnIndexes.has(idx)) {
+      th.classList.add("col-collapsed");
+      if (btn) {
+        btn.textContent = "+";
+        btn.title = `Mở lại cột ${colName}`;
+        btn.setAttribute("aria-label", `Mở lại cột ${colName}`);
+      }
+    } else {
+      th.classList.remove("col-collapsed");
+      if (btn) {
+        btn.textContent = "–";
+        btn.title = `Thu gọn cột ${colName}`;
+        btn.setAttribute("aria-label", `Thu gọn cột ${colName}`);
+      }
+    }
+  });
+
+  const trList = table.querySelectorAll("tbody tr");
+  trList.forEach(tr => {
+    if (tr.firstElementChild && tr.firstElementChild.hasAttribute("colspan")) return;
+    Array.from(tr.children).forEach((td, idx) => {
+      if (hiddenColumnIndexes.has(idx)) {
+        td.classList.add("col-collapsed");
+      } else {
+        td.classList.remove("col-collapsed");
+      }
+    });
+  });
+
+  const btnUnhideAll = document.getElementById("btnUnhideAllCols");
+  if (btnUnhideAll) {
+    if (hiddenColumnIndexes.size > 0) {
+      btnUnhideAll.style.display = "inline-flex";
+      btnUnhideAll.textContent = `Hiện lại ${hiddenColumnIndexes.size} cột đã ẩn`;
+    } else {
+      btnUnhideAll.style.display = "none";
+    }
+  }
+}
+
+/**
+ * Mở lại tất cả các cột đang bị ẩn
+ */
+function unhideAllColumns() {
+  hiddenColumnIndexes.clear();
+  saveHiddenColumns();
+  applyHiddenColumns();
+  applyFrozenColumns();
+}
+
+/**
+ * Đăng ký sự kiện click cho các nút dấu - / + trên thead th
+ */
+function initColumnToggleEvents() {
+  const table = document.querySelector(".full-excel-table");
+  if (!table) return;
+
+  const thead = table.querySelector("thead");
+  if (!thead || thead._toggleEventsAttached) return;
+  thead._toggleEventsAttached = true;
+
+  thead.addEventListener("click", (e) => {
+    const btn = e.target.closest(".col-toggle-btn");
+    const thCollapsed = e.target.closest("th.col-collapsed");
+
+    if (btn) {
+      e.stopPropagation();
+      const th = btn.closest("th");
+      if (!th) return;
+      const thList = Array.from(th.parentElement.children);
+      const colIndex = thList.indexOf(th);
+      if (colIndex >= 0) {
+        toggleColumn(colIndex);
+      }
+    } else if (thCollapsed) {
+      // Khi cột đang thu gọn, click trực tiếp vào ô th nhỏ cũng giúp mở lại
+      const thList = Array.from(thCollapsed.parentElement.children);
+      const colIndex = thList.indexOf(thCollapsed);
+      if (colIndex >= 0) {
+        toggleColumn(colIndex);
+      }
+    }
+  });
+
+  const btnUnhideAll = document.getElementById("btnUnhideAllCols");
+  if (btnUnhideAll && !btnUnhideAll._clickAttached) {
+    btnUnhideAll._clickAttached = true;
+    btnUnhideAll.addEventListener("click", () => {
+      unhideAllColumns();
+    });
   }
 }
 
