@@ -1,0 +1,34 @@
+# ==============================================================================
+# RIPGREP / LOCAL SEARCH EXCLUSION (.ignore)
+# ==============================================================================
+node_modules/
+data/
+sample-data/
+dumps/
+scratch/
+dist/
+build/
+logs/
+*.log
+*.sql
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.dump
+*.csv
+*.xlsx
+*.xlsm
+cloudflared.exe
+*.exe
+*.dll
+*.bin
+*.iso
+*.zip
+*.tar
+*.gz
+*.7z
+*.mp4
+*.pdf
+.DS_Store
+Thumbs.db

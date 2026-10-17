@@ -1,0 +1,61 @@
+# ==============================================================================
+# GOOGLE ANTIGRAVITY & GEMINI CODE ASSIST INDEX EXCLUSION (.geminiignore)
+# Purpose: Optimize Vector Indexing & RAG retrieval by eliminating non-code,
+#          binary, heavy data dumps, and build artifacts from workspace corpus.
+# ==============================================================================
+
+# 1. Database Dumps, Spreadsheets & Heavy Data Files
+data/
+sample-data/
+dumps/
+*.sql
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.dump
+*.csv
+*.tsv
+*.xlsx
+*.xlsm
+*.xls
+
+# 2. Build Artifacts & Dependencies
+node_modules/
+dist/
+build/
+out/
+package-lock.json
+
+# 3. Binaries, Executables & Heavy Media
+cloudflared.exe
+*.exe
+*.dll
+*.bin
+*.iso
+*.zip
+*.tar
+*.gz
+*.7z
+*.rar
+*.mp4
+*.pdf
+
+# 4. Logs, Telemetry & Temporary Files
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+scratch/
+tmp/
+temp/
+.tmp/
+
+# 5. OS & IDE Metadata
+.git/
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.env*

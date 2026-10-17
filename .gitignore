@@ -14,9 +14,15 @@ yarn-error.log*
 Thumbs.db
 *.log
 
-# SQLite Database local dumps
+# SQLite Database local dumps & Data files
 data/*.db
 data/*.db-journal
+data/*.json
+data/*.sql
+data/*.dump
+sample-data/
+scratch/
 
 # Cloudflared binaries
 cloudflared.exe
+

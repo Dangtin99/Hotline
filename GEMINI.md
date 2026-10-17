@@ -33,3 +33,15 @@ Tài liệu này ghi nhớ các nguyên tắc cốt lõi bắt buộc AI Assista
 2. **Tốc độ và tính ổn định:**
    - Ưu tiên các giải pháp xử lý cục bộ, nhanh chóng, không làm chậm tốc độ render bảng và biểu đồ.
    - Khi chỉnh sửa file, chỉ thay đổi đúng phạm vi cần thiết, giữ gìn cấu trúc gốc của hệ thống.
+
+---
+
+## 3. QUY CHUẨN TỐC ĐỘ PHẢN HỒI & BẢO VỆ VECTOR INDEXING
+
+1. **Bảo toàn 4 tệp cấu hình loại trừ (Four-Tier Exclusion Defense):**
+   - Luôn duy trì và bảo vệ: `.gitignore`, `.geminiignore`, `.ignore`, `.vscode/settings.json`.
+   - Ngăn chặn hoàn toàn việc quét, nạp vào bộ nhớ Vector Indexing hoặc local search các tệp dữ liệu lớn trong `data/` (> 35MB), `node_modules/`, `sample-data/`, `scratch/`.
+
+2. **Quy chuẩn đọc mã nguồn cục bộ (Targeted Reading):**
+   - Với các tệp đơn khối lớn (`app.js`, `data-table.js`, `database.js`), AI luôn sử dụng tìm kiếm chuỗi mục tiêu và chỉ đọc từ 30–60 dòng xung quanh phần cần sửa, tuyệt đối không đọc toàn bộ tệp để đảm bảo thời gian phản hồi siêu tốc (5–15 giây).
+

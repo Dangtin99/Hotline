@@ -1,0 +1,40 @@
+{
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true,
+    "**/data/**": true,
+    "**/sample-data/**": true,
+    "**/scratch/**": true,
+    "**/.cache/**": true,
+    "**/dist/**": true,
+    "**/build/**": true,
+    "**/*.exe": true,
+    "**/*.pdf": true,
+    "**/*.sql": true,
+    "**/*.zip": true,
+    "**/*.tar*": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/data": true,
+    "**/sample-data": true,
+    "**/scratch": true,
+    "**/.cache": true,
+    "**/dist": true,
+    "**/build": true,
+    "**/*.exe": true,
+    "**/*.pdf": true,
+    "**/*.sql": true,
+    "**/*.log": true,
+    "**/*.zip": true,
+    "**/*.xlsm": true,
+    "**/*.xlsx": true
+  },
+  "files.exclude": {
+    "**/.git": true,
+    "**/.DS_Store": true,
+    "**/Thumbs.db": true,
+    "**/cloudflared.exe": true
+  }
+}
