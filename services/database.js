@@ -2471,10 +2471,32 @@ async function getDashboardDataAsync(params = {}) {
   };
 }
 
+// Lấy danh sách tất cả các Depot hiện có trong hệ thống dữ liệu
+function getAllDepotsFromDatabase() {
+  const set = new Set(["AIC", "BSD", "CPD", "EAD", "EPD", "ETD", "GKP", "PMCM", "RCS", "SCD", "SLD", "TES", "THT"]);
+  if (sqliteEngine) {
+    try {
+      const rows = sqliteEngine.prepare("SELECT DISTINCT depot FROM cancellation_orders WHERE depot IS NOT NULL AND trim(depot) != ''").all();
+      if (rows && rows.length > 0) {
+        rows.forEach(r => {
+          if (r && r.depot) set.add(String(r.depot).trim().toUpperCase());
+        });
+      }
+    } catch (e) {}
+  }
+  if (Array.isArray(memoryOrders)) {
+    memoryOrders.forEach(o => {
+      if (o && o.depot) set.add(String(o.depot).trim().toUpperCase());
+    });
+  }
+  return Array.from(set).filter(Boolean).sort();
+}
+
 // Khởi chạy nạp dữ liệu kiểm tra đơn từ store
 loadVerificationFromStore();
 
 module.exports = {
+  getAllDepotsFromDatabase,
   insertRecords,
   insertRecordsAsync,
   getAllRecords,

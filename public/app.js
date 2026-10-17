@@ -13,6 +13,12 @@ let currentRecords = [];
 let currentMatrixStatus = "ALL";
 let allMatrixStatuses = [];
 
+// Danh sách toàn bộ 13 Depot chuẩn hiện đang có trong hệ thống dữ liệu
+const SYSTEM_DEPOTS_FALLBACK = ["AIC", "BSD", "CPD", "EAD", "EPD", "ETD", "GKP", "PMCM", "RCS", "SCD", "SLD", "TES", "THT"];
+if (!window.SYSTEM_DEPOTS_LIST) {
+  window.SYSTEM_DEPOTS_LIST = SYSTEM_DEPOTS_FALLBACK;
+}
+
 // Bộ lọc Dashboard Toàn Diện
 let currentDatasetId = "sql_all";
 let masterDashboardRecords = [];
@@ -269,7 +275,7 @@ async function fetchDashboardDataByRange(dateFrom, dateTo, dateType = "ngayHuy",
       currentDatasetName.innerHTML = `<strong>Dữ liệu ${dateLabel}</strong> <span style="font-size: 13px; font-weight: normal; color: var(--text-muted);">(${result.totalRecords} đơn, so sánh với ${result.totalPrevious} đơn kỳ trước)</span>`;
     }
 
-    initDashboardFilterControls(masterDashboardRecords);
+    initDashboardFilterControls(masterDashboardRecords, result.allDepots);
     renderDashboardViews(result.data, currentRecords, currentComparisonInfo);
     clearAlert();
   } catch (err) {
@@ -379,6 +385,20 @@ function isCancelledOrder(r) {
   if (!r) return false;
   if (!r.trangThaiDonHang) return false;
   return isCancelledStatus(r.trangThaiDonHang);
+}
+
+// Kiểm tra trạng thái đơn hàng có chính xác là Đã Hủy hay không
+function isExactCancelledStatus(val) {
+  if (!val) return false;
+  const raw = String(val).trim().toLowerCase();
+  if (raw === "đã hủy" || raw === "đã huỷ" || raw === "hủy" || raw === "huỷ" || raw === "da huy" || raw === "huy") return true;
+  const s = raw.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").trim();
+  return s === "da huy" || s === "huy";
+}
+
+function isExactCancelledOrder(r) {
+  if (!r || !r.trangThaiDonHang) return false;
+  return isExactCancelledStatus(r.trangThaiDonHang);
 }
 
 // Kiểm tra xem đơn hàng có bị tự động hủy do quá hạn 3h hay không (Đã vô hiệu hóa tự động hủy)
@@ -713,11 +733,25 @@ function updateDashboardStatusLabel() {
 }
 
 // Khởi tạo các bộ điều khiển lọc trên Dashboard
-function initDashboardFilterControls(records) {
-  if (!records || records.length === 0) return;
+function initDashboardFilterControls(records, serverAllDepots) {
+  // 1. Depots: Luôn hiển thị cứng toàn bộ tất cả Depot hiện đang có trong dữ liệu
+  const baseDepots = new Set(
+    (Array.isArray(serverAllDepots) && serverAllDepots.length > 0)
+      ? serverAllDepots
+      : (window.SYSTEM_DEPOTS_LIST || SYSTEM_DEPOTS_FALLBACK)
+  );
+  if (Array.isArray(records)) {
+    records.forEach(r => {
+      if (r && r.depot) baseDepots.add(String(r.depot).trim().toUpperCase());
+    });
+  }
+  if (Array.isArray(masterDashboardRecords)) {
+    masterDashboardRecords.forEach(r => {
+      if (r && r.depot) baseDepots.add(String(r.depot).trim().toUpperCase());
+    });
+  }
 
-  // 1. Depots
-  let availableDepots = [...new Set(records.map(r => r.depot).filter(Boolean))].sort();
+  let availableDepots = Array.from(baseDepots).filter(Boolean).sort();
   try {
     const userStr = localStorage.getItem("gpg_auth_user");
     if (userStr) {
@@ -736,14 +770,30 @@ function initDashboardFilterControls(records) {
   } catch (e) {}
 
   allDashboardDepots = availableDepots;
-  selectedDashboardDepots = [...allDashboardDepots];
+
+  // Giữ nguyên trạng thái chọn của người dùng nếu đã có lựa chọn trước đó
+  const prevSelected = Array.isArray(selectedDashboardDepots) ? new Set(selectedDashboardDepots) : null;
+  const hadAllSelected = !prevSelected || prevSelected.size === 0 || (prevSelected.size >= allDashboardDepots.length);
+
+  if (!hadAllSelected && prevSelected && prevSelected.size > 0) {
+    selectedDashboardDepots = allDashboardDepots.filter(d => prevSelected.has(d));
+    if (selectedDashboardDepots.length === 0) {
+      selectedDashboardDepots = [...allDashboardDepots];
+    }
+  } else {
+    selectedDashboardDepots = [...allDashboardDepots];
+  }
+
   if (depotOptionsList) {
-    depotOptionsList.innerHTML = allDashboardDepots.map(d => `
-      <label class="multiselect-item">
-        <input type="checkbox" class="depot-dashboard-cb" value="${d}" checked>
-        <span>Depot ${d}</span>
-      </label>
-    `).join("");
+    depotOptionsList.innerHTML = allDashboardDepots.map(d => {
+      const isChecked = selectedDashboardDepots.includes(d);
+      return `
+        <label class="multiselect-item">
+          <input type="checkbox" class="depot-dashboard-cb" value="${d}" ${isChecked ? "checked" : ""}>
+          <span>Depot ${d}</span>
+        </label>
+      `;
+    }).join("");
 
     const checkboxes = depotOptionsList.querySelectorAll(".depot-dashboard-cb");
     checkboxes.forEach(cb => {
@@ -755,6 +805,8 @@ function initDashboardFilterControls(records) {
     });
     updateDashboardDepotLabel();
   }
+
+  if (!records || records.length === 0) return;
 
   // 2. Shipping Lines
   const lines = [...new Set(records.map(r => r.hangTau).filter(Boolean))].sort();
@@ -1346,6 +1398,7 @@ async function reloadDashboardDataPreservingFilters() {
     const urlParams = new URLSearchParams(window.location.search);
     const uploadId = urlParams.get("id");
 
+    let fetchedAllDepots = null;
     if (uploadId && uploadId !== "all") {
       const res = await fetch(`/api/history/${encodeURIComponent(uploadId)}?refresh=1&_t=${Date.now()}`);
       const result = await res.json();
@@ -1354,6 +1407,7 @@ async function reloadDashboardDataPreservingFilters() {
       }
       currentRecords = (result.data && result.data.records) || [];
       masterDashboardRecords = [...currentRecords];
+      fetchedAllDepots = result.allDepots || (result.data && result.data.allDepots) || null;
     } else {
       const targetFrom = savedSnapshot.dateFrom || getVietnamTodayYmd();
       const targetTo = savedSnapshot.dateTo || getVietnamTodayYmd();
@@ -1377,6 +1431,7 @@ async function reloadDashboardDataPreservingFilters() {
           if (resultAll.status === "success") {
             currentRecords = resultAll.records || (resultAll.data && resultAll.data.records) || [];
             masterDashboardRecords = [...currentRecords];
+            fetchedAllDepots = resultAll.allDepots || null;
           }
         }
       } else {
@@ -1386,6 +1441,7 @@ async function reloadDashboardDataPreservingFilters() {
         }
         currentRecords = result.currentRecords || [];
         masterDashboardRecords = [...currentRecords, ...(result.previousRecords || [])];
+        fetchedAllDepots = result.allDepots || null;
         currentComparisonInfo = {
           hasComparison: true,
           ...result.filter,
@@ -1407,7 +1463,7 @@ async function reloadDashboardDataPreservingFilters() {
     });
 
     // Cập nhật lại danh mục filter options
-    initDashboardFilterControls(masterDashboardRecords);
+    initDashboardFilterControls(masterDashboardRecords, fetchedAllDepots);
 
     // 2. Khôi phục chính xác các điều kiện lọc đã chọn từ snapshot
     if (savedSnapshot.selectedDepots && savedSnapshot.selectedDepots.length > 0) {
@@ -1529,6 +1585,7 @@ function calculateAnalyticsFromRecords(records) {
   const depotMap = {};
   const lineMap = {};
   const reasonMap = {};
+  let totalCancelledStatusOrders = 0;
 
   records.forEach(r => {
     const teus = Number(r.sizeTeus) || 0;
@@ -1553,8 +1610,12 @@ function calculateAnalyticsFromRecords(records) {
     lineMap[l].count += 1;
     lineMap[l].teus += teus;
 
-    const reason = r.lyDoHuy || r.lyDoTuChoi || "Không có lý do";
-    reasonMap[reason] = (reasonMap[reason] || 0) + 1;
+    // Chỉ xét các đơn có trạng thái đơn = Đã Hủy cho cơ cấu lý do hủy
+    if (isExactCancelledOrder(r)) {
+      totalCancelledStatusOrders += 1;
+      const reason = r.lyDoHuy || r.lyDoTuChoi || "Không có lý do";
+      reasonMap[reason] = (reasonMap[reason] || 0) + 1;
+    }
   });
 
   const byDepot = Object.keys(depotMap).map(d => ({
@@ -1581,7 +1642,9 @@ function calculateAnalyticsFromRecords(records) {
   const topCancelReasons = Object.keys(reasonMap).map(rs => ({
     reason: rs,
     count: reasonMap[rs],
-    percentage: totalOrders > 0 ? ((reasonMap[rs] / totalOrders) * 100).toFixed(1) : "0.0"
+    percentage: totalCancelledStatusOrders > 0 
+      ? ((reasonMap[rs] / totalCancelledStatusOrders) * 100).toFixed(1) 
+      : (totalOrders > 0 ? ((reasonMap[rs] / totalOrders) * 100).toFixed(1) : "0.0")
   })).sort((a, b) => b.count - a.count);
 
   return {
@@ -1752,7 +1815,9 @@ function renderReasonsChart(reasons) {
               return fullLabels[idx] || labels[idx];
             },
             label: function(item) {
-              return `Số đơn hủy: ${item.raw} đơn`;
+              const r = top6[item.dataIndex];
+              const pct = r && r.percentage ? ` (${r.percentage}%)` : "";
+              return `Số đơn hủy: ${item.raw} đơn${pct}`;
             }
           }
         }
@@ -1871,7 +1936,7 @@ function getUserAuthorizedDepots(records = []) {
       if (r && r.depot) allDepotsSet.add(String(r.depot).trim().toUpperCase());
     });
   }
-  const sysList = window.SYSTEM_DEPOTS_LIST || ["BSD", "SLD", "THT", "PMCM", "ETD", "AIC", "SCD", "GKP", "EPD", "EAD", "RCS"];
+  const sysList = window.SYSTEM_DEPOTS_LIST || SYSTEM_DEPOTS_FALLBACK;
   sysList.forEach(d => allDepotsSet.add(d));
 
   let finalDepots = [];

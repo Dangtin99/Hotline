@@ -158,7 +158,13 @@ async function loadVerificationDataset() {
 }
 
 function populateFilterDropdowns() {
-  const depots = [...new Set(allRecords.map(r => r.depot).filter(Boolean))].sort();
+  const baseDepots = new Set(window.SYSTEM_DEPOTS_LIST || ["AIC", "BSD", "CPD", "EAD", "EPD", "ETD", "GKP", "PMCM", "RCS", "SCD", "SLD", "TES", "THT"]);
+  if (Array.isArray(allRecords)) {
+    allRecords.forEach(r => {
+      if (r && r.depot) baseDepots.add(String(r.depot).trim().toUpperCase());
+    });
+  }
+  const depots = Array.from(baseDepots).filter(Boolean).sort();
   const lines = [...new Set(allRecords.map(r => r.hangTau).filter(Boolean))].sort();
   const statuses = [...new Set(allRecords.map(r => r.trangThaiDonHang).filter(Boolean))].sort();
 

@@ -13,6 +13,10 @@ const depotDropdownPanel = document.getElementById("depotDropdownPanel");
 const depotSelectedLabel = document.getElementById("depotSelectedLabel");
 const depotSelectAll = document.getElementById("depotSelectAll");
 const depotOptionsList = document.getElementById("depotOptionsList");
+const SYSTEM_DEPOTS_FALLBACK = ["AIC", "BSD", "CPD", "EAD", "EPD", "ETD", "GKP", "PMCM", "RCS", "SCD", "SLD", "TES", "THT"];
+if (!window.SYSTEM_DEPOTS_LIST) {
+  window.SYSTEM_DEPOTS_LIST = SYSTEM_DEPOTS_FALLBACK;
+}
 let allDepotValues = [];
 let selectedDepots = []; // Danh sách các depot đang được chọn
 
@@ -2287,7 +2291,18 @@ const loadTableData = loadDataset;
 
 // Điền các option cho bộ lọc
 function populateFilterDropdowns(records) {
-  let depots = [...new Set(records.map(r => r.depot).filter(Boolean))].sort();
+  const baseDepots = new Set(window.SYSTEM_DEPOTS_LIST || SYSTEM_DEPOTS_FALLBACK);
+  if (Array.isArray(records)) {
+    records.forEach(r => {
+      if (r && r.depot) baseDepots.add(String(r.depot).trim().toUpperCase());
+    });
+  }
+  if (Array.isArray(allRecords)) {
+    allRecords.forEach(r => {
+      if (r && r.depot) baseDepots.add(String(r.depot).trim().toUpperCase());
+    });
+  }
+  let depots = Array.from(baseDepots).filter(Boolean).sort();
   try {
     const userStr = localStorage.getItem("gpg_auth_user");
     if (userStr) {

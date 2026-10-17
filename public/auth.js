@@ -530,7 +530,8 @@ async function handleAdminResetPassword(username, fullName) {
 // MODAL PHÂN QUYỀN DEPOT TRỰC THUỘC (DÀNH CHO ADMIN)
 // =========================================================================
 
-const SYSTEM_DEPOTS_LIST = ["BSD", "SLD", "THT", "PMCM", "ETD", "AIC", "SCD", "GKP", "EPD", "EAD", "RCS"];
+const SYSTEM_DEPOTS_LIST = ["AIC", "BSD", "CPD", "EAD", "EPD", "ETD", "GKP", "PMCM", "RCS", "SCD", "SLD", "TES", "THT"];
+window.SYSTEM_DEPOTS_LIST = SYSTEM_DEPOTS_LIST;
 
 function ensureAdminDepotModal() {
   let modal = document.getElementById("adminDepotModal");

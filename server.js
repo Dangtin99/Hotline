@@ -52,7 +52,8 @@ const {
   formatToVietnamParts,
   getDashboardDataAsync,
   getLatestDateAsync,
-  getVietnamTodayYmd
+  getVietnamTodayYmd,
+  getAllDepotsFromDatabase
 } = require("./services/database");
 const tursoClient = require("./services/tursoClient");
 const {
@@ -565,6 +566,7 @@ app.get("/api/all-data", authRequired, async (req, res) => {
 
     const analytics = aggregateCancellationData(allRecords);
     const stats = getDatabaseStats();
+    const userAuthorizedDepots = getUserAuthorizedDepotsList(req.user);
 
     return res.json({
       status: "success",
@@ -573,6 +575,7 @@ app.get("/api/all-data", authRequired, async (req, res) => {
       totalRecords: allRecords.length,
       totalTeus: analytics.kpis?.totalTeus || 0,
       stats,
+      allDepots: userAuthorizedDepots,
       records: allRecords,
       data: analytics
     });
@@ -580,6 +583,18 @@ app.get("/api/all-data", authRequired, async (req, res) => {
     return res.status(500).json({ status: "error", message: err.message });
   }
 });
+
+/**
+ * Hàm lấy danh sách Depot được phân quyền xem cho user
+ */
+function getUserAuthorizedDepotsList(user) {
+  const allSystemDepots = getAllDepotsFromDatabase();
+  if (!user || user.role === "admin") return allSystemDepots;
+  const userDepots = parseDepots(user.assignedDepots);
+  if (userDepots.includes("ALL") || userDepots.length === 0) return allSystemDepots;
+  const allowed = new Set(userDepots.map(d => String(d).trim().toUpperCase()));
+  return allSystemDepots.filter(d => allowed.has(d));
+}
 
 /**
  * API: Lấy dữ liệu phục vụ Báo Cáo Tổng Quan (Dashboard) có phân trang & lọc phạm vi ngày tối ưu
@@ -616,6 +631,7 @@ app.get("/api/dashboard-data", authRequired, async (req, res) => {
 
     // Tính toán phân tích chỉ số cho kỳ hiện tại
     const analytics = aggregateCancellationData(currentRecords);
+    const userAuthorizedDepots = getUserAuthorizedDepotsList(req.user);
 
     return res.json({
       status: "success",
@@ -624,6 +640,7 @@ app.get("/api/dashboard-data", authRequired, async (req, res) => {
       today: result.today,
       totalRecords: currentRecords.length,
       totalPrevious: previousRecords.length,
+      allDepots: userAuthorizedDepots,
       currentRecords,
       previousRecords,
       data: analytics

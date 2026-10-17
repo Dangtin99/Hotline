@@ -347,17 +347,22 @@ function aggregateCancellationData(records) {
     }))
     .sort((a, b) => b.count - a.count);
 
-  // 3. Top lý do hủy phổ biến
+  // 3. Top lý do hủy phổ biến (Chỉ xét các đơn có trạng thái đơn = Đã Hủy)
   const cancelReasonMap = {};
+  let totalCancelledStatusOrders = 0;
   records.forEach(r => {
-    const reason = r.lyDoHuy;
-    cancelReasonMap[reason] = (cancelReasonMap[reason] || 0) + 1;
+    const st = String(r.trangThaiDonHang || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d");
+    if (st === "da huy" || st === "huy") {
+      totalCancelledStatusOrders += 1;
+      const reason = r.lyDoHuy || "Không có lý do";
+      cancelReasonMap[reason] = (cancelReasonMap[reason] || 0) + 1;
+    }
   });
   const topCancelReasons = Object.entries(cancelReasonMap)
     .map(([reason, count]) => ({
       reason,
       count,
-      percentage: Number(((count / (totalOrders || 1)) * 100).toFixed(1))
+      percentage: Number(((count / (totalCancelledStatusOrders || totalOrders || 1)) * 100).toFixed(1))
     }))
     .sort((a, b) => b.count - a.count);
 
