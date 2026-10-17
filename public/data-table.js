@@ -2857,7 +2857,7 @@ function renderTable(records) {
         <td style="font-size: 12.5px; font-family: monospace;">${r.sdtTaiXe || "-"}</td>
         <td>${r.tenNhaXe || "-"}</td>
         <td style="font-size: 12.5px; font-family: monospace;">${r.sdtNhaXe || "-"}</td>
-        <td style="max-width: 224px; white-space: normal; color: #b45309; font-size: 13px; line-height: 1.4;">${r.lyDoTuChoi || "-"}</td>
+        <td style="max-width: 224px; white-space: normal; color: #000000; font-size: 13px; line-height: 1.4;">${r.lyDoTuChoi || "-"}</td>
         ${currentTab === "cancelled" ? `
           <td class="col-pending-action text-center" style="padding: 6px 8px; vertical-align: middle;">
             ${isRowInPending ? `
