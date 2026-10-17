@@ -187,7 +187,12 @@
             <h2>Lịch Sử Đăng Tải Dữ Liệu</h2>
             <p>Danh sách các tệp báo cáo đơn hủy đã lưu trữ trong hệ thống</p>
           </div>
-          <div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+            <div class="btn-group" style="display: inline-flex; border-radius: 4px; overflow: hidden; border: 1px solid var(--border-color, #e2e8f0);">
+              <button type="button" id="btnFilterHistory4Days" class="btn btn-sm btn-secondary active" style="border-radius: 0;">4 Ngày Gần Nhất</button>
+              <button type="button" id="btnFilterHistoryAll" class="btn btn-sm btn-outline" style="border-radius: 0; border: none; border-left: 1px solid var(--border-color, #e2e8f0);">Tất Cả</button>
+            </div>
+            <button type="button" id="btnPruneOldHistory" class="btn btn-outline btn-sm text-warning" title="Dọn dẹp lịch sử hiển thị > 4 ngày, dữ liệu đơn hàng trong CSDL SQL vẫn giữ nguyên 100%">Dọn Lịch Sử > 4 Ngày</button>
             <button type="button" id="btnClearAllHistory" class="btn btn-outline btn-sm text-danger" style="display: none;">Xóa Toàn Bộ Lịch Sử</button>
           </div>
         </div>
@@ -208,6 +213,12 @@
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- Phân trang lịch sử đơn duyệt -->
+        <div id="historyPaginationBar" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 14px; padding-top: 10px; border-top: 1px solid #edf2f7;">
+          <div id="historyPaginationInfo" style="font-size: 0.88rem; color: #64748b;">Đang tải thông tin phân trang...</div>
+          <div id="historyPaginationControls" style="display: flex; gap: 6px; align-items: center;"></div>
         </div>
       </section>
       </div> <!-- /tabContentApproved -->
@@ -273,8 +284,54 @@
               </tbody>
             </table>
           </div>
+
+          <!-- Phân trang lịch sử kiểm tra đơn -->
+          <div id="verificationPaginationBar" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 14px; padding-top: 10px; border-top: 1px solid #edf2f7;">
+            <div id="verificationPaginationInfo" style="font-size: 0.88rem; color: #64748b;">Đang tải thông tin phân trang...</div>
+            <div id="verificationPaginationControls" style="display: flex; gap: 6px; align-items: center;"></div>
+          </div>
         </section>
       </div> <!-- /tabContentVerification -->
+
+      <!-- Khối Sao Lưu Cơ Sở Dữ Liệu Cục Bộ (Database Backup Ra Máy Tính Người Dùng) -->
+      <section class="history-panel mt-4" style="border: 1px solid #cbd5e1; background: #ffffff; border-radius: 8px; padding: 18px;">
+        <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+          <div>
+            <h2 style="display: flex; align-items: center; gap: 8px; margin: 0; font-size: 1.15rem;">
+              <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #16a34a;"></span>
+              Sao Lưu Cơ Sở Dữ Liệu Cục Bộ (Database Backup)
+            </h2>
+            <p style="color: #64748b; margin-top: 4px; font-size: 0.88rem;">
+              Bản sao lưu CSDL được lưu an toàn trực tiếp vào máy tính của bạn tại: 
+              <strong style="color: #0f172a;" id="txtBackupFolderPath">C:\Users\TinDD\Documents\GPG_Database_Backups</strong>
+              (Tách biệt khỏi hệ thống web, không làm nặng dung lượng máy chủ).
+            </p>
+          </div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button type="button" id="btnCreateBackupNow" class="btn btn-primary btn-sm">Sao Lưu Vào Máy Tính Ngay</button>
+            <button type="button" id="btnDownloadDbFile" class="btn btn-secondary btn-sm">Tải File CSDL (.db) Về Máy</button>
+            <button type="button" id="btnRefreshBackupList" class="btn btn-outline btn-sm">Làm Mới</button>
+          </div>
+        </div>
+
+        <div class="table-responsive mt-3">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width: 45%;">Tên Bản Sao Lưu (.db)</th>
+                <th style="width: 20%; text-align: center;">Dung Lượng</th>
+                <th style="width: 25%; text-align: center;">Thời Gian Tạo</th>
+                <th style="width: 10%; text-align: center;">Trạng Thái</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyBackupList">
+              <tr>
+                <td colspan="4" class="text-center py-3 text-muted">Đang kiểm tra danh sách bản sao lưu trên máy tính...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </main>
 
     <!-- Footer -->

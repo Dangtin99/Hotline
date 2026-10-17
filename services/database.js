@@ -335,11 +335,12 @@ function loadAllFromStore() {
   return memoryOrders;
 }
 
-// Lưu dữ liệu vào file JSON và xuất dump file .sql (Tối ưu I/O: chỉ sinh dump khi upload file mới hoặc người dùng yêu cầu)
+// Lưu dữ liệu vào file JSON và xuất dump file .sql (Tối ưu I/O: lưu compact, chỉ sinh dump khi upload file mới hoặc người dùng yêu cầu)
 function persistStore(options = {}) {
   try {
     if (fs.existsSync(DATA_DIR)) {
-      fs.writeFileSync(DB_JSON_PATH, JSON.stringify(memoryOrders, null, 2), "utf8");
+      // Lưu dạng compact không dùng null, 2 để giảm 50% dung lượng và tăng tốc độ I/O
+      fs.writeFileSync(DB_JSON_PATH, JSON.stringify(memoryOrders), "utf8");
       if (options.generateDump === true) {
         generateSqlDumpFile();
       }
@@ -929,6 +930,61 @@ function deleteRecordsByUploadId(uploadId) {
     try {
       const stmt = sqliteEngine.prepare("DELETE FROM cancellation_orders WHERE upload_id = ?");
       stmt.run(uploadId);
+    } catch (e) {}
+  }
+}
+
+/**
+ * Lấy danh sách bản ghi theo upload_id trực tiếp từ SQLite Database (hoặc memoryOrders)
+ */
+function getRecordsByUploadId(uploadId) {
+  if (sqliteEngine) {
+    try {
+      const rows = sqliteEngine.prepare(
+        "SELECT * FROM cancellation_orders WHERE upload_id = ? ORDER BY id ASC"
+      ).all(uploadId);
+      if (rows && rows.length > 0) {
+        return rows.map(r => ({
+          rowKey: r.row_key,
+          uploadId: r.upload_id,
+          fileName: r.file_name,
+          stt: r.stt,
+          depot: r.depot,
+          hangTau: r.hang_tau,
+          ngayHuyDon: r.ngay_huy_don,
+          ngayDuocDuyet: r.ngay_duoc_duyet,
+          soBooking: r.so_booking,
+          soContainer: r.so_container,
+          trangThaiDonHang: r.trang_thai_don_hang,
+          trangThaiKichHoat: r.trang_thai_kich_hoat,
+          thoiGianKichHoat: r.thoi_gian_kich_hoat,
+          lyDoHuy: r.ly_do_huy,
+          loaiContainer: r.loai_container,
+          loaiDonHang: r.loai_don_hang,
+          sizeTeus: r.size_teus,
+          tenTaiXe: r.ten_tai_xe,
+          sdtTaiXe: r.sdt_tai_xe,
+          tenNhaXe: r.ten_nha_xe,
+          sdtNhaXe: r.sdt_nha_xe,
+          lyDoTuChoi: r.ly_do_tu_choi,
+          trangThaiXuLy: r.trang_thai_xu_ly,
+          giaiTrinh: r.giai_trinh,
+          giaiTrinhChiTiet: r.giai_trinh_chi_tiet || null,
+          createdAt: r.created_at
+        }));
+      }
+    } catch (e) {}
+  }
+  return memoryOrders.filter(o => o.uploadId === uploadId);
+}
+
+/**
+ * Thu hồi phân mảnh đĩa và nén SQLite
+ */
+function vacuumDatabase() {
+  if (sqliteEngine) {
+    try {
+      sqliteEngine.exec("VACUUM;");
     } catch (e) {}
   }
 }
@@ -2511,6 +2567,8 @@ module.exports = {
   clearDatabaseAsync,
   deleteRecordsByUploadId,
   deleteRecordsByUploadIdAsync,
+  getRecordsByUploadId,
+  vacuumDatabase,
   syncAllToSupabase,
   SQL_DUMP_PATH,
   insertVerificationRecords,

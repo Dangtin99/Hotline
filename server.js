@@ -53,8 +53,11 @@ const {
   getDashboardDataAsync,
   getLatestDateAsync,
   getVietnamTodayYmd,
-  getAllDepotsFromDatabase
+  getAllDepotsFromDatabase,
+  getRecordsByUploadId,
+  vacuumDatabase
 } = require("./services/database");
+const backupService = require("./services/backupService");
 const tursoClient = require("./services/tursoClient");
 const {
   authenticate,
@@ -521,18 +524,16 @@ app.post("/api/upload", authRequired, upload.single("file"), async (req, res) =>
       uploadedAt: nowStr
     });
 
-    // 4. Ghi vào lịch sử từng đợt tải (lưu trữ đồng bộ lên Turso Cloud)
+    // 4. Ghi vào lịch sử từng đợt tải (lưu trữ metadata tinh gọn, không nhồi nhét sampleRows hay analytics)
     const historyItem = {
       id: newId,
       fileName,
       fileSize: fileSizeStr,
       uploadedAt: nowStr,
       recordCount: records.length,
-      teusCount: analytics.kpis.totalTeus,
+      teusCount: (analytics.kpis && analytics.kpis.totalTeus) || 0,
       matchPercent: validation.matchPercent,
-      isValid: validation.isValid,
-      validation: validation,
-      data: analytics
+      isValid: validation.isValid
     };
 
     await saveHistoryAsync(historyItem);
@@ -1000,8 +1001,26 @@ app.post("/api/turso/sync", authRequired, async (req, res) => {
 app.get("/api/history", authRequired, async (req, res) => {
   try {
     const history = await loadHistoryAsync();
+    let filtered = history;
+
+    // Lọc theo 4 ngày gần nhất nếu có query param filter=4days
+    if (req.query.filter === "4days") {
+      const now = Date.now();
+      const FOUR_DAYS_MS = 4 * 24 * 60 * 60 * 1000;
+      filtered = history.filter(item => {
+        let itemTime = 0;
+        if (item.id && /^UP-(\d{12,14})$/.test(item.id)) {
+          itemTime = Number(item.id.replace("UP-", ""));
+        } else if (item.uploadedAt) {
+          const d = new Date(item.uploadedAt);
+          if (!isNaN(d.getTime())) itemTime = d.getTime();
+        }
+        return !itemTime || (now - itemTime) <= FOUR_DAYS_MS;
+      });
+    }
+
     // Ẩn chi tiết data lớn khi chỉ lấy danh sách lịch sử
-    const summary = history.map(item => ({
+    const summary = filtered.map(item => ({
       id: item.id,
       fileName: item.fileName,
       fileSize: item.fileSize,
@@ -1011,14 +1030,53 @@ app.get("/api/history", authRequired, async (req, res) => {
       matchPercent: item.matchPercent,
       isValid: item.isValid
     }));
-    return res.json({ status: "success", data: summary });
+    return res.json({
+      status: "success",
+      data: summary,
+      totalCount: history.length,
+      filteredCount: summary.length
+    });
   } catch (err) {
     return res.status(500).json({ status: "error", message: err.message });
   }
 });
 
 /**
- * API: Lấy chi tiết phân tích của 1 lần đăng tải trong lịch sử
+ * API: Dọn dẹp các đợt tải cũ hơn 4 ngày khỏi lịch sử (CHỈ XÓA LỊCH SỬ HIỂN THỊ, GIỮ NGUYÊN 100% CSDL SQL)
+ */
+app.post("/api/history/prune-4days", authRequired, async (req, res) => {
+  try {
+    const history = await loadHistoryAsync();
+    const now = Date.now();
+    const FOUR_DAYS_MS = 4 * 24 * 60 * 60 * 1000;
+
+    const remaining = history.filter(item => {
+      let itemTime = 0;
+      if (item.id && /^UP-(\d{12,14})$/.test(item.id)) {
+        itemTime = Number(item.id.replace("UP-", ""));
+      } else if (item.uploadedAt) {
+        const d = new Date(item.uploadedAt);
+        if (!isNaN(d.getTime())) itemTime = d.getTime();
+      }
+      return !itemTime || (now - itemTime) <= FOUR_DAYS_MS;
+    });
+
+    const prunedCount = history.length - remaining.length;
+    saveHistory(remaining);
+
+    return res.json({
+      status: "success",
+      message: `Đã dọn dẹp ${prunedCount} đợt tải cũ hơn 4 ngày khỏi lịch sử. Toàn bộ dữ liệu đơn hàng trong CSDL SQL vẫn được bảo toàn nguyên vẹn 100%!`,
+      prunedCount,
+      remainingCount: remaining.length
+    });
+  } catch (err) {
+    return res.status(500).json({ status: "error", message: err.message });
+  }
+});
+
+/**
+ * API: Lấy chi tiết phân tích của 1 lần đăng tải trong lịch sử (Tự động fallback đọc từ CSDL SQL theo upload_id)
  */
 app.get("/api/history/:id", authRequired, async (req, res) => {
   try {
@@ -1028,17 +1086,19 @@ app.get("/api/history/:id", authRequired, async (req, res) => {
       return res.status(404).json({ status: "error", message: "Không tìm thấy dữ liệu đã tải!" });
     }
 
-    let responseData = item.data;
+    let records = [];
     if (item.data && Array.isArray(item.data.records)) {
-      let records = [...item.data.records];
-      applyExpired3hCancellation(records);
-      if (req.user && req.user.role !== "admin") {
-        records = filterRecordsByDepotPermission(records, req.user);
-        responseData = aggregateCancellationData(records);
-      } else {
-        responseData = { ...item.data, records };
-      }
+      records = [...item.data.records];
+    } else {
+      // Đọc trực tiếp các đơn hàng theo upload_id từ SQLite Database
+      records = getRecordsByUploadId(item.id);
     }
+
+    applyExpired3hCancellation(records);
+    if (req.user && req.user.role !== "admin") {
+      records = filterRecordsByDepotPermission(records, req.user);
+    }
+    const responseData = aggregateCancellationData(records);
 
     if (req.query.format === "markdown") {
       const markdown = generateMarkdownReport(responseData);
@@ -1050,9 +1110,64 @@ app.get("/api/history/:id", authRequired, async (req, res) => {
       status: "success",
       fileName: item.fileName,
       uploadedAt: formatVietnamDateTime(item.uploadedAt, item.id),
-      validation: item.validation,
+      validation: item.validation || { isValid: item.isValid, matchPercent: item.matchPercent },
       data: responseData
     });
+  } catch (err) {
+    return res.status(500).json({ status: "error", message: err.message });
+  }
+});
+
+/**
+ * =========================================================================
+ * DATABASE BACKUP APIs (SAO LƯU CƠ SỞ DỮ LIỆU CỤC BỘ RA MÁY TÍNH NGƯỜI DÙNG)
+ * =========================================================================
+ */
+
+/**
+ * API: Tạo bản sao lưu CSDL an toàn vào thư mục Documents/GPG_Database_Backups
+ */
+app.post("/api/backup/create", authRequired, async (req, res) => {
+  try {
+    const result = backupService.createBackup();
+    vacuumDatabase();
+    return res.json({
+      status: "success",
+      message: `Đã tạo bản sao lưu an toàn tại: ${result.filePath} (${result.sizeMB} MB)`,
+      data: result
+    });
+  } catch (err) {
+    return res.status(500).json({ status: "error", message: err.message });
+  }
+});
+
+/**
+ * API: Lấy danh sách các bản sao lưu trong thư mục máy tính
+ */
+app.get("/api/backup/list", authRequired, (req, res) => {
+  try {
+    const list = backupService.listBackups();
+    return res.json({
+      status: "success",
+      backupDir: backupService.BACKUP_DIR,
+      data: list
+    });
+  } catch (err) {
+    return res.status(500).json({ status: "error", message: err.message });
+  }
+});
+
+/**
+ * API: Tải trực tiếp file CSDL SQLite (.db) về máy tính qua trình duyệt
+ */
+app.get("/api/backup/download", authRequired, (req, res) => {
+  try {
+    if (!fs.existsSync(backupService.SOURCE_DB_PATH)) {
+      return res.status(404).json({ status: "error", message: "Chưa có file CSDL để tải về." });
+    }
+    const todayStr = formatVietnamDateTime(new Date()).slice(0, 10).replace(/\//g, "-");
+    const downloadName = `cancellation_orders_${todayStr}.db`;
+    return res.download(backupService.SOURCE_DB_PATH, downloadName);
   } catch (err) {
     return res.status(500).json({ status: "error", message: err.message });
   }
@@ -1341,6 +1456,8 @@ if (require.main === module) {
     console.log(`Hệ thống Phân tích Đơn Hủy Logistics đang chạy tại:`);
     console.log(`http://localhost:${PORT}`);
     console.log(`=====================================================`);
+    // Kiểm tra và tự động sao lưu CSDL ra thư mục máy tính người dùng
+    backupService.checkAndRunDailyAutoBackup();
   });
 }
 

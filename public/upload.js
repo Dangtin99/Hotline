@@ -223,6 +223,47 @@ document.addEventListener("DOMContentLoaded", () => {
     tabUploadVerification.addEventListener("click", () => switchUploadTab("verification"));
   }
 
+  // Bộ lọc lịch sử 4 ngày vs Tất cả
+  const btnFilter4Days = document.getElementById("btnFilterHistory4Days");
+  const btnFilterAll = document.getElementById("btnFilterHistoryAll");
+  if (btnFilter4Days && btnFilterAll) {
+    btnFilter4Days.onclick = () => {
+      currentHistoryFilter = "4days";
+      btnFilter4Days.classList.add("active", "btn-secondary");
+      btnFilter4Days.classList.remove("btn-outline");
+      btnFilterAll.classList.remove("active", "btn-secondary");
+      btnFilterAll.classList.add("btn-outline");
+      historyPage = 1;
+      loadHistoryList();
+    };
+    btnFilterAll.onclick = () => {
+      currentHistoryFilter = "all";
+      btnFilterAll.classList.add("active", "btn-secondary");
+      btnFilterAll.classList.remove("btn-outline");
+      btnFilter4Days.classList.remove("active", "btn-secondary");
+      btnFilter4Days.classList.add("btn-outline");
+      historyPage = 1;
+      loadHistoryList();
+    };
+  }
+
+  const btnPrune = document.getElementById("btnPruneOldHistory");
+  if (btnPrune) btnPrune.onclick = handlePruneOldHistory;
+
+  // Quản lý sao lưu CSDL cục bộ
+  const btnCreateBackup = document.getElementById("btnCreateBackupNow");
+  if (btnCreateBackup) btnCreateBackup.onclick = handleCreateBackupNow;
+
+  const btnDownloadDb = document.getElementById("btnDownloadDbFile");
+  if (btnDownloadDb) {
+    btnDownloadDb.onclick = () => {
+      window.location.href = "/api/backup/download";
+    };
+  }
+
+  const btnRefreshBackups = document.getElementById("btnRefreshBackupList");
+  if (btnRefreshBackups) btnRefreshBackups.onclick = loadBackupList;
+
   // Khởi tạo tab từ URL query nếu có (?tab=verification)
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.get("tab") === "verification") {
@@ -230,6 +271,7 @@ document.addEventListener("DOMContentLoaded", () => {
   } else {
     loadHistoryList();
   }
+  loadBackupList();
 });
 
 function showAlert(msg, isError = true) {
@@ -374,35 +416,52 @@ async function handleExecuteImport() {
   }
 }
 
-// 3. Quản lý Lịch sử Đăng tải
+// 3. Quản lý Lịch sử Đăng tải Đơn duyệt & Phân trang
+let currentHistoryFilter = "4days"; // '4days' hoặc 'all'
+let historyPage = 1;
+const historyPageSize = 10;
+let rawHistoryData = [];
+
 async function loadHistoryList() {
   try {
-    const res = await fetch("/api/history");
+    const url = currentHistoryFilter === "4days" ? "/api/history?filter=4days" : "/api/history";
+    const res = await fetch(url);
     const result = await res.json();
     if (!res.ok || result.status !== "success") return;
 
-    renderHistoryTable(result.data);
+    rawHistoryData = result.data || [];
+    renderHistoryTable();
   } catch (err) {
     console.error("Lỗi tải lịch sử:", err);
   }
 }
 
-function renderHistoryTable(history) {
-  if (!history || history.length === 0) {
+function renderHistoryTable() {
+  if (!tbodyHistory) return;
+  const total = rawHistoryData.length;
+  const totalPages = Math.max(1, Math.ceil(total / historyPageSize));
+  if (historyPage > totalPages) historyPage = totalPages;
+
+  const startIdx = (historyPage - 1) * historyPageSize;
+  const endIdx = Math.min(startIdx + historyPageSize, total);
+  const pageItems = rawHistoryData.slice(startIdx, endIdx);
+
+  if (total === 0) {
     tbodyHistory.innerHTML = `
       <tr>
         <td colspan="4" class="text-center py-4 text-muted">
-          Chưa có lịch sử đăng tải nào. Hãy chọn file bên trên để import dữ liệu.
+          Chưa có lịch sử đăng tải nào ${currentHistoryFilter === "4days" ? "trong 4 ngày gần nhất" : ""}. Hãy chọn file bên trên để import dữ liệu.
         </td>
       </tr>
     `;
     if (btnClearAllHistory) btnClearAllHistory.style.display = "none";
+    renderHistoryPagination(0, 0, 0, 1);
     return;
   }
 
   if (btnClearAllHistory) btnClearAllHistory.style.display = "inline-block";
 
-  tbodyHistory.innerHTML = history.map(item => {
+  tbodyHistory.innerHTML = pageItems.map(item => {
     return `
       <tr>
         <td><code>${item.id}</code></td>
@@ -414,6 +473,65 @@ function renderHistoryTable(history) {
       </tr>
     `;
   }).join("");
+
+  renderHistoryPagination(startIdx + 1, endIdx, total, totalPages);
+}
+
+function renderHistoryPagination(start, end, total, totalPages) {
+  const infoEl = document.getElementById("historyPaginationInfo");
+  const controlsEl = document.getElementById("historyPaginationControls");
+  if (!infoEl || !controlsEl) return;
+
+  if (total === 0) {
+    infoEl.textContent = "Không có dữ liệu đợt tải.";
+    controlsEl.innerHTML = "";
+    return;
+  }
+
+  infoEl.innerHTML = `Hiển thị <strong>${start} - ${end}</strong> trên tổng số <strong>${total}</strong> đợt tải (Trang ${historyPage}/${totalPages})`;
+
+  let html = "";
+  html += `<button type="button" class="btn btn-outline btn-sm" ${historyPage <= 1 ? "disabled" : ""} onclick="changeHistoryPage(${historyPage - 1})">&laquo; Trước</button>`;
+
+  for (let p = 1; p <= totalPages; p++) {
+    if (totalPages > 7) {
+      if (p !== 1 && p !== totalPages && Math.abs(p - historyPage) > 1) {
+        if (p === 2 || p === totalPages - 1) {
+          html += `<span style="padding: 0 4px; color: #94a3b8;">...</span>`;
+        }
+        continue;
+      }
+    }
+    const activeClass = p === historyPage ? "btn-secondary" : "btn-outline";
+    html += `<button type="button" class="btn ${activeClass} btn-sm" onclick="changeHistoryPage(${p})">${p}</button>`;
+  }
+
+  html += `<button type="button" class="btn btn-outline btn-sm" ${historyPage >= totalPages ? "disabled" : ""} onclick="changeHistoryPage(${historyPage + 1})">Sau &raquo;</button>`;
+  controlsEl.innerHTML = html;
+}
+
+window.changeHistoryPage = function(p) {
+  historyPage = p;
+  renderHistoryTable();
+};
+
+async function handlePruneOldHistory() {
+  if (!confirm("Bạn có muốn dọn dẹp các đợt tải cũ hơn 4 ngày khỏi lịch sử trang không?\n\nLƯU Ý: Thao tác này CHỈ dọn dẹp lịch sử hiển thị, toàn bộ dữ liệu đơn hàng trong CSDL SQL vẫn được bảo toàn nguyên vẹn 100%!")) {
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/history/prune-4days", { method: "POST" });
+    const result = await res.json();
+    if (!res.ok || result.status !== "success") {
+      throw new Error(result.message || "Lỗi dọn dẹp lịch sử.");
+    }
+    showAlert(result.message, false);
+    historyPage = 1;
+    loadHistoryList();
+  } catch (err) {
+    showAlert(err.message);
+  }
 }
 
 // Xóa 1 bản ghi lịch sử - Đơn duyệt
@@ -521,7 +639,11 @@ async function handleExecuteImportVerification() {
   }
 }
 
-// Tải danh sách lịch sử kiểm tra đơn
+// Tải danh sách lịch sử kiểm tra đơn & Phân trang
+let verificationPage = 1;
+const verificationPageSize = 10;
+let rawVerificationData = [];
+
 async function loadVerificationHistory() {
   if (!tbodyVerificationHistory) return;
   try {
@@ -529,17 +651,25 @@ async function loadVerificationHistory() {
     const result = await res.json();
     if (!res.ok || result.status !== "success") return;
 
-    renderVerificationHistoryTable(result.data);
+    rawVerificationData = result.data || [];
+    renderVerificationHistoryTable();
   } catch (err) {
     console.error("Lỗi tải lịch sử kiểm tra đơn:", err);
   }
 }
 
-// Hiển thị danh sách lịch sử kiểm tra đơn lên bảng
-function renderVerificationHistoryTable(history) {
+// Hiển thị danh sách lịch sử kiểm tra đơn lên bảng có phân trang
+function renderVerificationHistoryTable() {
   if (!tbodyVerificationHistory) return;
+  const total = rawVerificationData.length;
+  const totalPages = Math.max(1, Math.ceil(total / verificationPageSize));
+  if (verificationPage > totalPages) verificationPage = totalPages;
 
-  if (!history || history.length === 0) {
+  const startIdx = (verificationPage - 1) * verificationPageSize;
+  const endIdx = Math.min(startIdx + verificationPageSize, total);
+  const pageItems = rawVerificationData.slice(startIdx, endIdx);
+
+  if (total === 0) {
     tbodyVerificationHistory.innerHTML = `
       <tr>
         <td colspan="5" class="text-center py-4 text-muted">
@@ -548,12 +678,13 @@ function renderVerificationHistoryTable(history) {
       </tr>
     `;
     if (btnClearAllVerificationHistory) btnClearAllVerificationHistory.style.display = "none";
+    renderVerificationPagination(0, 0, 0, 1);
     return;
   }
 
   if (btnClearAllVerificationHistory) btnClearAllVerificationHistory.style.display = "inline-block";
 
-  tbodyVerificationHistory.innerHTML = history.map(item => {
+  tbodyVerificationHistory.innerHTML = pageItems.map(item => {
     return `
       <tr>
         <td><code>${item.id}</code></td>
@@ -569,6 +700,113 @@ function renderVerificationHistoryTable(history) {
       </tr>
     `;
   }).join("");
+
+  renderVerificationPagination(startIdx + 1, endIdx, total, totalPages);
+}
+
+function renderVerificationPagination(start, end, total, totalPages) {
+  const infoEl = document.getElementById("verificationPaginationInfo");
+  const controlsEl = document.getElementById("verificationPaginationControls");
+  if (!infoEl || !controlsEl) return;
+
+  if (total === 0) {
+    infoEl.textContent = "Không có dữ liệu đợt tải kiểm tra.";
+    controlsEl.innerHTML = "";
+    return;
+  }
+
+  infoEl.innerHTML = `Hiển thị <strong>${start} - ${end}</strong> trên tổng số <strong>${total}</strong> đợt tải (Trang ${verificationPage}/${totalPages})`;
+
+  let html = "";
+  html += `<button type="button" class="btn btn-outline btn-sm" ${verificationPage <= 1 ? "disabled" : ""} onclick="changeVerificationPage(${verificationPage - 1})">&laquo; Trước</button>`;
+
+  for (let p = 1; p <= totalPages; p++) {
+    if (totalPages > 7) {
+      if (p !== 1 && p !== totalPages && Math.abs(p - verificationPage) > 1) {
+        if (p === 2 || p === totalPages - 1) {
+          html += `<span style="padding: 0 4px; color: #94a3b8;">...</span>`;
+        }
+        continue;
+      }
+    }
+    const activeClass = p === verificationPage ? "btn-secondary" : "btn-outline";
+    html += `<button type="button" class="btn ${activeClass} btn-sm" onclick="changeVerificationPage(${p})">${p}</button>`;
+  }
+
+  html += `<button type="button" class="btn btn-outline btn-sm" ${verificationPage >= totalPages ? "disabled" : ""} onclick="changeVerificationPage(${verificationPage + 1})">Sau &raquo;</button>`;
+  controlsEl.innerHTML = html;
+}
+
+window.changeVerificationPage = function(p) {
+  verificationPage = p;
+  renderVerificationHistoryTable();
+};
+
+// =========================================================================
+// QUẢN LÝ SAO LƯU CƠ SỞ DỮ LIỆU CỤC BỘ (DATABASE BACKUP)
+// =========================================================================
+
+async function loadBackupList() {
+  const tbody = document.getElementById("tbodyBackupList");
+  const txtPath = document.getElementById("txtBackupFolderPath");
+  if (!tbody) return;
+
+  try {
+    const res = await fetch("/api/backup/list");
+    const result = await res.json();
+    if (!res.ok || result.status !== "success") {
+      tbody.innerHTML = `<tr><td colspan="4" class="text-center py-3 text-danger">Không thể nạp danh sách sao lưu.</td></tr>`;
+      return;
+    }
+
+    if (txtPath && result.backupDir) {
+      txtPath.textContent = result.backupDir;
+    }
+
+    const backups = result.data || [];
+    if (backups.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="4" class="text-center py-3 text-muted">Chưa có bản sao lưu nào trong thư mục máy tính. Bấm "Sao Lưu Vào Máy Tính Ngay" để tạo bản đầu tiên.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = backups.map(b => `
+      <tr>
+        <td><strong>${b.fileName}</strong></td>
+        <td class="text-center"><strong>${b.sizeMB} MB</strong></td>
+        <td class="text-center">${formatVietnamDateTime(b.createdAt)}</td>
+        <td class="text-center">
+          <span class="badge" style="background: #ecfdf5; color: #166534; font-weight: 600; padding: 4px 8px; border-radius: 4px;">An toàn</span>
+        </td>
+      </tr>
+    `).join("");
+  } catch (err) {
+    console.error("Lỗi tải danh sách sao lưu:", err);
+  }
+}
+
+async function handleCreateBackupNow() {
+  const btn = document.getElementById("btnCreateBackupNow");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Đang sao lưu...";
+  }
+
+  try {
+    const res = await fetch("/api/backup/create", { method: "POST" });
+    const result = await res.json();
+    if (!res.ok || result.status !== "success") {
+      throw new Error(result.message || "Lỗi khi tạo bản sao lưu.");
+    }
+    showAlert(`Đã tạo bản sao lưu an toàn tại: ${result.data.fileName} (${result.data.sizeMB} MB)`, false);
+    loadBackupList();
+  } catch (err) {
+    showAlert(err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Sao Lưu Vào Máy Tính Ngay";
+    }
+  }
 }
 
 // Xóa 1 bản ghi lịch sử kiểm tra đơn
