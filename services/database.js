@@ -2028,16 +2028,23 @@ async function getAllRecordsAsync(forceRefresh = false) {
       const hasValidCache = !forceRefresh && memoryOrders.length > 0 && lastOrdersCachedVersion === currentVer;
 
       if (!hasValidCache) {
-        const tursoRows = await tursoClient.getAllOrdersFromTurso();
+        const [tursoRows, tursoOps] = await Promise.all([
+          tursoClient.getAllOrdersFromTurso(),
+          tursoClient.getAllOperationalStatesFromTurso()
+        ]);
         if (Array.isArray(tursoRows)) {
           memoryOrders = tursoRows;
           applyExpired3hCancellation(memoryOrders);
           lastOrdersCachedVersion = currentVer;
         }
+        if (tursoOps) {
+          memoryOpMap = tursoOps;
+          lastOpMapCachedVersion = currentVer;
+        }
       }
 
       if (Array.isArray(memoryOrders) && memoryOrders.length > 0) {
-        // Lấy trạng thái tác nghiệp từ bảng order_operational_state nếu có (sử dụng cache nếu version không đổi)
+        // Lấy trạng thái tác nghiệp từ bảng order_operational_state nếu chưa có
         if (lastOpMapCachedVersion !== currentVer || !memoryOpMap || Object.keys(memoryOpMap).length === 0) {
           try {
             memoryOpMap = await tursoClient.getAllOperationalStatesFromTurso() || {};

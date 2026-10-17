@@ -576,6 +576,9 @@ app.get("/api/all-data", authRequired, async (req, res) => {
       totalTeus += Number(allRecords[i].sizeTeus) || 0;
     }
 
+    // Thiết lập Cache-Control cho CDN Vercel (Edge Caching 30s, background revalidation 120s)
+    res.setHeader("Cache-Control", "public, s-maxage=30, stale-while-revalidate=120");
+
     return res.json({
       status: "success",
       isAllData: true,
