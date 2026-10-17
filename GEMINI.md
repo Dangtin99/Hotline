@@ -45,3 +45,16 @@ Tài liệu này ghi nhớ các nguyên tắc cốt lõi bắt buộc AI Assista
 2. **Quy chuẩn đọc mã nguồn cục bộ (Targeted Reading):**
    - Với các tệp đơn khối lớn (`app.js`, `data-table.js`, `database.js`), AI luôn sử dụng tìm kiếm chuỗi mục tiêu và chỉ đọc từ 30–60 dòng xung quanh phần cần sửa, tuyệt đối không đọc toàn bộ tệp để đảm bảo thời gian phản hồi siêu tốc (5–15 giây).
 
+---
+
+## 4. QUY CHUẨN TUÂN THỦ PHẠM VI YÊU CẦU (STRICT SCOPE BOUNDARY & EXPLICIT CONFIRMATION)
+
+1. **Tuyệt đối không tự ý mở rộng phạm vi (Strict Scope Boundary / No Over-Engineering):**
+   - AI Agent chỉ được phép can thiệp và thực hiện chính xác các nội dung, thành phần, tệp và chức năng mà người dùng trực tiếp yêu cầu.
+   - Tuyệt đối không tự ý sửa đổi ngoài lề, tái cấu trúc (refactor), đổi màu sắc, đổi nhãn chữ, xóa mã nguồn hoặc thêm các tính năng phát sinh không có trong yêu cầu của người dùng.
+
+2. **Bắt buộc hỏi ý kiến trước khi thực hiện bất kỳ chỉnh sửa nào nằm ngoài yêu cầu:**
+   - Nếu trong quá trình xử lý, phát hiện các điểm liên đới kỹ thuật hoặc có đề xuất cải tiến nằm ngoài phạm vi yêu cầu trực tiếp, AI **BẮT BUỘC PHẢI HỎI Ý KIẾN VÀ NÊU RÕ VẤN ĐỀ CHO NGƯỜI DÙNG TRƯỚC**.
+   - Chỉ được phép triển khai chỉnh sửa khi đã nhận được sự đồng thuận rõ ràng từ người dùng.
+
+
