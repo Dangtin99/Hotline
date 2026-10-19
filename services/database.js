@@ -171,12 +171,6 @@ try {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
-    try {
-      sqliteEngine.exec("ALTER TABLE eir_cancellation_orders ADD COLUMN nguoi_tao TEXT;");
-    } catch (e) {}
-    try {
-      sqliteEngine.exec("ALTER TABLE eir_cancellation_orders ADD COLUMN so_xe TEXT;");
-    } catch (e) {}
     CREATE INDEX IF NOT EXISTS idx_eir_depot ON eir_cancellation_orders(depot);
     CREATE INDEX IF NOT EXISTS idx_eir_hang_tau ON eir_cancellation_orders(hang_tau);
     CREATE INDEX IF NOT EXISTS idx_eir_trang_thai ON eir_cancellation_orders(trang_thai_don_hang);
@@ -240,6 +234,8 @@ try {
   `);
   try { sqliteEngine.prepare("ALTER TABLE cancellation_orders ADD COLUMN giai_trinh_chi_tiet TEXT;").run(); } catch (e) {}
   try { sqliteEngine.prepare("ALTER TABLE order_operational_state ADD COLUMN explanation_detail TEXT;").run(); } catch (e) {}
+  try { sqliteEngine.prepare("ALTER TABLE eir_cancellation_orders ADD COLUMN nguoi_tao TEXT;").run(); } catch (e) {}
+  try { sqliteEngine.prepare("ALTER TABLE eir_cancellation_orders ADD COLUMN so_xe TEXT;").run(); } catch (e) {}
   console.log("Đã kết nối cơ sở dữ liệu SQLite thành công (cancellation_orders.db)");
 } catch (e) {
   console.log("Sử dụng File-backed SQL Store & Đồng bộ hóa SQL Dump script:", e.message);
