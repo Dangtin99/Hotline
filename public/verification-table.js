@@ -244,6 +244,7 @@ function applyFilters() {
         (r.sttFile && String(r.sttFile).toLowerCase().includes(term)) ||
         (r.soBooking && String(r.soBooking).toLowerCase().includes(term)) ||
         (r.soContainer && String(r.soContainer).toLowerCase().includes(term)) ||
+        (r.nguoiTao && String(r.nguoiTao).toLowerCase().includes(term)) ||
         (r.tenTaiXe && String(r.tenTaiXe).toLowerCase().includes(term)) ||
         (r.sdtTaiXe && String(r.sdtTaiXe).toLowerCase().includes(term)) ||
         (r.tenNhaXe && String(r.tenNhaXe).toLowerCase().includes(term)) ||
@@ -357,6 +358,7 @@ function renderTable() {
         <td>${escapeHtml(r.tenTaiXe || "-")}</td>
         <td>${escapeHtml(r.sdtTaiXe || "-")}</td>
         <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.tenNhaXe || "")}">${escapeHtml(r.tenNhaXe || "-")}</td>
+        <td>${escapeHtml(r.nguoiTao || "-")}</td>
         <td style="font-size:12px;color:var(--text-muted);">${escapeHtml(r.fileName || "-")}</td>
       </tr>
     `;
@@ -447,6 +449,10 @@ window.viewOrderDetail = function(key) {
       <div class="detail-item">
         <label>Thời Gian Kích Hoạt Xếp Tài</label>
         <div>${escapeHtml(formatDateDisplay(item.thoiGianKichHoat))}</div>
+      </div>
+      <div class="detail-item">
+        <label>Người Tạo Đơn</label>
+        <div><strong>${escapeHtml(item.nguoiTao || "-")}</strong></div>
       </div>
       <div class="detail-item">
         <label>Tệp Dữ Liệu Nguồn</label>

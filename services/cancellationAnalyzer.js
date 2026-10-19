@@ -65,25 +65,29 @@ function normalizeDate(val) {
 function parseApprovalTimestamp(dateStr) {
   if (!dateStr) return null;
   const str = String(dateStr).trim().replace("T", " ");
+
+  // Pattern 1: YYYY-MM-DD HH:mm:ss
   let parts = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
   if (parts) {
-    const y = parseInt(parts[1], 10);
-    const m = parseInt(parts[2], 10) - 1;
-    const d = parseInt(parts[3], 10);
-    const h = parseInt(parts[4] || "0", 10);
-    const min = parseInt(parts[5] || "0", 10);
-    const s = parseInt(parts[6] || "0", 10);
-    return Date.UTC(y, m, d, h - 7, min, s);
+    const y = parts[1].padStart(4, "0");
+    const mo = parts[2].padStart(2, "0");
+    const d = parts[3].padStart(2, "0");
+    const h = (parts[4] || "0").padStart(2, "0");
+    const min = (parts[5] || "0").padStart(2, "0");
+    const s = (parts[6] || "0").padStart(2, "0");
+    return new Date(`${y}-${mo}-${d}T${h}:${min}:${s}+07:00`).getTime();
   }
+
+  // Pattern 2: DD-MM-YYYY HH:mm:ss
   parts = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
   if (parts) {
-    const d = parseInt(parts[1], 10);
-    const m = parseInt(parts[2], 10) - 1;
-    const y = parseInt(parts[3], 10);
-    const h = parseInt(parts[4] || "0", 10);
-    const min = parseInt(parts[5] || "0", 10);
-    const s = parseInt(parts[6] || "0", 10);
-    return Date.UTC(y, m, d, h - 7, min, s);
+    const d = parts[1].padStart(2, "0");
+    const mo = parts[2].padStart(2, "0");
+    const y = parts[3].padStart(4, "0");
+    const h = (parts[4] || "0").padStart(2, "0");
+    const min = (parts[5] || "0").padStart(2, "0");
+    const s = (parts[6] || "0").padStart(2, "0");
+    return new Date(`${y}-${mo}-${d}T${h}:${min}:${s}+07:00`).getTime();
   }
   return null;
 }
@@ -719,6 +723,7 @@ function parseVerificationFile(input) {
     const sdtTaiXe = getVal(row, ["SĐT", "Số điện thoại tài xế", "SĐT tài xế", "Điện thoại tài xế"], ["nhà xe", "nha xe", "công ty", "đơn vị"]);
     const nhaXe = getVal(row, ["Tên nhà xe", "Đơn vị vận tải", "Đơn vị vận chuyển", "Công ty vận tải", "Tên công ty", "Nhà xe", "Ten nha xe", "Don vi van tai"], ["sđt", "sdt", "điện thoại", "phone", "tel", "tài xế", "tai xe"]);
     const sdtNhaXe = getVal(row, ["Số điện thoại nhà xe", "SĐT nhà xe", "SDT nhà xe", "Số điện thoại đơn vị vận tải", "SĐT đơn vị vận tải", "SDT đơn vị vận tải", "Điện thoại nhà xe", "SĐT công ty", "SDT cong ty", "So dien thoai nha xe", "Sdt nha xe"], ["tài xế", "tai xe"]);
+    const nguoiTao = getVal(row, ["Người tạo", "Nguoi tao", "Người tạo đơn", "Nguoi tao don", "Created by", "User tạo", "Tài khoản tạo", "User tao"]);
 
     let loaiDonHang = "N/A";
     if (loaiDon.toUpperCase().includes("OUT")) loaiDonHang = "OUT";
@@ -754,7 +759,8 @@ function parseVerificationFile(input) {
       tenTaiXe: taiXe || null,
       sdtTaiXe: sdtTaiXe || null,
       tenNhaXe: nhaXe || null,
-      sdtNhaXe: sdtNhaXe || null
+      sdtNhaXe: sdtNhaXe || null,
+      nguoiTao: nguoiTao || null
     });
   }
 

@@ -45,6 +45,7 @@ CREATE TABLE eir_cancellation_orders (
     
     -- Quản trị hệ thống & Nhật ký kiểm toán (Audit Trail)
     file_nguon VARCHAR(255),                                   -- Tên tệp dữ liệu nguồn tải lên
+    nguoi_tao VARCHAR(150),                                    -- Người tạo đơn / User khởi tạo đơn hàng EIR
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

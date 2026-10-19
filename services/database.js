@@ -10,6 +10,15 @@
 
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
+
+// Fix #6: Hàng đợi thực thi ghi dữ liệu để phòng chống race condition khi upload đồng thời
+let _dbWriteQueue = Promise.resolve();
+function enqueueDbWrite(fn) {
+  const next = _dbWriteQueue.then(() => fn(), () => fn());
+  _dbWriteQueue = next.catch(() => {});
+  return next;
+}
 
 const DATA_DIR = path.join(__dirname, "..", "data");
 const DB_SQLITE_PATH = path.join(DATA_DIR, "cancellation_orders.db");
@@ -157,9 +166,13 @@ try {
       ten_nha_xe TEXT,
       sdt_nha_xe TEXT,
       file_nguon TEXT,
+      nguoi_tao TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+    try {
+      sqliteEngine.exec("ALTER TABLE eir_cancellation_orders ADD COLUMN nguoi_tao TEXT;");
+    } catch (e) {}
     CREATE INDEX IF NOT EXISTS idx_eir_depot ON eir_cancellation_orders(depot);
     CREATE INDEX IF NOT EXISTS idx_eir_hang_tau ON eir_cancellation_orders(hang_tau);
     CREATE INDEX IF NOT EXISTS idx_eir_trang_thai ON eir_cancellation_orders(trang_thai_don_hang);
@@ -325,16 +338,27 @@ function loadAllFromStore() {
   try {
     if (fs.existsSync(DB_JSON_PATH)) {
       const content = fs.readFileSync(DB_JSON_PATH, "utf8");
-      memoryOrders = JSON.parse(content);
-      return memoryOrders;
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed)) {
+        memoryOrders = parsed;
+        return memoryOrders;
+      }
     }
   } catch (err) {
     console.warn("Chưa có file cancellation_orders.json hoặc lỗi đọc:", err.message);
   }
 
-  // Nếu file JSON chưa có, kiểm tra và import từ lịch sử tải lên cũ
+  // Fix #10: Chỉ reset và migrate khi thực sự chưa có dữ liệu trong memory
+  const beforeReset = memoryOrders.length;
   memoryOrders = [];
-  migrateFromUploadHistory();
+  try {
+    migrateFromUploadHistory();
+  } catch (migErr) {
+    console.error("Lỗi migrate dữ liệu từ lịch sử:", migErr.message);
+    if (beforeReset > 0) {
+      console.warn(`[Cảnh báo] Migration thất bại, ${beforeReset} bản ghi trong RAM bị reset.`);
+    }
+  }
   return memoryOrders;
 }
 
@@ -602,11 +626,26 @@ function getAllRecords() {
  */
 function updateOrderNote(rowKey, noteData = {}) {
   let matched = memoryOrders.filter(o => o.rowKey === rowKey);
+  // Fix #11: Khớp chính xác theo altKey (STT_Booking_Container)
   if (matched.length === 0 && rowKey) {
     matched = memoryOrders.filter(o => {
       const altKey = `${o.stt}_${o.soBooking || ''}_${o.soContainer || ''}`;
-      return altKey === rowKey || (o.soContainer && o.soBooking && rowKey.includes(o.soContainer) && rowKey.includes(o.soBooking));
+      return altKey === rowKey;
     });
+  }
+  // Khớp chính xác cả Container và Booking nếu rowKey có cấu trúc DEPOT#CONTAINER#BOOKING#DATE
+  if (matched.length === 0 && rowKey && typeof rowKey === "string" && rowKey.includes("#")) {
+    const parts = rowKey.split("#");
+    if (parts.length >= 3) {
+      const contPart = (parts[1] || "").trim().toUpperCase();
+      const bookPart = (parts[2] || "").trim().toUpperCase();
+      if (contPart && bookPart) {
+        matched = memoryOrders.filter(o =>
+          (o.soContainer || "").trim().toUpperCase() === contPart &&
+          (o.soBooking || "").trim().toUpperCase() === bookPart
+        );
+      }
+    }
   }
   const nowStr = new Date().toISOString().replace("T", " ").substring(0, 19);
   const hasStatus = noteData.status !== undefined;
@@ -1028,10 +1067,16 @@ function generateVerificationKey(r) {
   const book = (r.soBooking || "").trim().toUpperCase();
   const date = (r.ngayHuyDon || "").trim();
   const depot = (r.depot || "").trim().toUpperCase();
+  const hangTau = (r.hangTau || "").trim().toUpperCase();
+  const lyDo = (r.lyDoHuy || "").trim().substring(0, 30);
 
   if (eir) return `${depot}#EIR_${eir}#${date}`;
   if (cont || book) return `${depot}#${cont}#${book}#${date}`;
-  return `${depot}#VER_${Date.now()}_${Math.random()}`;
+
+  // Fix #9: Fallback có tính xác định (deterministic) dựa trên mã băm MD5 thay vì random
+  const hashInput = `${depot}|${hangTau}|${date}|${lyDo}`;
+  const hash = crypto.createHash("md5").update(hashInput).digest("hex").substring(0, 12);
+  return `${depot}#VER_FALLBACK_${hash}`;
 }
 
 function loadVerificationFromStore() {
@@ -1101,6 +1146,7 @@ function generateVerificationSqlDumpFile() {
     lines.push(`  ten_nha_xe VARCHAR(255),`);
     lines.push(`  sdt_nha_xe VARCHAR(50),`);
     lines.push(`  file_nguon VARCHAR(255),`);
+    lines.push(`  nguoi_tao VARCHAR(150),`);
     lines.push(`  created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,`);
     lines.push(`  updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP`);
     lines.push(`);`);
@@ -1113,8 +1159,8 @@ function generateVerificationSqlDumpFile() {
 
     memoryVerificationOrders.forEach((o, idx) => {
       lines.push(
-        `INSERT INTO eir_cancellation_orders (id, row_key, upload_id, file_name, stt_file, depot, hang_tau, ngay_huy_don, ngay_duoc_duyet, so_booking, so_container, loai_container, loai_don_hang, size_teus, trang_thai_don_hang, trang_thai_kich_hoat, thoi_gian_kich_hoat, ly_do_huy, ly_do_tu_choi, ly_do_huy_check, ten_tai_xe, sdt_tai_xe, ten_nha_xe, sdt_nha_xe, file_nguon, created_at, updated_at) ` +
-        `VALUES (${idx + 1}, ${escapeSql(o.rowKey)}, ${escapeSql(o.uploadId)}, ${escapeSql(o.fileName)}, ${escapeSql(o.sttFile)}, ${escapeSql(o.depot)}, ${escapeSql(o.hangTau)}, ${escapeSql(o.ngayHuyDon)}, ${escapeSql(o.ngayDuocDuyet)}, ${escapeSql(o.soBooking)}, ${escapeSql(o.soContainer)}, ${escapeSql(o.loaiContainer)}, ${escapeSql(o.loaiDonHang)}, ${Number(o.sizeTeus) || 0}, ${escapeSql(o.trangThaiDonHang)}, ${escapeSql(o.trangThaiKichHoat)}, ${escapeSql(o.thoiGianKichHoat)}, ${escapeSql(o.lyDoHuy)}, ${escapeSql(o.lyDoTuChoi)}, ${escapeSql(o.lyDoHuyCheck)}, ${escapeSql(o.tenTaiXe)}, ${escapeSql(o.sdtTaiXe)}, ${escapeSql(o.tenNhaXe)}, ${escapeSql(o.sdtNhaXe)}, ${escapeSql(o.fileName)}, ${escapeSql(o.createdAt)}, ${escapeSql(o.updatedAt)});`
+        `INSERT INTO eir_cancellation_orders (id, row_key, upload_id, file_name, stt_file, depot, hang_tau, ngay_huy_don, ngay_duoc_duyet, so_booking, so_container, loai_container, loai_don_hang, size_teus, trang_thai_don_hang, trang_thai_kich_hoat, thoi_gian_kich_hoat, ly_do_huy, ly_do_tu_choi, ly_do_huy_check, ten_tai_xe, sdt_tai_xe, ten_nha_xe, sdt_nha_xe, file_nguon, nguoi_tao, created_at, updated_at) ` +
+        `VALUES (${idx + 1}, ${escapeSql(o.rowKey)}, ${escapeSql(o.uploadId)}, ${escapeSql(o.fileName)}, ${escapeSql(o.sttFile)}, ${escapeSql(o.depot)}, ${escapeSql(o.hangTau)}, ${escapeSql(o.ngayHuyDon)}, ${escapeSql(o.ngayDuocDuyet)}, ${escapeSql(o.soBooking)}, ${escapeSql(o.soContainer)}, ${escapeSql(o.loaiContainer)}, ${escapeSql(o.loaiDonHang)}, ${Number(o.sizeTeus) || 0}, ${escapeSql(o.trangThaiDonHang)}, ${escapeSql(o.trangThaiKichHoat)}, ${escapeSql(o.thoiGianKichHoat)}, ${escapeSql(o.lyDoHuy)}, ${escapeSql(o.lyDoTuChoi)}, ${escapeSql(o.lyDoHuyCheck)}, ${escapeSql(o.tenTaiXe)}, ${escapeSql(o.sdtTaiXe)}, ${escapeSql(o.tenNhaXe)}, ${escapeSql(o.sdtNhaXe)}, ${escapeSql(o.fileName)}, ${escapeSql(o.nguoiTao)}, ${escapeSql(o.createdAt)}, ${escapeSql(o.updatedAt)});`
       );
     });
 
@@ -1165,6 +1211,7 @@ function insertVerificationRecords(records, metadata = {}, shouldPersist = true)
       sdtTaiXe: r.sdtTaiXe || "",
       tenNhaXe: r.tenNhaXe || "",
       sdtNhaXe: r.sdtNhaXe || "",
+      nguoiTao: r.nguoiTao || "",
       createdAt: nowStr,
       updatedAt: nowStr
     };
@@ -1189,13 +1236,14 @@ function insertVerificationRecords(records, metadata = {}, shouldPersist = true)
             row_key, upload_id, file_name, stt_file, depot, hang_tau, ngay_huy_don, ngay_duoc_duyet,
             so_booking, so_container, loai_container, loai_don_hang, size_teus, trang_thai_don_hang,
             trang_thai_kich_hoat, thoi_gian_kich_hoat, ly_do_huy, ly_do_tu_choi, ly_do_huy_check,
-            ten_tai_xe, sdt_tai_xe, ten_nha_xe, sdt_nha_xe, file_nguon, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ten_tai_xe, sdt_tai_xe, ten_nha_xe, sdt_nha_xe, file_nguon, nguoi_tao, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(row_key) DO UPDATE SET
             upload_id=excluded.upload_id,
             file_name=excluded.file_name,
             trang_thai_don_hang=excluded.trang_thai_don_hang,
             ngay_duoc_duyet=excluded.ngay_duoc_duyet,
+            nguoi_tao=excluded.nguoi_tao,
             updated_at=excluded.updated_at
         `);
         stmt.run(
@@ -1205,7 +1253,7 @@ function insertVerificationRecords(records, metadata = {}, shouldPersist = true)
           orderData.trangThaiDonHang, orderData.trangThaiKichHoat, orderData.thoiGianKichHoat,
           orderData.lyDoHuy, orderData.lyDoTuChoi, orderData.lyDoHuyCheck, orderData.tenTaiXe,
           orderData.sdtTaiXe, orderData.tenNhaXe, orderData.sdtNhaXe, orderData.fileName,
-          orderData.createdAt, orderData.updatedAt
+          orderData.nguoiTao, orderData.createdAt, orderData.updatedAt
         );
       } catch (err) {}
     }
@@ -2080,47 +2128,49 @@ async function getAllRecordsAsync(forceRefresh = false) {
 }
 
 async function insertRecordsAsync(records, metadata = {}) {
-  // 1. Chỉ nạp dữ liệu từ Turso Cloud/Local nếu memory chưa được khởi tạo
-  if (memoryOrders.length === 0) {
-    if (tursoClient && tursoClient.isTursoAvailable()) {
-      try {
-        const existingTurso = await tursoClient.getAllOrdersFromTurso();
-        if (Array.isArray(existingTurso) && existingTurso.length > 0) {
-          memoryOrders = existingTurso;
+  return enqueueDbWrite(async () => {
+    // 1. Chỉ nạp dữ liệu từ Turso Cloud/Local nếu memory chưa được khởi tạo
+    if (memoryOrders.length === 0) {
+      if (tursoClient && tursoClient.isTursoAvailable()) {
+        try {
+          const existingTurso = await tursoClient.getAllOrdersFromTurso();
+          if (Array.isArray(existingTurso) && existingTurso.length > 0) {
+            memoryOrders = existingTurso;
+          }
+        } catch (e) {
+          console.warn("[Turso] Không thể đọc từ Turso trước khi insert:", e.message);
         }
-      } catch (e) {
-        console.warn("[Turso] Không thể đọc từ Turso trước khi insert:", e.message);
+      }
+      if (memoryOrders.length === 0) {
+        loadAllFromStore();
       }
     }
-    if (memoryOrders.length === 0) {
-      loadAllFromStore();
+
+    // 2. Thêm trực tiếp vào local store & memory
+    const res = insertRecords(records, metadata, false);
+
+    // 3. Đồng bộ hóa Delta (chỉ các đơn mới hoặc cập nhật từ file vừa nạp) lên Turso Cloud
+    if (tursoClient && tursoClient.isTursoAvailable()) {
+      try {
+        const recordsToSync = (res.processedRecords && res.processedRecords.length > 0) ? res.processedRecords : records;
+        await tursoClient.syncOrdersToTurso(recordsToSync);
+      } catch (e) {
+        console.error("[Turso] Lỗi đồng bộ orders lên Turso:", e.message);
+        throw new Error(`Lỗi đồng bộ lên CSDL đám mây Turso: ${e.message}`);
+      }
     }
-  }
 
-  // 2. Thêm trực tiếp vào local store & memory
-  const res = insertRecords(records, metadata, false);
-
-  // 3. Đồng bộ hóa Delta (chỉ các đơn mới hoặc cập nhật từ file vừa nạp) lên Turso Cloud
-  if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
-      const recordsToSync = (res.processedRecords && res.processedRecords.length > 0) ? res.processedRecords : records;
-      await tursoClient.syncOrdersToTurso(recordsToSync);
-    } catch (e) {
-      console.error("[Turso] Lỗi đồng bộ orders lên Turso:", e.message);
-      throw new Error(`Lỗi đồng bộ lên CSDL đám mây Turso: ${e.message}`);
-    }
-  }
+      persistStore({ syncFullToTurso: false });
+    } catch (e) {}
 
-  try {
-    persistStore({ syncFullToTurso: false });
-  } catch (e) {}
+    bumpOperationalVersion();
 
-  bumpOperationalVersion();
-
-  return {
-    ...res,
-    total: memoryOrders.length
-  };
+    return {
+      ...res,
+      total: memoryOrders.length
+    };
+  });
 }
 
 async function updateOrderNoteAsync(rowKey, noteData = {}) {
@@ -2186,39 +2236,41 @@ async function getAllVerificationRecordsAsync(forceRefresh = false) {
 }
 
 async function insertVerificationRecordsAsync(records, metadata = {}) {
-  if (memoryVerificationOrders.length === 0) {
+  return enqueueDbWrite(async () => {
+    if (memoryVerificationOrders.length === 0) {
+      if (tursoClient && tursoClient.isTursoAvailable()) {
+        try {
+          const tursoRows = await tursoClient.getAllVerificationOrdersFromTurso();
+          if (Array.isArray(tursoRows) && tursoRows.length > 0) {
+            memoryVerificationOrders = tursoRows;
+          }
+        } catch (e) {}
+      }
+      if (memoryVerificationOrders.length === 0) {
+        loadVerificationFromStore();
+      }
+    }
+
+    const res = insertVerificationRecords(records, metadata, false);
+
     if (tursoClient && tursoClient.isTursoAvailable()) {
       try {
-        const tursoRows = await tursoClient.getAllVerificationOrdersFromTurso();
-        if (Array.isArray(tursoRows) && tursoRows.length > 0) {
-          memoryVerificationOrders = tursoRows;
-        }
-      } catch (e) {}
+        const recordsToSync = (res.processedRecords && res.processedRecords.length > 0) ? res.processedRecords : records;
+        await tursoClient.syncVerificationOrdersToTurso(recordsToSync);
+      } catch (e) {
+        console.error("[Turso] Lỗi đồng bộ verification orders lên Turso:", e.message);
+      }
     }
-    if (memoryVerificationOrders.length === 0) {
-      loadVerificationFromStore();
-    }
-  }
 
-  const res = insertVerificationRecords(records, metadata, false);
-
-  if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
-      const recordsToSync = (res.processedRecords && res.processedRecords.length > 0) ? res.processedRecords : records;
-      await tursoClient.syncVerificationOrdersToTurso(recordsToSync);
-    } catch (e) {
-      console.error("[Turso] Lỗi đồng bộ verification orders lên Turso:", e.message);
-    }
-  }
+      persistVerificationStore({ syncFullToTurso: false, generateDump: false });
+    } catch (e) {}
 
-  try {
-    persistVerificationStore({ syncFullToTurso: false, generateDump: false });
-  } catch (e) {}
-
-  return {
-    ...res,
-    total: memoryVerificationOrders.length
-  };
+    return {
+      ...res,
+      total: memoryVerificationOrders.length
+    };
+  });
 }
 
 async function deleteVerificationRecordsByUploadIdAsync(uploadId) {

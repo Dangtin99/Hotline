@@ -28,7 +28,7 @@
       if (u && u.role !== "admin") {
         document.documentElement.classList.add("non-admin-user");
         const path = window.location.pathname.toLowerCase();
-        if (path.endsWith("upload.html") || path.endsWith("verification-table.html")) {
+        if (path.endsWith("upload.html") || path.endsWith("verification-table.html") || path.endsWith("new-feature.html")) {
           window.location.replace("index.html");
           return;
         }

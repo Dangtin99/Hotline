@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phân Tích Đơn Đặt Lại Theo Booking - Logistics Cancellation Analytics</title>
+  <link rel="stylesheet" href="style.css?v=20261017_1154">
+  <script src="auth.js"></script>
+  <style>
+    .pagination-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding: 12px 16px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius);
+      margin-top: 14px;
+    }
+    .pagination-info {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .pagination-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .page-btn {
+      padding: 5px 11px;
+      font-size: 13px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--text-main);
+      transition: var(--transition);
+    }
+    .page-btn:hover:not(:disabled) {
+      background: var(--blue-light);
+      border-color: var(--blue-primary);
+      color: var(--blue-primary);
+    }
+    .page-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    /* Modal Lịch Sử Đặt Lại */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(15, 23, 42, 0.55);
+      backdrop-filter: blur(2px);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal-overlay.active {
+      display: flex;
+    }
+    .modal-container {
+      background: var(--bg-surface);
+      border-radius: var(--radius);
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+      width: 95%;
+      max-width: 1280px;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid var(--border-light);
+    }
+    .modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-light);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+    .modal-header h3 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--blue-primary);
+      margin: 0;
+    }
+    .modal-close-btn {
+      background: none;
+      border: none;
+      font-size: 20px;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 4px;
+      line-height: 1;
+    }
+    .modal-close-btn:hover {
+      color: var(--danger);
+    }
+    .modal-body {
+      padding: 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      table-layout: auto;
+    }
+    .history-table th {
+      background: #f8fafc;
+      padding: 10px 12px;
+      border-bottom: 2px solid #e2e8f0;
+      font-weight: 600;
+      color: #475569;
+      white-space: nowrap;
+    }
+    .history-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #f1f5f9;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    .history-table tr:hover {
+      background: #f8fafc;
+    }
+    .cell-truncate-1line {
+      max-width: 260px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-wrapper">
+    <!-- Thanh Tab Bên Trái (Left Sidebar) -->
+    <aside class="app-sidebar">
+      <div class="sidebar-brand">
+        <div class="sidebar-brand-text">
+          <div class="brand-title">GPG LOGISTICS</div>
+          <div class="brand-subtitle">Quản Trị Đơn Hủy & EIR 24/7</div>
+        </div>
+        <button type="button" class="sidebar-collapse-btn" id="btnCollapseSidebar" title="Ẩn thanh tab" aria-label="Ẩn thanh tab">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="sidebar-heading">
+          <span>TỔNG QUAN</span>
+          <span style="font-size: 9px; opacity: 0.85;">▼</span>
+        </div>
+        <a href="index.html" class="sidebar-link" id="navDashboard">
+          <span>Bảng Điều Khiển</span>
+        </a>
+
+        <div class="sidebar-heading" style="margin-top: 10px;">
+          <span>PHÂN HỆ DỮ LIỆU</span>
+          <span style="font-size: 9px; opacity: 0.85;">▼</span>
+        </div>
+        <a href="data-table.html" class="sidebar-link" id="navDataTable">
+          <span>Dữ Liệu Chi Tiết</span>
+        </a>
+        <a href="data-table.html?tab=unpaid" class="sidebar-link" id="navUnpaid" style="display: none !important;">
+          <span>Đơn Chưa Thanh Toán</span>
+        </a>
+        <a href="data-table.html?tab=cancelled" class="sidebar-link" id="navCancelled" style="display: none !important;">
+          <span>Đơn Hủy</span>
+        </a>
+        <a href="verification-table.html" class="sidebar-link" id="navVerificationTable" data-admin-only="true">
+          <span>Dữ Liệu Check Đơn</span>
+        </a>
+        <a href="new-feature.html" class="sidebar-link active" id="navNewFeature" data-admin-only="true">
+          <span>Báo Cáo Mới</span>
+        </a>
+
+        <div class="sidebar-heading" id="sidebarHeadingUpload" data-admin-only="true" style="margin-top: 10px;">
+          <span>QUẢN TRỊ TẢI LÊN</span>
+          <span style="font-size: 9px; opacity: 0.85;">▼</span>
+        </div>
+        <a href="upload.html" class="sidebar-link" id="navUpload" data-admin-only="true">
+          <span>Đăng Tải Dữ Liệu</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-user-card" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; background: rgba(255,255,255,0.08); border-radius: 8px; margin-bottom: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px; overflow: hidden;">
+            <span id="sidebarUserName" style="font-size: 12px; font-weight: 500; color: #f8fafc; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Admin</span>
+          </div>
+          <button type="button" id="sidebarBtnLogout" style="background: none; border: none; color: #94a3b8; font-size: 14px; cursor: pointer; padding: 2px;" title="Đăng xuất">Đăng xuất</button>
+        </div>
+        <div class="sidebar-status">
+          <span class="status-dot"></span>
+          <span>Hệ thống trực tuyến</span>
+        </div>
+        <div class="sidebar-copyright">
+          <span>© 2026 GPG Logistics</span>
+          <span>v3.7</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Nội Dung Chính (Main Content) -->
+    <div class="main-content">
+      <!-- Header -->
+      <header class="app-header">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <button type="button" class="sidebar-header-toggle-btn" id="headerSidebarToggleBtn" title="Hiện thanh tab" aria-label="Hiện thanh tab">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+          <div>
+            <h1>PHÂN TÍCH ĐƠN ĐẶT LẠI THEO BOOKING</h1>
+            <p style="font-size: 12px; color: var(--text-muted); margin-top: 3px;">Thống kê tần suất đặt lại & Nhận diện trạng thái mới nhất dựa trên Số Booking, Container và Chiều (Gate IN / OUT)</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <a href="data-table.html" class="btn btn-outline btn-sm" style="text-decoration: none;">Xem Bảng Dữ Liệu</a>
+          <a href="verification-table.html" class="btn btn-outline btn-sm" style="text-decoration: none;">Xem Dữ Liệu Check Đơn</a>
+          <a href="index.html" class="btn btn-primary btn-sm" style="text-decoration: none;">Xem Bảng Điều Hành</a>
+          <div class="header-user-dropdown-container" id="headerUserMenu">
+            <button type="button" class="user-chip-btn" id="userChipBtn" aria-haspopup="true" aria-expanded="false" title="Menu người dùng">
+              Tài Khoản
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <!-- Notification Alert -->
+      <div id="alertBox" class="alert-box" hidden></div>
+
+      <!-- Source notice & Action Bar -->
+      <div class="source-notice">
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <span style="color: var(--text-muted);">Cơ sở dữ liệu:</span>
+          <strong style="color: var(--blue-primary);">SQLite / PostgreSQL: <code>eir_cancellation_orders</code></strong>
+          <span id="badgeFileCount" class="badge badge-info" style="font-size: 12px;">0 tệp đã tích lũy</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <div id="totalRowsBadge" class="badge badge-info" style="font-size: 13px; padding: 6px 14px;">
+            Đang phân tích gom nhóm...
+          </div>
+          <button type="button" id="btnRefreshData" class="btn btn-outline btn-sm">Làm Mới Dữ Liệu</button>
+          <button type="button" id="btnExportExcel" class="btn btn-primary btn-sm">Xuất File Excel (XLSX)</button>
+        </div>
+      </div>
+
+      <!-- Bộ lọc và Tìm kiếm nhanh theo giao diện Control Center -->
+      <section class="filter-panel" aria-labelledby="rebookingFilterTitle">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">CONTROL CENTER</p>
+            <h2 id="rebookingFilterTitle">Bộ lọc phân tích đơn đặt lại</h2>
+          </div>
+          <span class="live-status">Phân hệ gom nhóm đối soát</span>
+        </div>
+
+        <!-- Lưới bộ lọc -->
+        <div class="filters-grid">
+          <!-- Hàng 1 - Cột 1: Từ Ngày -->
+          <div class="filter-field date-field">
+            <label for="filterDateFrom">Từ ngày</label>
+            <div class="date-input-container">
+              <input type="date" id="filterDateFrom" class="filter-select filter-date-input" title="Lọc từ ngày cập nhật cuối">
+            </div>
+          </div>
+
+          <!-- Hàng 1 - Cột 2: Đến Ngày -->
+          <div class="filter-field date-field">
+            <label for="filterDateTo">Đến ngày</label>
+            <div class="date-input-container" style="position: relative; display: flex; align-items: center;">
+              <input type="date" id="filterDateTo" class="filter-select filter-date-input" title="Lọc đến ngày cập nhật cuối" style="width: 100%;">
+              <button type="button" id="btnClearDateFilter" class="btn-clear-date" title="Xóa lọc ngày" style="display: none; position: absolute; right: 30px;">×</button>
+            </div>
+          </div>
+
+          <!-- Hàng 1 - Cột 3: Depot -->
+          <div class="filter-field dropdown-field">
+            <label for="filterDepot">Depot</label>
+            <select id="filterDepot" class="filter-select">
+              <option value="">Tất cả Depot</option>
+            </select>
+          </div>
+
+          <!-- Hàng 1 - Cột 4: Hãng Tàu -->
+          <div class="filter-field dropdown-field">
+            <label for="filterLine">Hãng tàu (Line)</label>
+            <select id="filterLine" class="filter-select">
+              <option value="">Tất cả Hãng tàu</option>
+            </select>
+          </div>
+
+          <!-- Hàng 2 - Cột 1: Chiều Vận Hành -->
+          <div class="filter-field dropdown-field">
+            <label for="filterDirection">Chiều vận hành</label>
+            <select id="filterDirection" class="filter-select">
+              <option value="">Tất cả chiều</option>
+              <option value="OUT">Gate OUT (Lấy cont)</option>
+              <option value="IN">Gate IN (Hạ cont)</option>
+            </select>
+          </div>
+
+          <!-- Hàng 2 - Cột 2: Trạng Thái Mới Nhất -->
+          <div class="filter-field dropdown-field">
+            <label for="filterStatus">Trạng thái mới nhất</label>
+            <select id="filterStatus" class="filter-select">
+              <option value="">Tất cả trạng thái mới nhất</option>
+            </select>
+          </div>
+
+          <!-- Hàng 2 - Cột 3: Tổng Lần Tạo Đơn -->
+          <div class="filter-field dropdown-field">
+            <label for="filterRebookCount">Tổng lần tạo đơn</label>
+            <select id="filterRebookCount" class="filter-select">
+              <option value="rebooked" selected>Chỉ đơn tạo >= 2 lần (Mặc định)</option>
+              <option value="high_rebooked">Đơn tạo nhiều (>= 3 lần)</option>
+              <option value="all">Tất cả đơn (Bao gồm đơn 1 lần)</option>
+            </select>
+          </div>
+
+          <!-- Hàng 2 - Cột 4: Tìm Nhanh -->
+          <div class="filter-field search-field">
+            <label for="searchInput">Tìm nhanh</label>
+            <div class="search-box">
+              <input type="text" id="searchInput" placeholder="Booking, Container, Hãng tàu, Nhà xe, Tài xế...">
+            </div>
+          </div>
+        </div>
+
+        <!-- Hàng nút thao tác -->
+        <div class="filter-actions-row">
+          <div style="font-size: 12px; color: #64748b; font-weight: 500;">
+            Mỗi dòng đại diện duy nhất 1 đơn hàng (theo Số Booking, Container và Chiều) kèm lịch sử đặt lại
+          </div>
+          <div class="filter-action-buttons" style="display: flex; gap: 8px; align-items: center;">
+            <button id="btnResetFilter" class="btn btn-outline btn-sm" type="button" title="Đặt lại bộ lọc về mặc định">Đặt Lại</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Bảng dữ liệu gom nhóm chi tiết -->
+      <div class="full-table-container">
+        <table class="data-table full-excel-table" id="tableRebookingData">
+          <thead>
+            <tr>
+              <th style="width: 50px; min-width: 50px; text-align: center;">STT</th>
+              <th style="width: 140px; min-width: 140px;" data-sort="soBooking" title="Nhấn để sắp xếp theo Số Booking">Số Booking</th>
+              <th style="width: 140px; min-width: 140px;" data-sort="soContainer" title="Nhấn để sắp xếp theo Số Container">Số Container</th>
+              <th style="width: 80px; min-width: 80px; text-align: center;">Chiều</th>
+              <th style="width: 90px; min-width: 90px; text-align: center;" data-sort="hangTau">Hãng Tàu</th>
+              <th style="width: 80px; min-width: 80px; text-align: center;">Depot</th>
+              <th style="width: 120px; min-width: 120px;">Loại Cont</th>
+              <th style="width: 70px; min-width: 70px; text-align: center;" data-sort="sizeTeus">TEUS</th>
+              <th style="width: 110px; min-width: 110px; text-align: center;" data-sort="totalAttempts" title="Nhấn để sắp xếp theo Tổng số lần tạo">Tổng Lần Tạo</th>
+              <th style="width: 140px; min-width: 140px;" data-sort="latestStatus">Trạng Thái Mới Nhất</th>
+              <th style="width: 120px; min-width: 120px; text-align: center;">Kích Hoạt</th>
+              <th style="width: 150px; min-width: 150px;" data-sort="latestDate" title="Nhấn để sắp xếp theo Thời gian mới nhất">Cập Nhật Cuối</th>
+              <th style="width: 150px; min-width: 150px;" data-sort="firstDate">Lần Đầu Tạo</th>
+              <th style="width: 150px; min-width: 150px;" data-sort="nguoiTao">Người Tạo</th>
+              <th style="width: 200px; min-width: 200px;">Đơn Vị Vận Tải</th>
+              <th style="width: 100px; min-width: 100px; text-align: center;">Thao Tác</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyRebookingData">
+            <tr>
+              <td colspan="16" class="text-center py-4">Đang nạp và phân tích dữ liệu đơn đặt lại...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Thanh Phân Trang (Pagination) -->
+      <div class="pagination-bar">
+        <div class="pagination-info" id="paginationInfo">
+          Đang hiển thị 0 - 0 trên tổng số 0 đơn
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted);">
+            <span>Số dòng:</span>
+            <select id="selectPageSize" class="filter-select" style="padding: 4px 8px; font-size: 13px;">
+              <option value="25">25</option>
+              <option value="50" selected>50</option>
+              <option value="100">100</option>
+              <option value="200">200</option>
+              <option value="all">Tất cả</option>
+            </select>
+          </div>
+          <div class="pagination-controls" id="paginationControls">
+            <button type="button" class="page-btn" id="btnPageFirst" title="Trang đầu">Đầu</button>
+            <button type="button" class="page-btn" id="btnPagePrev" title="Trang trước">Trước</button>
+            <span id="pageIndicator" style="font-size: 13px; font-weight: 600; padding: 0 6px;">Trang 1 / 1</span>
+            <button type="button" class="page-btn" id="btnPageNext" title="Trang sau">Sau</button>
+            <button type="button" class="page-btn" id="btnPageLast" title="Trang cuối">Cuối</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <footer class="app-footer">
+        <p>Logistics Cancellation Analytics Engine &copy; 2026. Bảng dữ liệu phân tích đơn đặt lại theo Booking, Container & Chiều EIR.</p>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Modal Xem Chi Tiết Lịch Sử Các Lần Đặt (Audit Trail Modal) -->
+  <div class="modal-overlay" id="modalHistoryDetail">
+    <div class="modal-container">
+      <div class="modal-header">
+        <div>
+          <h3 id="modalHistoryTitle">Lịch Sử Các Lần Đặt Hàng</h3>
+          <p id="modalHistorySubtitle" style="font-size: 12px; color: var(--text-muted); margin-top: 4px;"></p>
+        </div>
+        <button type="button" class="modal-close-btn" id="btnModalHistoryClose">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="modalHistorySummary"></div>
+        <div style="overflow-x: auto;">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th style="min-width: 120px; text-align: center;">Lần Thứ</th>
+                <th style="min-width: 140px;">Số Booking</th>
+                <th style="min-width: 130px;">Số Cont</th>
+                <th style="min-width: 120px;">Số EIR</th>
+                <th style="min-width: 140px;">Ngày Phát Sinh</th>
+                <th style="min-width: 140px;">Ngày Duyệt</th>
+                <th style="min-width: 130px;">Trạng Thái Đơn</th>
+                <th style="min-width: 110px; text-align: center;">Kích Hoạt</th>
+                <th style="min-width: 260px; max-width: 320px;">Lý Do Hủy</th>
+                <th style="min-width: 220px; max-width: 280px;">Lý Do Từ Chối</th>
+                <th style="min-width: 180px;">Tài Xế</th>
+                <th style="min-width: 220px;">Đơn Vị Vận Tải</th>
+                <th style="min-width: 140px;">Người Tạo</th>
+                <th style="min-width: 150px;">File Nguồn</th>
+              </tr>
+            </thead>
+            <tbody id="modalHistoryTableBody">
+              <!-- Render động bằng JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Thư viện xuất Excel & Mã điều khiển nghiệp vụ -->
+  <script src="/vendor/xlsx/xlsx.full.min.js"></script>
+  <script src="rebooking-analytics.js"></script>
+</body>
+</html>
