@@ -562,12 +562,39 @@
     return result;
   }
 
-  // Parse thời gian an toàn cho bản ghi
+  // Parse thời gian an toàn cho bản ghi (hỗ trợ mọi định dạng ngày: YYYY-MM-DD, HH:mm DD-MM-YYYY, DD/MM/YYYY)
   function parseRecordTimestamp(r) {
     if (!r) return 0;
-    const dateStr = r.ngayHuyDon || r.ngayDuocDuyet || r.thoiGianKichHoat || r.createdAt;
-    if (!dateStr) return 0;
-    const t = new Date(dateStr).getTime();
+    const val = r.ngayHuyDon || r.ngayDuocDuyet || r.thoiGianKichHoat || r.createdAt;
+    if (!val || val === "-" || val === "null" || val === "undefined") return 0;
+    const str = String(val).trim();
+    if (!str) return 0;
+
+    // 1. Dạng YYYY-MM-DD hoặc YYYY/MM/DD
+    const ymdMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+    if (ymdMatch) {
+      const y = parseInt(ymdMatch[1], 10);
+      const m = parseInt(ymdMatch[2], 10) - 1;
+      const d = parseInt(ymdMatch[3], 10);
+      const hh = ymdMatch[4] !== undefined ? parseInt(ymdMatch[4], 10) : 0;
+      const mm = ymdMatch[5] !== undefined ? parseInt(ymdMatch[5], 10) : 0;
+      const ss = ymdMatch[6] !== undefined ? parseInt(ymdMatch[6], 10) : 0;
+      return new Date(y, m, d, hh, mm, ss).getTime();
+    }
+
+    // 2. Dạng HH:mm DD-MM-YYYY hoặc DD-MM-YYYY / DD/MM/YYYY
+    const dmyMatch = str.match(/^(?:(\d{1,2}):(\d{2})(?::(\d{2}))?\s+)?(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+    if (dmyMatch) {
+      const hh = dmyMatch[1] !== undefined ? parseInt(dmyMatch[1], 10) : 0;
+      const mm = dmyMatch[2] !== undefined ? parseInt(dmyMatch[2], 10) : 0;
+      const ss = dmyMatch[3] !== undefined ? parseInt(dmyMatch[3], 10) : 0;
+      const d = parseInt(dmyMatch[4], 10);
+      const m = parseInt(dmyMatch[5], 10) - 1;
+      const y = parseInt(dmyMatch[6], 10);
+      return new Date(y, m, d, hh, mm, ss).getTime();
+    }
+
+    const t = new Date(str).getTime();
     return isNaN(t) ? 0 : t;
   }
 
@@ -1020,19 +1047,40 @@
   }
 
   // Định dạng ngày hiển thị dd/mm/yyyy hh:mm
-  function formatDateDisplay(d) {
-    if (!d) return "-";
-    const date = new Date(d);
-    if (isNaN(date.getTime())) return String(d);
+  function formatDateDisplay(val) {
+    if (!val || val === "-" || val === "null" || val === "undefined") return "-";
+    const str = String(val).trim();
+    if (!str) return "-";
 
-    const pad = n => String(n).padStart(2, "0");
-    const day = pad(date.getDate());
-    const month = pad(date.getMonth() + 1);
-    const year = date.getFullYear();
-    const hours = pad(date.getHours());
-    const minutes = pad(date.getMinutes());
+    const ymdMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+    if (ymdMatch) {
+      const y = ymdMatch[1];
+      const m = ymdMatch[2].padStart(2, "0");
+      const d = ymdMatch[3].padStart(2, "0");
+      const time = ymdMatch[4] !== undefined
+        ? ` ${ymdMatch[4].padStart(2, "0")}:${ymdMatch[5].padStart(2, "0")}`
+        : "";
+      return `${d}/${m}/${y}${time}`;
+    }
 
-    return `${day}/${month}/${year} ${hours}:${minutes}`;
+    const dmyMatch = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+    if (dmyMatch) {
+      const d = dmyMatch[1].padStart(2, "0");
+      const m = dmyMatch[2].padStart(2, "0");
+      const y = dmyMatch[3];
+      const time = dmyMatch[4] !== undefined
+        ? ` ${dmyMatch[4].padStart(2, "0")}:${dmyMatch[5].padStart(2, "0")}`
+        : "";
+      return `${d}/${m}/${y}${time}`;
+    }
+
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      const pad = n => String(n).padStart(2, "0");
+      return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    return str;
   }
 
   function escapeHtml(str) {

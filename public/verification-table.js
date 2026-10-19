@@ -270,9 +270,9 @@ function applyFilters() {
     // 6. Activation
     if (activation && r.trangThaiKichHoat !== activation) return false;
 
-    // 7. Date range
+    // 7. Date range (Lọc theo ngày cập nhật cuối trong bảng)
     if (fromDate || toDate) {
-      const dateVal = (r.ngayHuyDon || "").substring(0, 10);
+      const dateVal = getRecordLatestDateYMD(r);
       if (fromDate && dateVal && dateVal < fromDate) return false;
       if (toDate && dateVal && dateVal > toDate) return false;
     }
@@ -500,6 +500,42 @@ function escapeHtml(str) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+// Chuẩn hóa bất kỳ định dạng ngày tháng nào sang YYYY-MM-DD
+function parseDateToYMD(val) {
+  if (!val || val === "-" || val === "null" || val === "undefined") return "";
+  const str = String(val).trim();
+  if (!str) return "";
+
+  // 1. Dạng YYYY-MM-DD hoặc YYYY/MM/DD
+  const ymdMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (ymdMatch) {
+    return `${ymdMatch[1]}-${ymdMatch[2].padStart(2, "0")}-${ymdMatch[3].padStart(2, "0")}`;
+  }
+
+  // 2. Dạng HH:mm DD-MM-YYYY hoặc DD-MM-YYYY / DD/MM/YYYY
+  const dmyMatch = str.match(/^(?:(?:\d{1,2}):(?:\d{2})(?::(?:\d{2}))?\s+)?(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (dmyMatch) {
+    return `${dmyMatch[3]}-${dmyMatch[2].padStart(2, "0")}-${dmyMatch[1].padStart(2, "0")}`;
+  }
+
+  return "";
+}
+
+// Lấy ngày cập nhật cuối cùng trong bảng (so sánh giữa ngày duyệt, ngày kích hoạt, ngày phát sinh/hủy, createdAt)
+function getRecordLatestDateYMD(r) {
+  if (!r) return "";
+  const dates = [
+    parseDateToYMD(r.ngayDuocDuyet),
+    parseDateToYMD(r.thoiGianKichHoat),
+    parseDateToYMD(r.ngayHuyDon),
+    parseDateToYMD(r.createdAt)
+  ].filter(Boolean);
+
+  if (dates.length === 0) return "";
+  dates.sort();
+  return dates[dates.length - 1]; // Lấy ngày mới nhất (YYYY-MM-DD lớn nhất)
 }
 
 function formatDateDisplay(val) {
