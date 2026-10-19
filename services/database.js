@@ -167,11 +167,15 @@ try {
       sdt_nha_xe TEXT,
       file_nguon TEXT,
       nguoi_tao TEXT,
+      so_xe TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
     try {
       sqliteEngine.exec("ALTER TABLE eir_cancellation_orders ADD COLUMN nguoi_tao TEXT;");
+    } catch (e) {}
+    try {
+      sqliteEngine.exec("ALTER TABLE eir_cancellation_orders ADD COLUMN so_xe TEXT;");
     } catch (e) {}
     CREATE INDEX IF NOT EXISTS idx_eir_depot ON eir_cancellation_orders(depot);
     CREATE INDEX IF NOT EXISTS idx_eir_hang_tau ON eir_cancellation_orders(hang_tau);
@@ -1159,8 +1163,8 @@ function generateVerificationSqlDumpFile() {
 
     memoryVerificationOrders.forEach((o, idx) => {
       lines.push(
-        `INSERT INTO eir_cancellation_orders (id, row_key, upload_id, file_name, stt_file, depot, hang_tau, ngay_huy_don, ngay_duoc_duyet, so_booking, so_container, loai_container, loai_don_hang, size_teus, trang_thai_don_hang, trang_thai_kich_hoat, thoi_gian_kich_hoat, ly_do_huy, ly_do_tu_choi, ly_do_huy_check, ten_tai_xe, sdt_tai_xe, ten_nha_xe, sdt_nha_xe, file_nguon, nguoi_tao, created_at, updated_at) ` +
-        `VALUES (${idx + 1}, ${escapeSql(o.rowKey)}, ${escapeSql(o.uploadId)}, ${escapeSql(o.fileName)}, ${escapeSql(o.sttFile)}, ${escapeSql(o.depot)}, ${escapeSql(o.hangTau)}, ${escapeSql(o.ngayHuyDon)}, ${escapeSql(o.ngayDuocDuyet)}, ${escapeSql(o.soBooking)}, ${escapeSql(o.soContainer)}, ${escapeSql(o.loaiContainer)}, ${escapeSql(o.loaiDonHang)}, ${Number(o.sizeTeus) || 0}, ${escapeSql(o.trangThaiDonHang)}, ${escapeSql(o.trangThaiKichHoat)}, ${escapeSql(o.thoiGianKichHoat)}, ${escapeSql(o.lyDoHuy)}, ${escapeSql(o.lyDoTuChoi)}, ${escapeSql(o.lyDoHuyCheck)}, ${escapeSql(o.tenTaiXe)}, ${escapeSql(o.sdtTaiXe)}, ${escapeSql(o.tenNhaXe)}, ${escapeSql(o.sdtNhaXe)}, ${escapeSql(o.fileName)}, ${escapeSql(o.nguoiTao)}, ${escapeSql(o.createdAt)}, ${escapeSql(o.updatedAt)});`
+        `INSERT INTO eir_cancellation_orders (id, row_key, upload_id, file_name, stt_file, depot, hang_tau, ngay_huy_don, ngay_duoc_duyet, so_booking, so_container, loai_container, loai_don_hang, size_teus, trang_thai_don_hang, trang_thai_kich_hoat, thoi_gian_kich_hoat, ly_do_huy, ly_do_tu_choi, ly_do_huy_check, ten_tai_xe, sdt_tai_xe, ten_nha_xe, sdt_nha_xe, so_xe, file_nguon, nguoi_tao, created_at, updated_at) ` +
+        `VALUES (${idx + 1}, ${escapeSql(o.rowKey)}, ${escapeSql(o.uploadId)}, ${escapeSql(o.fileName)}, ${escapeSql(o.sttFile)}, ${escapeSql(o.depot)}, ${escapeSql(o.hangTau)}, ${escapeSql(o.ngayHuyDon)}, ${escapeSql(o.ngayDuocDuyet)}, ${escapeSql(o.soBooking)}, ${escapeSql(o.soContainer)}, ${escapeSql(o.loaiContainer)}, ${escapeSql(o.loaiDonHang)}, ${Number(o.sizeTeus) || 0}, ${escapeSql(o.trangThaiDonHang)}, ${escapeSql(o.trangThaiKichHoat)}, ${escapeSql(o.thoiGianKichHoat)}, ${escapeSql(o.lyDoHuy)}, ${escapeSql(o.lyDoTuChoi)}, ${escapeSql(o.lyDoHuyCheck)}, ${escapeSql(o.tenTaiXe)}, ${escapeSql(o.sdtTaiXe)}, ${escapeSql(o.tenNhaXe)}, ${escapeSql(o.sdtNhaXe)}, ${escapeSql(o.soXe)}, ${escapeSql(o.fileName)}, ${escapeSql(o.nguoiTao)}, ${escapeSql(o.createdAt)}, ${escapeSql(o.updatedAt)});`
       );
     });
 
@@ -1211,6 +1215,7 @@ function insertVerificationRecords(records, metadata = {}, shouldPersist = true)
       sdtTaiXe: r.sdtTaiXe || "",
       tenNhaXe: r.tenNhaXe || "",
       sdtNhaXe: r.sdtNhaXe || "",
+      soXe: r.soXe || "",
       nguoiTao: r.nguoiTao || "",
       createdAt: nowStr,
       updatedAt: nowStr
@@ -1236,13 +1241,14 @@ function insertVerificationRecords(records, metadata = {}, shouldPersist = true)
             row_key, upload_id, file_name, stt_file, depot, hang_tau, ngay_huy_don, ngay_duoc_duyet,
             so_booking, so_container, loai_container, loai_don_hang, size_teus, trang_thai_don_hang,
             trang_thai_kich_hoat, thoi_gian_kich_hoat, ly_do_huy, ly_do_tu_choi, ly_do_huy_check,
-            ten_tai_xe, sdt_tai_xe, ten_nha_xe, sdt_nha_xe, file_nguon, nguoi_tao, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ten_tai_xe, sdt_tai_xe, ten_nha_xe, sdt_nha_xe, so_xe, file_nguon, nguoi_tao, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(row_key) DO UPDATE SET
             upload_id=excluded.upload_id,
             file_name=excluded.file_name,
             trang_thai_don_hang=excluded.trang_thai_don_hang,
             ngay_duoc_duyet=excluded.ngay_duoc_duyet,
+            so_xe=excluded.so_xe,
             nguoi_tao=excluded.nguoi_tao,
             updated_at=excluded.updated_at
         `);
@@ -1252,7 +1258,7 @@ function insertVerificationRecords(records, metadata = {}, shouldPersist = true)
           orderData.soContainer, orderData.loaiContainer, orderData.loaiDonHang, orderData.sizeTeus,
           orderData.trangThaiDonHang, orderData.trangThaiKichHoat, orderData.thoiGianKichHoat,
           orderData.lyDoHuy, orderData.lyDoTuChoi, orderData.lyDoHuyCheck, orderData.tenTaiXe,
-          orderData.sdtTaiXe, orderData.tenNhaXe, orderData.sdtNhaXe, orderData.fileName,
+          orderData.sdtTaiXe, orderData.tenNhaXe, orderData.sdtNhaXe, orderData.soXe, orderData.fileName,
           orderData.nguoiTao, orderData.createdAt, orderData.updatedAt
         );
       } catch (err) {}

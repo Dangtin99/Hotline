@@ -352,7 +352,15 @@
     // ----------------------------------------------------
     // VÒNG 2: Kiểm tra tiếp các đơn ở phần đệm có Khác Số Booking
     // Khóa xét: Số Container + Chiều + Người tạo
-    // (Nếu người tạo trống, xét theo Số Container + Chiều)
+    // Hàm chuẩn hóa biển số xe để so khớp (bỏ khoảng trắng, dấu gạch ngang, chấm)
+    function cleanTruckPlate(t) {
+      if (!t || t === "-" || t === "null" || t === "undefined") return "";
+      return String(t).toUpperCase().replace(/[^A-Z0-9]/g, "");
+    }
+
+    // ----------------------------------------------------
+    // VÒNG 2: Quét phần đệm cho các đơn khác Booking
+    // gom theo: Số Container + Chiều + Người tạo + SỐ XE
     // ----------------------------------------------------
     const pass2Map = new Map();
     const candidatesForPass3 = [];
@@ -362,16 +370,17 @@
       const cont = (candidate.soContainer || "").trim().toUpperCase();
       const dir = (candidate.loaiDonHang || "").trim().toUpperCase();
       const creator = (singleRecord.nguoiTao || "").toString().trim().toUpperCase();
+      const truck = cleanTruckPlate(singleRecord.soXe);
 
-      // Nếu không có số container hợp lệ hoặc không đủ điều kiện Pass 2
+      // Nếu không có số container hợp lệ hoặc không đủ người tạo / số xe
       // Chuyển tiếp thẳng vào danh sách ứng viên Pass 3 để kiểm tra các đơn OUT
-      if (!cont || cont === "-" || cont === "CHUA_CO_CONT" || !creator || creator === "-" || creator === "UNKNOWN" || creator === "UNDEFINED") {
+      if (!cont || cont === "-" || cont === "CHUA_CO_CONT" || !creator || creator === "-" || !truck) {
         candidatesForPass3.push(candidate);
         return;
       }
 
-      // Khóa gom Vòng 2: Container + Chiều + Người tạo (Bắt buộc trùng chính xác người tạo)
-      const pass2Key = `${cont}__${dir}__${creator}`;
+      // Khóa gom Vòng 2: Container + Chiều + Người tạo + Số xe
+      const pass2Key = `${cont}__${dir}__${creator}__${truck}`;
 
       if (!pass2Map.has(pass2Key)) {
         pass2Map.set(pass2Key, {
@@ -379,6 +388,7 @@
           soContainer: cont,
           loaiDonHang: dir,
           nguoiTaoKey: creator,
+          truckKey: truck,
           memberGroups: []
         });
       }
@@ -434,6 +444,7 @@
     // 2. Người tạo (Bắt buộc trùng chính xác người tạo hợp lệ)
     // 3. Depot
     // 4. Hãng tàu
+    // 5. Số xe (Bắt buộc trùng chính xác số xe vận chuyển)
     // ----------------------------------------------------
     const pass3Map = new Map();
 
@@ -443,12 +454,13 @@
       const creator = (singleRecord.nguoiTao || "").toString().trim().toUpperCase();
       const depot = (singleRecord.depot || candidate.depot || "").toString().trim().toUpperCase();
       const line = (singleRecord.hangTau || candidate.hangTau || "").toString().trim().toUpperCase();
+      const truck = cleanTruckPlate(singleRecord.soXe);
 
-      // Chỉ xét đơn chiều OUT và bắt buộc có người tạo, depot, hãng tàu
+      // Chỉ xét đơn chiều OUT và bắt buộc có người tạo, depot, hãng tàu, số xe
       const isValidCreator = creator && creator !== "-" && creator !== "UNKNOWN" && creator !== "UNDEFINED";
       const isOutDirection = dir === "OUT";
 
-      if (!isOutDirection || !isValidCreator || !depot || depot === "-" || !line || line === "-") {
+      if (!isOutDirection || !isValidCreator || !depot || depot === "-" || !line || line === "-" || !truck) {
         finalizedGroups.push({
           ...candidate,
           matchType: "SINGLE"
@@ -456,8 +468,8 @@
         return;
       }
 
-      // Khóa gom Vòng 3: OUT + Người tạo + Depot + Hãng tàu
-      const pass3Key = `OUT__${creator}__${depot}__${line}`;
+      // Khóa gom Vòng 3: OUT + Người tạo + Depot + Hãng tàu + Số xe
+      const pass3Key = `OUT__${creator}__${depot}__${line}__${truck}`;
 
       if (!pass3Map.has(pass3Key)) {
         pass3Map.set(pass3Key, {
@@ -465,6 +477,7 @@
           creator,
           depot,
           line,
+          truck,
           memberGroups: []
         });
       }
@@ -549,6 +562,7 @@
         tenTaiXe: latest.tenTaiXe || first.tenTaiXe || "-",
         sdtTaiXe: latest.sdtTaiXe || first.sdtTaiXe || "-",
         tenNhaXe: latest.tenNhaXe || first.tenNhaXe || "-",
+        soXe: latest.soXe || first.soXe || "-",
         nguoiTao: latest.nguoiTao || first.nguoiTao || "-",
         matchType: g.matchType || "SINGLE",
         allBookings: g.allBookings || [g.soBooking],
@@ -682,7 +696,7 @@
       if (rebookVal === "rebooked" && o.totalAttempts < 2) return false;
       if (rebookVal === "high_rebooked" && o.totalAttempts < 3) return false;
 
-      // 7. Tìm nhanh theo Booking, Cont, Tài xế, Nhà xe, Hãng tàu, Người tạo
+      // 7. Tìm nhanh theo Booking, Cont, Tài xế, Nhà xe, Hãng tàu, Người tạo, Số xe
       if (term) {
         const matchBooking = o.soBooking && o.soBooking.toLowerCase().includes(term);
         const matchCont = o.soContainer && o.soContainer.toLowerCase().includes(term);
@@ -691,7 +705,8 @@
         const matchTransporter = o.tenNhaXe && o.tenNhaXe.toLowerCase().includes(term);
         const matchLine = o.hangTau && o.hangTau.toLowerCase().includes(term);
         const matchCreator = o.nguoiTao && o.nguoiTao.toLowerCase().includes(term);
-        if (!matchBooking && !matchCont && !matchDriver && !matchPhone && !matchTransporter && !matchLine && !matchCreator) {
+        const matchTruck = o.soXe && o.soXe.toLowerCase().includes(term);
+        if (!matchBooking && !matchCont && !matchDriver && !matchPhone && !matchTransporter && !matchLine && !matchCreator && !matchTruck) {
           return false;
         }
       }
@@ -756,7 +771,7 @@
     if (total === 0) {
       tbodyRebookingData.innerHTML = `
         <tr>
-          <td colspan="15" class="text-center py-4" style="color:var(--text-muted);font-weight:500;">
+          <td colspan="17" class="text-center py-4" style="color:var(--text-muted);font-weight:500;">
             Không tìm thấy đơn hàng nào phù hợp với điều kiện lọc hiện tại.
           </td>
         </tr>
@@ -841,6 +856,7 @@
           <td>${escapeHtml(formatDateDisplay(o.latestDate))}</td>
           <td>${escapeHtml(formatDateDisplay(o.firstDate))}</td>
           <td>${escapeHtml(o.nguoiTao)}</td>
+          <td><strong>${escapeHtml(o.soXe || "-")}</strong></td>
           <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(o.tenNhaXe || "")}">${escapeHtml(o.tenNhaXe)}</td>
           <td class="text-center">
             <button type="button" class="btn btn-outline btn-sm" onclick="event.stopPropagation(); window.viewRebookingHistory('${escapeHtml(o.groupKey)}')" style="padding:3px 8px;font-size:12px;">
@@ -944,6 +960,7 @@
             <td style="font-size:12px;color:#dc2626;"><span class="cell-truncate-1line" title="${escapeHtml(r.lyDoHuy || "")}">${escapeHtml(r.lyDoHuy || "-")}</span></td>
             <td style="font-size:12px;color:#b45309;"><span class="cell-truncate-1line" title="${escapeHtml(r.lyDoTuChoi || "")}">${escapeHtml(r.lyDoTuChoi || "-")}</span></td>
             <td style="font-size:12px;white-space:nowrap;">${escapeHtml(r.tenTaiXe || "-")}${r.sdtTaiXe ? ` <span style="color:var(--text-muted);font-size:11px;">(${escapeHtml(r.sdtTaiXe)})</span>` : ''}</td>
+            <td style="font-size:12px;font-weight:600;">${escapeHtml(r.soXe || "-")}</td>
             <td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.tenNhaXe || "")}">${escapeHtml(r.tenNhaXe || "-")}</td>
             <td>${escapeHtml(r.nguoiTao || "-")}</td>
             <td style="font-size:11px;color:var(--text-muted);">${escapeHtml(r.fileName || "-")}</td>
@@ -1014,6 +1031,7 @@
         "Cập Nhật Mới Nhất": formatDateDisplay(o.latestDate),
         "Ngày Khởi Tạo Lần Đầu": formatDateDisplay(o.firstDate),
         "Người Tạo": o.nguoiTao,
+        "Số Xe": o.soXe,
         "Tài Xế Mới Nhất": o.tenTaiXe,
         "SĐT Tài Xế": o.sdtTaiXe,
         "Đơn Vị Vận Tải": o.tenNhaXe

@@ -1,5 +1,25 @@
 const path = require("path");
 const fs = require("fs");
+
+// Nạp biến môi trường từ .env nếu chưa có trong process.env
+const envPath = path.join(__dirname, ".env");
+if (fs.existsSync(envPath)) {
+  try {
+    const lines = fs.readFileSync(envPath, "utf8").split(/\r?\n/);
+    lines.forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) return;
+      const idx = trimmed.indexOf("=");
+      if (idx !== -1) {
+        const key = trimmed.substring(0, idx).trim();
+        const val = trimmed.substring(idx + 1).trim();
+        if (!process.env[key]) {
+          process.env[key] = val;
+        }
+      }
+    });
+  } catch (e) {}
+}
 const express = require("express");
 const cors = require("cors");
 const compression = require("compression");
@@ -68,7 +88,8 @@ const {
   setUserActive,
   resetPassword,
   changePassword,
-  parseDepots
+  parseDepots,
+  revokeToken    // Fix #13
 } = require("./services/authService");
 
 /**
@@ -128,18 +149,28 @@ function loadHistory() {
 }
 
 async function saveHistoryAsync(historyItem) {
+  // 1. Lưu local trước (nguồn gốc nhanh chóng khi có local filesystem)
+  let localSaved = false;
+  try {
+    const list = loadHistory();
+    list.unshift(historyItem);
+    saveHistory(list);
+    localSaved = true;
+  } catch (e) {
+    console.warn("[History] Không lưu được local (có thể filesystem read-only):", e.message);
+  }
+
+  // 2. Lưu Turso Cloud (nguồn lưu trữ bền vững)
   if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       await tursoClient.saveUploadHistoryItemToTurso(historyItem);
     } catch (e) {
       console.error("[Turso] Lỗi lưu lịch sử đăng tải lên Turso:", e.message);
+      if (!localSaved) {
+        console.error("[CRITICAL] Không thể lưu upload history vào bất kỳ kho lưu trữ nào!");
+      }
     }
   }
-  try {
-    const list = loadHistory();
-    list.unshift(historyItem);
-    saveHistory(list);
-  } catch (e) {}
 }
 
 function saveHistory(historyList) {
@@ -202,12 +233,12 @@ function saveVerificationHistory(historyList) {
   }
 }
 
-// Khởi tạo bản ghi mẫu ban đầu vào lịch sử nếu trống hoặc cập nhật records
-(function initDefaultSample() {
-  let history = loadHistory();
-  const sampleFilePath = path.join(__dirname, "sample-data", "mau_bao_cao_don_huy.csv");
-  if (fs.existsSync(sampleFilePath)) {
-    try {
+// Fix #16: Khởi tạo bản ghi mẫu ban đầu vào lịch sử nếu trống (chạy bất đồng bộ qua setImmediate để không block startup)
+setImmediate(() => {
+  try {
+    let history = loadHistory();
+    const sampleFilePath = path.join(__dirname, "sample-data", "mau_bao_cao_don_huy.csv");
+    if (fs.existsSync(sampleFilePath)) {
       const content = fs.readFileSync(sampleFilePath, "utf8");
       const validation = validateAgainstSqlSchema(content);
       const records = parseCancellationFile(content);
@@ -249,15 +280,39 @@ function saveVerificationHistory(historyList) {
           uploadedAt: "2026-10-02 08:30:00"
         });
       }
-    } catch (e) {
-      console.error("Lỗi khởi tạo mẫu:", e.message);
     }
+  } catch (e) {
+    console.error("Lỗi khởi tạo mẫu:", e.message);
   }
-})();
+});
 
 // Cấu hình Middleware
 app.use(compression());
-app.use(cors());
+
+// Fix #1: Kiểm soát CORS Origin an toàn và tương thích
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim()).filter(Boolean)
+  : null;
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Cho phép các request nội bộ (same-origin, local apps, Postman, server-to-server không có origin header)
+    if (!origin) return callback(null, true);
+    if (!ALLOWED_ORIGINS || ALLOWED_ORIGINS.length === 0 || ALLOWED_ORIGINS.includes("*")) {
+      return callback(null, true);
+    }
+    if (ALLOWED_ORIGINS.includes(origin)) {
+      return callback(null, true);
+    }
+    // Cho phép localhost và 127.0.0.1 mặc định
+    if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`Origin '${origin}' không được phép truy cập theo chính sách bảo mật CORS.`));
+  },
+  credentials: true
+}));
+
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use(express.static(path.join(__dirname, "public"), {
@@ -272,9 +327,21 @@ app.use(express.static(path.join(__dirname, "public"), {
 app.use("/vendor/xlsx-style", express.static(path.join(__dirname, "node_modules", "xlsx-js-style", "dist")));
 app.use("/vendor/xlsx", express.static(path.join(__dirname, "node_modules", "xlsx", "dist")));
 
+// Fix #15: Validate đuôi tệp tin trong multer
+const ALLOWED_EXTENSIONS = new Set([".xlsx", ".xls", ".csv"]);
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 30 * 1024 * 1024 } // 30MB
+  limits: { fileSize: 30 * 1024 * 1024 }, // 30MB
+  fileFilter: (req, file, cb) => {
+    if (!file || !file.originalname) {
+      return cb(null, true);
+    }
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!ALLOWED_EXTENSIONS.has(ext)) {
+      return cb(new Error("Định dạng file không hợp lệ. Chỉ chấp nhận các file bảng tính .xlsx, .xls, .csv"));
+    }
+    cb(null, true);
+  }
 });
 
 /**
@@ -381,6 +448,19 @@ app.post("/api/auth/change-password", authRequired, (req, res) => {
  * API: Đăng xuất
  */
 app.post("/api/auth/logout", (req, res) => {
+  // Fix #13: Thu hồi token trong blacklist
+  let token = null;
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.substring(7).trim();
+  } else if (req.query && req.query.token) {
+    token = req.query.token;
+  } else if (req.body && req.body.token) {
+    token = req.body.token;
+  }
+  if (token) {
+    revokeToken(token);
+  }
   return res.json({ success: true, message: "Đã đăng xuất thành công." });
 });
 
@@ -410,8 +490,18 @@ app.post("/api/admin/users/:id/toggle-active", adminRequired, (req, res) => {
     const { id } = req.params;
     const { isActive } = req.body;
 
-    // Tránh admin tự vô hiệu hóa tài khoản của chính mình
-    if (String(id).toLowerCase() === String(req.user.username).toLowerCase() && !isActive) {
+    // Fix #17: Tìm user mục tiêu để kiểm tra username chính xác (tránh trường hợp dùng numeric ID)
+    const allUsers = getAllUsers();
+    const targetUser = allUsers.find(
+      u => String(u.username).toLowerCase() === String(id).toLowerCase() ||
+           String(u.id) === String(id)
+    );
+
+    if (!targetUser) {
+      return res.status(404).json({ success: false, message: `Không tìm thấy người dùng: ${id}` });
+    }
+
+    if (String(targetUser.username).toLowerCase() === String(req.user.username).toLowerCase() && !isActive) {
       return res.status(400).json({
         success: false,
         message: "Không thể tự vô hiệu hóa tài khoản quản trị viên đang đăng nhập."
@@ -1462,7 +1552,7 @@ app.get("/api/sample", authRequired, (req, res) => {
  * Health check
  */
 app.get("/health", (req, res) => {
-  res.json({ status: "ok", app: "Logistics Cancellation Analytics Engine", time: new Date() });
+  res.json({ status: "ok" });
 });
 
 if (require.main === module) {

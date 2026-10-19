@@ -245,6 +245,7 @@ function applyFilters() {
         (r.soBooking && String(r.soBooking).toLowerCase().includes(term)) ||
         (r.soContainer && String(r.soContainer).toLowerCase().includes(term)) ||
         (r.nguoiTao && String(r.nguoiTao).toLowerCase().includes(term)) ||
+        (r.soXe && String(r.soXe).toLowerCase().includes(term)) ||
         (r.tenTaiXe && String(r.tenTaiXe).toLowerCase().includes(term)) ||
         (r.sdtTaiXe && String(r.sdtTaiXe).toLowerCase().includes(term)) ||
         (r.tenNhaXe && String(r.tenNhaXe).toLowerCase().includes(term)) ||
@@ -358,6 +359,7 @@ function renderTable() {
         <td>${escapeHtml(r.tenTaiXe || "-")}</td>
         <td>${escapeHtml(r.sdtTaiXe || "-")}</td>
         <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.tenNhaXe || "")}">${escapeHtml(r.tenNhaXe || "-")}</td>
+        <td><strong>${escapeHtml(r.soXe || "-")}</strong></td>
         <td>${escapeHtml(r.nguoiTao || "-")}</td>
         <td style="font-size:12px;color:var(--text-muted);">${escapeHtml(r.fileName || "-")}</td>
       </tr>
@@ -477,6 +479,10 @@ window.viewOrderDetail = function(key) {
       <div class="detail-item">
         <label>Số Điện Thoại Tài Xế</label>
         <div>${escapeHtml(item.sdtTaiXe || "-")}</div>
+      </div>
+      <div class="detail-item">
+        <label>Biển Số Xe Vận Chuyển</label>
+        <div><strong>${escapeHtml(item.soXe || "-")}</strong></div>
       </div>
       <div class="detail-item full-width">
         <label>Đơn Vị Vận Tải (Nhà Xe)</label>

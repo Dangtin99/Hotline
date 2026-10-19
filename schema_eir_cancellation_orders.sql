@@ -42,6 +42,7 @@ CREATE TABLE eir_cancellation_orders (
     sdt_tai_xe VARCHAR(50),                                    -- Số điện thoại liên lạc tài xế
     ten_nha_xe VARCHAR(255),                                   -- Tên công ty / đơn vị vận tải
     sdt_nha_xe VARCHAR(50),                                    -- Số điện thoại liên lạc nhà xe (nếu có)
+    so_xe VARCHAR(50),                                         -- Biển số xe / Số xe vận chuyển
     
     -- Quản trị hệ thống & Nhật ký kiểm toán (Audit Trail)
     file_nguon VARCHAR(255),                                   -- Tên tệp dữ liệu nguồn tải lên

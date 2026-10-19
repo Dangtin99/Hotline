@@ -10,7 +10,32 @@ const path = require("path");
 const DATA_DIR = path.join(__dirname, "..", "data");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
 const DB_SQLITE_PATH = path.join(DATA_DIR, "cancellation_orders.db");
-const JWT_SECRET = process.env.JWT_SECRET || "gpg_logistics_cancellation_analytics_secret_2026_xyz";
+// Tự động nạp cấu hình từ .env nếu chưa được inject vào process.env
+const envPath = path.join(__dirname, "..", ".env");
+if (fs.existsSync(envPath)) {
+  try {
+    const lines = fs.readFileSync(envPath, "utf8").split(/\r?\n/);
+    lines.forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) return;
+      const idx = trimmed.indexOf("=");
+      if (idx !== -1) {
+        const key = trimmed.substring(0, idx).trim();
+        const val = trimmed.substring(idx + 1).trim();
+        if (!process.env[key]) {
+          process.env[key] = val;
+        }
+      }
+    });
+  } catch (e) {}
+}
+
+// Fix #2: JWT_SECRET phải được cấu hình từ biến môi trường hoặc file .env, không có fallback cứng
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error("[FATAL] JWT_SECRET chưa được cấu hình trong .env. Server dừng để bảo vệ dữ liệu.");
+  process.exit(1);
+}
 
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -21,7 +46,33 @@ try {
   tursoClient = require("./tursoClient");
 } catch (e) {}
 
+// Fix #13: Token blacklist để invalidate token khi logout (Map: token → expireTime)
+const _tokenBlacklist = new Map();
+// Tự dọn dẹp các token đã hết hạn mỗi 30 phút
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, expireTime] of _tokenBlacklist) {
+    if (expireTime < now) _tokenBlacklist.delete(token);
+  }
+}, 30 * 60 * 1000).unref(); // .unref() để không block process exit
+
+function revokeToken(token, expireTime) {
+  if (token) _tokenBlacklist.set(token, expireTime || Date.now() + 7 * 24 * 60 * 60 * 1000);
+}
+
+function isTokenRevoked(token) {
+  return _tokenBlacklist.has(token);
+}
+
+// Fix #14: Cache TTL cho user list (60 giây)
 let memoryUsersCache = null;
+let _memoryCacheTimestamp = 0;
+const USER_CACHE_TTL_MS = 60 * 1000;
+
+function invalidateUsersCache() {
+  memoryUsersCache = null;
+  _memoryCacheTimestamp = 0;
+}
 
 // Kết nối SQLite tích hợp của Node.js
 let sqliteEngine = null;
@@ -62,9 +113,32 @@ function parseDepots(val) {
   return ["ALL"];
 }
 
-// Hàm mã hóa mật khẩu an toàn với PBKDF2 và muối (Salt)
+// Fix #4: PBKDF2 — 600,000 iterations (OWASP 2023 standard)
+// hashPassword: phiên bản mới, dùng cho mọi mật khẩu mới / được đổi
 function hashPassword(password, salt) {
+  return crypto.pbkdf2Sync(password, salt, 600_000, 64, "sha512").toString("hex");
+}
+
+// hashPasswordLegacy: phiên bản cũ (1000 iterations) — dùng để kiểm tra user cũ chưa re-hash
+function hashPasswordLegacy(password, salt) {
   return crypto.pbkdf2Sync(password, salt, 1000, 64, "sha512").toString("hex");
+}
+
+// Fix #5: Kiểm tra độ mạnh mật khẩu
+function validatePasswordStrength(password) {
+  if (!password || password.length < 8) {
+    throw new Error("Mật khẩu phải có ít nhất 8 ký tự.");
+  }
+  if (!/[A-Za-z]/.test(password)) {
+    throw new Error("Mật khẩu phải chứa ít nhất 1 chữ cái.");
+  }
+  if (!/[0-9]/.test(password)) {
+    throw new Error("Mật khẩu phải chứa ít nhất 1 chữ số.");
+  }
+  const WEAK_PASSWORDS = ["123456789@", "password", "12345678", "admin123", "123456789"];
+  if (WEAK_PASSWORDS.includes(password)) {
+    throw new Error("Mật khẩu quá đơn giản. Vui lòng chọn mật khẩu khác.");
+  }
 }
 
 // 8 Tài khoản chuẩn theo yêu cầu của hệ thống kèm phân quyền Depot trực thuộc
@@ -209,9 +283,12 @@ function seedDefaultUsers() {
   return finalUsers;
 }
 
-// Đọc danh sách tài khoản từ Memory Cache, SQLite hoặc File JSON
+// Đọc danh sách tài khoản từ Memory Cache (TTL 60s), SQLite hoặc File JSON
 function loadUsers() {
-  if (memoryUsersCache && Array.isArray(memoryUsersCache) && memoryUsersCache.length > 0) {
+  const now = Date.now();
+  // Fix #14: Cache hợp lệ trong 60 giây
+  if (memoryUsersCache && Array.isArray(memoryUsersCache) &&
+      memoryUsersCache.length > 0 && (now - _memoryCacheTimestamp) < USER_CACHE_TTL_MS) {
     return memoryUsersCache;
   }
 
@@ -236,6 +313,7 @@ function loadUsers() {
           };
         });
         memoryUsersCache = users;
+        _memoryCacheTimestamp = Date.now();
         return users;
       }
     } catch (e) {
@@ -256,6 +334,7 @@ function loadUsers() {
           };
         });
         memoryUsersCache = users;
+        _memoryCacheTimestamp = Date.now();
         return users;
       }
     }
@@ -322,6 +401,9 @@ function syncUserToStorage(user) {
       console.warn("[Turso] Lỗi đồng bộ user lên Turso:", err.message);
     });
   }
+
+  // Fix #14: Invalidate cache sau khi update để loadUsers lần sau đọc fresh data
+  invalidateUsersCache();
 }
 
 // Khởi tạo các tài khoản mẫu và kéo quyền mới nhất từ Turso Cloud
@@ -374,6 +456,10 @@ function generateToken(user) {
 // Xác thực Token & Kiểm tra tức thời trạng thái isActive của user
 function verifyToken(token) {
   if (!token || typeof token !== "string") return null;
+
+  // Fix #13: Từ chối token đã bị revoke (logout)
+  if (isTokenRevoked(token)) return null;
+
   const parts = token.split(".");
   if (parts.length !== 3) return null;
 
@@ -383,7 +469,16 @@ function verifyToken(token) {
     .update(`${header}.${payload}`)
     .digest("base64url");
 
-  if (signature !== expectedSig) return null;
+  // Fix #3: So sánh chữ ký bằng timingSafeEqual để chống Timing Attack
+  try {
+    const sigBuf = Buffer.from(signature);
+    const expBuf = Buffer.from(expectedSig);
+    if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+      return null;
+    }
+  } catch (e) {
+    return null;
+  }
 
   try {
     const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
@@ -431,24 +526,54 @@ function authenticate(username, password) {
     };
   }
 
-  const hash = hashPassword(password, user.salt);
-  if (hash !== user.passwordHash) {
-    return { success: false, message: "Tên đăng nhập hoặc mật khẩu không chính xác." };
+  // Fix #4: Kiểm tra password với backward compatibility
+  // Thử hash mới (600k iterations) trước
+  const hashNew = hashPassword(password, user.salt);
+  if (hashNew === user.passwordHash) {
+    const token = generateToken(user);
+    return {
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        fullName: user.fullName,
+        role: user.role,
+        roleLabel: user.role === "admin" ? "Quản trị viên" : "Người dùng",
+        assignedDepots: parseDepots(user.assignedDepots)
+      }
+    };
   }
 
-  const token = generateToken(user);
-  return {
-    success: true,
-    token,
-    user: {
-      id: user.id,
-      username: user.username,
-      fullName: user.fullName,
-      role: user.role,
-      roleLabel: user.role === "admin" ? "Quản trị viên" : "Người dùng",
-      assignedDepots: parseDepots(user.assignedDepots)
+  // Thử hash cũ (1000 iterations) — migration path cho user chưa re-hash
+  const hashLegacy = hashPasswordLegacy(password, user.salt);
+  if (hashLegacy === user.passwordHash) {
+    // Tự động re-hash lên chuẩn mới khi login thành công với hash cũ
+    try {
+      const newSalt = crypto.randomBytes(16).toString("hex");
+      user.salt = newSalt;
+      user.passwordHash = hashPassword(password, newSalt);
+      syncUserToStorage(user);
+      console.log(`[Security] Re-hash mật khẩu lên 600k iterations cho user: ${user.username}`);
+    } catch (e) {
+      console.warn("[Security] Không thể re-hash user:", e.message);
     }
-  };
+    const token = generateToken(user);
+    return {
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        fullName: user.fullName,
+        role: user.role,
+        roleLabel: user.role === "admin" ? "Quản trị viên" : "Người dùng",
+        assignedDepots: parseDepots(user.assignedDepots)
+      }
+    };
+  }
+
+  return { success: false, message: "Tên đăng nhập hoặc mật khẩu không chính xác." };
 }
 
 // Lấy danh sách toàn bộ người dùng (cho Admin)
@@ -517,9 +642,7 @@ function setUserActive(usernameOrId, isActive) {
 
 // Đặt lại mật khẩu cho tài khoản bất kỳ (Dành cho Admin)
 function resetPassword(usernameOrId, newPassword) {
-  if (!newPassword || newPassword.length < 6) {
-    throw new Error("Mật khẩu mới phải có ít nhất 6 ký tự.");
-  }
+  validatePasswordStrength(newPassword); // Fix #5
 
   const users = loadUsers();
   const user = users.find(
@@ -547,9 +670,7 @@ function changePassword(username, currentPassword, newPassword) {
   if (!currentPassword || !newPassword) {
     throw new Error("Vui lòng nhập đầy đủ mật khẩu hiện tại và mật khẩu mới.");
   }
-  if (newPassword.length < 6) {
-    throw new Error("Mật khẩu mới phải có ít nhất 6 ký tự.");
-  }
+  validatePasswordStrength(newPassword); // Fix #5
 
   const users = loadUsers();
   const user = users.find(u => u.username.toLowerCase() === String(username).toLowerCase());
@@ -557,8 +678,10 @@ function changePassword(username, currentPassword, newPassword) {
     throw new Error("Không tìm thấy người dùng.");
   }
 
-  const checkHash = hashPassword(currentPassword, user.salt);
-  if (checkHash !== user.passwordHash) {
+  // Fix #4: Kiểm tra password hiện tại với cả 2 phiên bản hash
+  const checkHashNew = hashPassword(currentPassword, user.salt);
+  const checkHashLegacy = hashPasswordLegacy(currentPassword, user.salt);
+  if (checkHashNew !== user.passwordHash && checkHashLegacy !== user.passwordHash) {
     throw new Error("Mật khẩu hiện tại không chính xác.");
   }
 
@@ -583,5 +706,7 @@ module.exports = {
   changePassword,
   seedDefaultUsers,
   hashPassword,
-  parseDepots
+  parseDepots,
+  revokeToken,      // Fix #13
+  isTokenRevoked    // Fix #13
 };

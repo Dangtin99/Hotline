@@ -638,6 +638,7 @@ async function getAllVerificationOrdersFromTurso() {
       sdtTaiXe: r.sdt_tai_xe,
       tenNhaXe: r.ten_nha_xe,
       sdtNhaXe: r.sdt_nha_xe,
+      soXe: r.so_xe || "",
       fileNguon: r.file_nguon,
       nguoiTao: r.nguoi_tao || "",
       createdAt: r.created_at,
@@ -670,13 +671,14 @@ async function syncVerificationOrdersToTurso(orders) {
           row_key, upload_id, file_name, stt_file, depot, hang_tau, ngay_huy_don, ngay_duoc_duyet,
           so_booking, so_container, loai_container, loai_don_hang, size_teus, trang_thai_don_hang,
           trang_thai_kich_hoat, thoi_gian_kich_hoat, ly_do_huy, ly_do_tu_choi, ly_do_huy_check,
-          ten_tai_xe, sdt_tai_xe, ten_nha_xe, sdt_nha_xe, file_nguon, nguoi_tao, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          ten_tai_xe, sdt_tai_xe, ten_nha_xe, sdt_nha_xe, so_xe, file_nguon, nguoi_tao, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
         ON CONFLICT(row_key) DO UPDATE SET
           upload_id = excluded.upload_id,
           file_name = excluded.file_name,
           trang_thai_don_hang = excluded.trang_thai_don_hang,
           ngay_duoc_duyet = excluded.ngay_duoc_duyet,
+          so_xe = excluded.so_xe,
           nguoi_tao = excluded.nguoi_tao,
           updated_at = datetime('now');
       `,
@@ -686,7 +688,7 @@ async function syncVerificationOrdersToTurso(orders) {
         o.soContainer || "", o.loaiContainer || "", o.loaiDonHang || "", Number(o.sizeTeus) || 0,
         o.trangThaiDonHang || "Chưa xác định", o.trangThaiKichHoat || "Chưa kích hoạt",
         o.thoiGianKichHoat || "", o.lyDoHuy || "", o.lyDoTuChoi || "", o.lyDoHuyCheck || "",
-        o.tenTaiXe || "", o.sdtTaiXe || "", o.tenNhaXe || "", o.sdtNhaXe || "", o.fileName || "",
+        o.tenTaiXe || "", o.sdtTaiXe || "", o.tenNhaXe || "", o.sdtNhaXe || "", o.soXe || "", o.fileName || "",
         o.nguoiTao || ""
       ]
     }));

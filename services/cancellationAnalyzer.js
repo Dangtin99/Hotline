@@ -723,6 +723,7 @@ function parseVerificationFile(input) {
     const sdtTaiXe = getVal(row, ["SĐT", "Số điện thoại tài xế", "SĐT tài xế", "Điện thoại tài xế"], ["nhà xe", "nha xe", "công ty", "đơn vị"]);
     const nhaXe = getVal(row, ["Tên nhà xe", "Đơn vị vận tải", "Đơn vị vận chuyển", "Công ty vận tải", "Tên công ty", "Nhà xe", "Ten nha xe", "Don vi van tai"], ["sđt", "sdt", "điện thoại", "phone", "tel", "tài xế", "tai xe"]);
     const sdtNhaXe = getVal(row, ["Số điện thoại nhà xe", "SĐT nhà xe", "SDT nhà xe", "Số điện thoại đơn vị vận tải", "SĐT đơn vị vận tải", "SDT đơn vị vận tải", "Điện thoại nhà xe", "SĐT công ty", "SDT cong ty", "So dien thoai nha xe", "Sdt nha xe"], ["tài xế", "tai xe"]);
+    const soXe = getVal(row, ["Số xe", "Số Xe", "Biển số xe", "Biển số", "Bien so xe", "So xe", "Biển Số Xe", "Truck no", "Truck"]);
     const nguoiTao = getVal(row, ["Người tạo", "Nguoi tao", "Người tạo đơn", "Nguoi tao don", "Created by", "User tạo", "Tài khoản tạo", "User tao"]);
 
     let loaiDonHang = "N/A";
@@ -760,6 +761,7 @@ function parseVerificationFile(input) {
       sdtTaiXe: sdtTaiXe || null,
       tenNhaXe: nhaXe || null,
       sdtNhaXe: sdtNhaXe || null,
+      soXe: soXe || null,
       nguoiTao: nguoiTao || null
     });
   }

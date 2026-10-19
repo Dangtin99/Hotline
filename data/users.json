@@ -3,15 +3,15 @@
     "id": "1",
     "fullName": "ADMIN",
     "username": "admin",
-    "passwordHash": "c4723e301be8f7a7480966ed5f95a1136f613eb67074a41b6779feda1c2ffee90c7f733d61ee54f436685ac13a92dfc6daf2ba8cd62a63b5751a9111325eb8af",
-    "salt": "c67bf41bc607f1bbb2ed6c32db72ce28",
+    "passwordHash": "a6458e4a02d116aa5f784325e7b94631dfd41d514d4900a5b48e27acbcfca2206749cf5ed09719d7ae53d69cdeb706fafd75fde8fa3af26370a9216009a8f4eb",
+    "salt": "035418fbbdd75c8d9a312e4e54756c9b",
     "role": "admin",
     "assignedDepots": [
       "ALL"
     ],
     "isActive": true,
     "createdAt": "2026-10-03 02:56:19",
-    "updatedAt": "2026-10-03 02:56:19"
+    "updatedAt": "2026-10-19 02:12:12"
   },
   {
     "id": "2",
@@ -102,7 +102,7 @@
     "updatedAt": "2026-10-12 13:17:39"
   },
   {
-    "id": "1792032460909",
+    "id": "12",
     "fullName": "ADMIN 01",
     "username": "admin_01",
     "passwordHash": "db5d06bd889671577aec50880f6389280e167870e2dbd82d531cf5899b3088201f8bc73367691bba0b293bb9df70f6bd224bebd5aaeea29d952fd8a64c7ead08",
@@ -111,7 +111,7 @@
     "assignedDepots": [
       "ALL"
     ],
-    "isActive": 1,
+    "isActive": true,
     "createdAt": "2026-10-15 02:47:40",
     "updatedAt": "2026-10-15 02:47:40"
   }
