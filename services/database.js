@@ -2214,6 +2214,14 @@ async function clearDatabaseAsync() {
 }
 
 async function getAllVerificationRecordsAsync(forceRefresh = false) {
+  // 0. Tối ưu siêu tốc (In-Memory Cache): Trả về ngay nếu cache RAM đã có sẵn và không yêu cầu forceRefresh
+  if (!forceRefresh && Array.isArray(memoryVerificationOrders) && memoryVerificationOrders.length > 0) {
+    return memoryVerificationOrders.map((o, idx) => ({
+      ...o,
+      sttFile: String(idx + 1)
+    }));
+  }
+
   // 1. Nếu Turso Cloud khả dụng -> Turso là Nguồn Chân Lý duy nhất
   if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
