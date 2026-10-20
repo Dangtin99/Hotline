@@ -2509,64 +2509,24 @@ function renderHourlyDepotChart(selectedDepot, records = []) {
     pointHoverRadius: 6
   };
 
-  const datasets = [];
-  if (currentDashboardTab === "unpaid") {
-    datasets.push(unpaidDataset);
-    if (showHourlyTotalLine) {
-      datasets.push({
-        label: "Tham chiếu Đơn Hủy",
-        data: cancelledHours,
-        borderColor: "#94a3b8",
-        backgroundColor: "rgba(148, 163, 184, 0.05)",
-        borderWidth: 1.8,
-        borderDash: [4, 4],
-        tension: 0.35,
-        fill: false,
-        pointBackgroundColor: "#94a3b8",
-        pointBorderColor: "#ffffff",
-        pointBorderWidth: 1.2,
-        pointRadius: 3,
-        pointHoverRadius: 5
-      });
-    }
-  } else if (currentDashboardTab === "cancelled") {
-    datasets.push(cancelDataset);
-    if (showHourlyTotalLine) {
-      datasets.push({
-        label: "Tham chiếu Chưa Thanh Toán",
-        data: unpaidHours,
-        borderColor: "#94a3b8",
-        backgroundColor: "rgba(148, 163, 184, 0.05)",
-        borderWidth: 1.8,
-        borderDash: [4, 4],
-        tension: 0.35,
-        fill: false,
-        pointBackgroundColor: "#94a3b8",
-        pointBorderColor: "#ffffff",
-        pointBorderWidth: 1.2,
-        pointRadius: 3,
-        pointHoverRadius: 5
-      });
-    }
-  } else {
-    datasets.push(cancelDataset, unpaidDataset);
-    if (showHourlyTotalLine) {
-      datasets.push({
-        label: "Tổng phát sinh (Hủy + Chưa TT)",
-        data: combinedHours,
-        borderColor: "#2563eb",
-        backgroundColor: currentHourlyChartType === "bar" ? "rgba(37, 99, 235, 0.85)" : "rgba(37, 99, 235, 0.08)",
-        borderWidth: 2.2,
-        borderDash: currentHourlyChartType === "line" ? [5, 5] : undefined,
-        tension: 0.35,
-        fill: false,
-        pointBackgroundColor: "#2563eb",
-        pointBorderColor: "#ffffff",
-        pointBorderWidth: 1.5,
-        pointRadius: 4,
-        pointHoverRadius: 6
-      });
-    }
+  // Luôn hiển thị cả 2 đường: Đơn Chưa Thanh Toán và Đơn Hủy theo từng khung giờ
+  const datasets = [cancelDataset, unpaidDataset];
+  if (showHourlyTotalLine) {
+    datasets.push({
+      label: "Tổng phát sinh (Hủy + Chưa TT)",
+      data: combinedHours,
+      borderColor: "#2563eb",
+      backgroundColor: currentHourlyChartType === "bar" ? "rgba(37, 99, 235, 0.85)" : "rgba(37, 99, 235, 0.08)",
+      borderWidth: 2.2,
+      borderDash: currentHourlyChartType === "line" ? [5, 5] : undefined,
+      tension: 0.35,
+      fill: false,
+      pointBackgroundColor: "#2563eb",
+      pointBorderColor: "#ffffff",
+      pointBorderWidth: 1.5,
+      pointRadius: 4,
+      pointHoverRadius: 6
+    });
   }
 
   const chartTitleScope = selectedDepot === "ALL" ? `Tất Cả Depot Phân Quyền (${depots.length} Depot)` : `Depot ${selectedDepot}`;
@@ -2605,21 +2565,12 @@ function renderHourlyDepotChart(selectedDepot, records = []) {
               return `Khung giờ: ${hLabel} - ${nextHour}:00 (${chartTitleScope})`;
             },
             footer: (items) => {
-              if (currentDashboardTab === "unpaid") {
-                const u = items.find(it => it.dataset.label.includes("chưa thanh toán"));
-                const uVal = u ? Number(u.raw) || 0 : 0;
-                return `Đơn Chưa Thanh Toán: ${uVal} đơn`;
-              }
-              if (currentDashboardTab === "cancelled") {
-                const c = items.find(it => it.dataset.label.includes("đơn hủy"));
-                const cVal = c ? Number(c.raw) || 0 : 0;
-                return `Đơn Đã Hủy: ${cVal} đơn`;
-              }
               let cancelVal = 0;
               let unpaidVal = 0;
               items.forEach(it => {
-                if (it.datasetIndex === 0) cancelVal = Number(it.raw) || 0;
-                if (it.datasetIndex === 1) unpaidVal = Number(it.raw) || 0;
+                const label = (it.dataset && it.dataset.label) ? it.dataset.label.toLowerCase() : "";
+                if (label.includes("hủy")) cancelVal = Number(it.raw) || 0;
+                if (label.includes("chưa thanh toán")) unpaidVal = Number(it.raw) || 0;
               });
               const sum = cancelVal + unpaidVal;
               return `Tổng phát sinh: ${sum} đơn (Hủy: ${cancelVal}, Chưa TT: ${unpaidVal})`;
@@ -2820,21 +2771,188 @@ function getExplanationGroup(rawVal) {
   return "";
 }
 
-// Render Bảng Thống Kê Top Depot & Hãng Tàu Có Số Lượng Đơn Hủy Nhiều Nhất Kèm Lý Do Phổ Biến
+// Biến trạng thái lưu trữ dữ liệu và số lượng dòng hiển thị của bảng Thống Kê Depot - Hãng Tàu
+let currentTopDepotLineRecords = [];
+let currentTopDepotLineLimit = 10; // 5, 10 hoặc 'ALL'
+let currentTopDepotLineData = [];
+
+/**
+ * Mở modal chi tiết danh sách đơn hàng cho cặp Depot & Hãng tàu
+ */
+window.openTopDepotLineDetailModal = function(depot, hangTau) {
+  if (!currentTopDepotLineRecords || currentTopDepotLineRecords.length === 0) {
+    if (typeof showAlert === "function") showAlert("Không có dữ liệu đơn hàng để hiển thị.");
+    return;
+  }
+
+  const targetDepot = (depot || "").trim();
+  const targetLine = (hangTau || "").trim();
+
+  const filtered = currentTopDepotLineRecords.filter(r => {
+    const d = (r.depot || "Chưa xác định").trim();
+    const l = (r.hangTau || "Khác").trim();
+    return d === targetDepot && l === targetLine;
+  });
+
+  const modal = document.getElementById("matrixDetailModal");
+  const modalTitle = document.getElementById("modalMatrixTitle");
+  const modalSubtitle = document.getElementById("modalMatrixSubtitle");
+  const searchInput = document.getElementById("modalMatrixSearch");
+  const btnOpenDataTable = document.getElementById("btnModalOpenDataTable");
+
+  modalActiveRecords = [...filtered];
+  modalFilteredRecords = [...filtered];
+
+  if (modalTitle) {
+    modalTitle.textContent = `Chi Tiết Đơn Hủy: Depot ${targetDepot} • Hãng Tàu ${targetLine}`;
+  }
+  if (modalSubtitle) {
+    const totalTeus = filtered.reduce((s, r) => s + (Number(r.sizeTeus) || 0), 0);
+    modalSubtitle.innerHTML = `Tổng số: <strong>${filtered.length.toLocaleString("vi-VN")}</strong> đơn hủy • Sản lượng: <strong>${totalTeus.toFixed(1)} TEUs</strong>`;
+  }
+
+  if (searchInput) searchInput.value = "";
+  if (btnOpenDataTable) {
+    btnOpenDataTable.onclick = () => {
+      if (typeof window.applyExternalFilterAndSwitchToDataTable === "function") {
+        window.applyExternalFilterAndSwitchToDataTable(modalFilteredRecords, `Depot: ${targetDepot} | Hãng tàu: ${targetLine}`);
+      }
+    };
+  }
+
+  renderModalMatrixTable();
+  if (modal) {
+    modal.classList.add("show");
+    modal.style.display = "flex";
+  }
+};
+
+/**
+ * Xuất dữ liệu Bảng Thống Kê Sản Lượng Hủy & Lý Do Hủy Chiếm Đa Phần Theo Depot & Hãng Tàu ra file CSV (UTF-8 BOM)
+ */
+function exportTopDepotLineCancelCsv() {
+  if (!currentTopDepotLineData || currentTopDepotLineData.length === 0) {
+    if (typeof showAlert === "function") showAlert("Không có dữ liệu để xuất CSV.");
+    return;
+  }
+
+  const dateStr = new Date().toISOString().substring(0, 10);
+  const rows = [
+    [
+      "STT",
+      "Depot",
+      "Hãng Tàu",
+      "Số Đơn Hủy",
+      "Sản Lượng (TEUs)",
+      "Tỷ Lệ / Tổng Hủy (%)",
+      "Lý Do Hủy Chiếm Đa Phần (Theo Nhóm Giải Trình)",
+      "Số Đơn Đa Phần",
+      "Tỷ Lệ Trên Số Đã Giải Trình (%)",
+      "Tỷ Lệ Trên Tổng Đơn Cặp (%)",
+      "Các Lý Do Khác",
+      "Số Đơn Đã Giải Trình",
+      "Tổng Đơn Của Cặp",
+      "Tỷ Lệ Đã Giải Trình (%)"
+    ]
+  ];
+
+  let sumCancel = 0;
+  let sumTeus = 0;
+  let sumExplained = 0;
+
+  const exportPairs = currentTopDepotLineData.slice(0, 3);
+  exportPairs.forEach((pair, idx) => {
+    sumCancel += pair.cancelCount;
+    sumTeus += pair.teus;
+    sumExplained += pair.explainedCount;
+
+    const top3Text = pair.topExps && pair.topExps.length > 0 
+      ? pair.topExps.map((rs, i) => {
+          const pct = pair.explainedCount > 0 ? ((rs.count / pair.explainedCount) * 100).toFixed(1) : "0.0";
+          return `${i + 1}. ${rs.reason} (${rs.count} đơn - ${pct}%)`;
+        }).join("; ")
+      : "Chưa có giải trình";
+
+    const top1 = pair.topExps && pair.topExps[0] ? pair.topExps[0] : null;
+    const top1Reason = top1 ? top1.reason : "-";
+    const top1Count = top1 ? top1.count : 0;
+    const top1Pct = top1 && pair.explainedCount > 0 ? ((top1.count / pair.explainedCount) * 100).toFixed(1) : "0.0";
+    const pairExplainPct = pair.cancelCount > 0 ? ((pair.explainedCount / pair.cancelCount) * 100).toFixed(1) : "0.0";
+
+    rows.push([
+      idx + 1,
+      `"${pair.depot.replace(/"/g, '""')}"`,
+      `"${pair.hangTau.replace(/"/g, '""')}"`,
+      pair.cancelCount,
+      pair.teus.toFixed(1),
+      pair.pctOfTotal,
+      `"${top3Text.replace(/"/g, '""')}"`,
+      top1Count,
+      top1Pct,
+      `"${top1Reason.replace(/"/g, '""')}"`,
+      pair.explainedCount,
+      pair.cancelCount,
+      pairExplainPct
+    ]);
+  });
+
+  // Dòng Tổng Cộng
+  const totalExplainPct = sumCancel > 0 ? ((sumExplained / sumCancel) * 100).toFixed(1) : "0.0";
+  const totalInView = currentTopDepotLineRecords ? currentTopDepotLineRecords.length : 0;
+  const pctTop3OfTotal = totalInView > 0 ? ((sumCancel / totalInView) * 100).toFixed(1) : "0.0";
+  rows.push([
+    "TỔNG TOP 3",
+    `"Top 3 cặp Depot - Hãng tàu"`,
+    `"-"`,
+    sumCancel,
+    sumTeus.toFixed(1),
+    pctTop3OfTotal,
+    `"Đã giải trình Top 3: ${sumExplained}/${sumCancel} đơn"`,
+    sumExplained,
+    "100.0",
+    totalExplainPct,
+    `"-"`,
+    sumExplained,
+    sumCancel,
+    totalExplainPct
+  ]);
+
+  const csvContent = "﻿" + rows.map(r => r.join(",")).join("\r\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `top_3_depot_hang_tau_huy_ly_do_da_phan_${dateStr}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Render Bảng Thống Kê Sản Lượng Hủy & Lý Do Hủy Chiếm Đa Phần Theo Depot & Hãng Tàu
+ * - Gom nhóm theo cặp: Depot + Hãng Tàu
+ * - Xác định chính xác nhóm giải trình chiếm đa phần (chiếm tỷ trọng cao nhất)
+ * - Hiển thị số lượng đơn hủy, sản lượng TEUs, tỷ lệ %, lý do chiếm đa phần kèm tỷ trọng
+ * - Hỗ trợ tùy chọn xem Top 5, Top 10 hoặc Tất Cả
+ */
 function renderTopDepotLineCancelTable(records = []) {
   const tbody = document.getElementById("tbodyTopDepotLineCancel");
+  const tfoot = document.getElementById("tfootTopDepotLineCancel");
   if (!tbody) return;
 
   const list = records || [];
-  // Sử dụng toàn bộ danh sách đơn hàng trong bộ lọc hiện tại để bảo đảm không bị sót đơn (khớp 100% với các thẻ KPI và biểu đồ)
-  const totalInView = list.length;
+  currentTopDepotLineRecords = list;
 
+  const totalInView = list.length;
   if (totalInView === 0) {
     tbody.innerHTML = `
       <tr>
         <td colspan="7" class="text-center text-muted" style="padding: 24px;">Không có đơn hàng nào trong bộ lọc hiện tại.</td>
       </tr>
     `;
+    if (tfoot) tfoot.innerHTML = "";
+    currentTopDepotLineData = [];
     return;
   }
 
@@ -2847,7 +2965,11 @@ function renderTopDepotLineCancelTable(records = []) {
     const depot = (r.depot || "Chưa xác định").trim();
     const hangTau = (r.hangTau || "Khác").trim();
     const key = `${depot}___${hangTau}`;
-    const teus = Number(r.sizeTeus) || 0;
+    let teus = Number(r.sizeTeus) || 0;
+    if (!teus && r.kichThuoc) {
+      const k = String(r.kichThuoc);
+      teus = k.includes("40") || k.includes("45") ? 2 : 1;
+    }
 
     // Trích xuất chính xác theo Nhóm Giải Trình (giaiTrinh)
     let rawExp = (r.giaiTrinh || r.giai_trinh || r.explanation || "").trim();
@@ -2881,60 +3003,118 @@ function renderTopDepotLineCancelTable(records = []) {
     }
   });
 
-  // Chuyển Map thành mảng, sắp xếp giảm dần theo số lượng đơn
-  const sortedPairs = Array.from(groupMap.values()).sort((a, b) => b.cancelCount - a.cancelCount);
+  // Chuyển Map thành mảng, sắp xếp giảm dần theo số lượng đơn hủy
+  const sortedPairs = Array.from(groupMap.values()).sort((a, b) => {
+    if (b.cancelCount !== a.cancelCount) return b.cancelCount - a.cancelCount;
+    return b.teus - a.teus;
+  });
 
-  // Hiển thị Top 3 cặp Depot - Hãng tàu có số lượng đơn nhiều nhất
-  const topPairs = sortedPairs.slice(0, 3);
+  let totalCancelAll = 0;
+  let totalTeusAll = 0;
+  let totalExplainedAll = 0;
 
-  tbody.innerHTML = topPairs.map((pair, idx) => {
-    const pct = ((pair.cancelCount / totalInView) * 100).toFixed(1);
+  // Tính toán Top 3 nhóm giải trình và tỷ lệ cho từng cặp
+  sortedPairs.forEach(pair => {
+    totalCancelAll += pair.cancelCount;
+    totalTeusAll += pair.teus;
+    totalExplainedAll += pair.explainedCount;
 
-    // Lấy danh sách giải trình thực tế xuất hiện từ cột dữ liệu giải trình, sắp xếp giảm dần theo số lượng
+    pair.pctOfTotal = totalInView > 0 ? ((pair.cancelCount / totalInView) * 100).toFixed(1) : "0.0";
+
     const sortedExps = Array.from(pair.explanationsMap.entries())
       .map(([reason, count]) => ({ reason, count }))
       .sort((a, b) => b.count - a.count);
 
-    // Lấy Top các lý do giải trình phổ biến nhất (Top 3) mà không lọc bỏ đơn lẻ
-    const topExps = sortedExps.slice(0, 3);
+    pair.sortedExps = sortedExps;
+    pair.topExps = sortedExps.slice(0, 3);
+    pair.otherExps = sortedExps.slice(3);
+  });
 
+  currentTopDepotLineData = sortedPairs;
+
+  // Chỉ lấy đúng Top 3 cặp Depot - Hãng tàu có số lượng đơn hủy nhiều nhất
+  const displayPairs = sortedPairs.slice(0, 3);
+
+  // Render các dòng dữ liệu với Top 3 nhóm giải trình cho từng cặp
+  tbody.innerHTML = displayPairs.map((pair, idx) => {
     let reasonsHtml = "";
-    if (topExps.length > 0) {
-      const expsListHtml = topExps.map(rs => {
-        const pctOfExplained = pair.explainedCount > 0 ? ((rs.count / pair.explainedCount) * 100).toFixed(0) : "0";
-        return `<div style="font-size: 12.5px; line-height: 1.5; margin-bottom: 2px;">
-          <span style="color: #475569; font-weight: 500;">- ${rs.reason}:</span> 
-          <strong style="color: #b91c1c;">${rs.count.toLocaleString()} đơn</strong> 
-          <span style="color: #64748b; font-size: 11px;">(${pctOfExplained}% số đã giải trình)</span>
-        </div>`;
+
+    if (pair.topExps && pair.topExps.length > 0) {
+      const topListHtml = pair.topExps.map((rs, rIdx) => {
+        const pctOfExplained = pair.explainedCount > 0 ? ((rs.count / pair.explainedCount) * 100).toFixed(1) : "0.0";
+        // Nhóm top 1 làm nổi bật hơn
+        const isTop1 = rIdx === 0;
+        const numColor = isTop1 ? "#1d4ed8" : "#475569";
+        const reasonColor = isTop1 ? "#0f172a" : "#334155";
+        const countColor = isTop1 ? "#b91c1c" : "#b91c1c";
+        const fontWeight = isTop1 ? "700" : "500";
+
+        return `
+          <div style="font-size: 12.5px; line-height: 1.5; margin-bottom: 2px;">
+            <span style="color: ${numColor}; font-weight: 700;">${rIdx + 1}.</span> 
+            <span style="color: ${reasonColor}; font-weight: ${fontWeight};">${rs.reason}:</span> 
+            <strong style="color: ${countColor};">${rs.count.toLocaleString("vi-VN")} đơn</strong> 
+            <span style="color: #64748b; font-size: 11px; font-weight: 500;">(${pctOfExplained}% số đã giải trình)</span>
+          </div>
+        `;
       }).join("");
+
+      let otherSummaryHtml = "";
+      if (pair.otherExps && pair.otherExps.length > 0) {
+        const otherCount = pair.otherExps.reduce((s, x) => s + x.count, 0);
+        otherSummaryHtml = `
+          <div style="font-size: 11px; color: #94a3b8; margin-top: 2px; font-style: italic;">
+            (+${pair.otherExps.length} nhóm lý do khác: ${otherCount.toLocaleString("vi-VN")} đơn)
+          </div>
+        `;
+      }
 
       const summaryExplainedHtml = `
         <div style="font-size: 11.5px; color: #64748b; margin-top: 5px; padding-top: 4px; border-top: 1px dashed #cbd5e1;">
-          Đã giải trình: <strong style="color: #0f172a;">${pair.explainedCount.toLocaleString()}</strong> / ${pair.cancelCount.toLocaleString()} đơn (${((pair.explainedCount / pair.cancelCount) * 100).toFixed(1)}%)
+          Đã giải trình: <strong style="color: #0f172a;">${pair.explainedCount.toLocaleString("vi-VN")}</strong> / ${pair.cancelCount.toLocaleString("vi-VN")} đơn (${((pair.explainedCount / pair.cancelCount) * 100).toFixed(1)}%)
         </div>
       `;
 
-      reasonsHtml = expsListHtml + summaryExplainedHtml;
+      reasonsHtml = topListHtml + otherSummaryHtml + summaryExplainedHtml;
     } else {
       reasonsHtml = `
-        <div style="font-size: 12.5px; color: #94a3b8; font-style: italic;">Chưa có dữ liệu giải trình</div>
-        <div style="font-size: 11.5px; color: #94a3b8; margin-top: 3px;">(0 / ${pair.cancelCount.toLocaleString()} đơn)</div>
+        <div style="font-size: 12.5px; color: #94a3b8; font-style: italic;">Chưa có dữ liệu nhóm giải trình</div>
+        <div style="font-size: 11.5px; color: #94a3b8; margin-top: 3px;">(0 / ${pair.cancelCount.toLocaleString("vi-VN")} đơn)</div>
       `;
     }
 
+    const safeDepot = pair.depot.replace(/'/g, "\\'");
+    const safeLine = pair.hangTau.replace(/'/g, "\\'");
+
     return `
-      <tr>
+      <tr style="cursor: pointer; transition: background 0.15s ease;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''" onclick="window.openTopDepotLineDetailModal('${safeDepot}', '${safeLine}')" title="Nhấp để xem danh sách ${pair.cancelCount} đơn hủy của cặp ${pair.depot} - ${pair.hangTau}">
         <td class="text-center" style="font-weight: 600; color: #64748b;">${idx + 1}</td>
         <td><strong style="color: #1d4ed8; font-size: 13.5px;">${pair.depot}</strong></td>
-        <td><strong>${pair.hangTau}</strong></td>
-        <td style="text-align: right;"><strong style="color: #b91c1c; font-size: 14px;">${pair.cancelCount.toLocaleString()}</strong></td>
-        <td style="text-align: right; font-weight: 600;">${pair.teus.toFixed(1)}</td>
-        <td style="text-align: right;"><span style="font-weight: 700; color: #0f172a;">${pct}%</span></td>
+        <td><strong style="color: #0f172a;">${pair.hangTau}</strong></td>
+        <td style="text-align: right;"><strong style="color: #b91c1c; font-size: 14px;">${pair.cancelCount.toLocaleString("vi-VN")}</strong></td>
+        <td style="text-align: right; font-weight: 600; color: #334155;">${pair.teus.toFixed(1)}</td>
+        <td style="text-align: right;"><span style="font-weight: 700; color: #0f172a;">${pair.pctOfTotal}%</span></td>
         <td style="padding: 8px 12px;">${reasonsHtml}</td>
       </tr>
     `;
   }).join("");
+
+  // Render dòng Tổng Cộng
+  if (tfoot) {
+    const totalExplainPct = totalCancelAll > 0 ? ((totalExplainedAll / totalCancelAll) * 100).toFixed(1) : "0.0";
+    tfoot.innerHTML = `
+      <tr>
+        <td class="text-center" style="font-weight: 700; color: #0f172a;">Tổng Top 3</td>
+        <td colspan="2" style="font-weight: 700; color: #0f172a;">Top 3 cặp Depot - Hãng tàu</td>
+        <td style="text-align: right;"><strong style="color: #b91c1c; font-size: 14px;">${displayPairs.reduce((s, p) => s + p.cancelCount, 0).toLocaleString("vi-VN")}</strong></td>
+        <td style="text-align: right; font-weight: 700; font-size: 13.5px; color: #0f172a;">${displayPairs.reduce((s, p) => s + p.teus, 0).toFixed(1)}</td>
+        <td style="text-align: right;"><strong style="color: #0f172a;">${totalInView > 0 ? ((displayPairs.reduce((s, p) => s + p.cancelCount, 0) / totalInView) * 100).toFixed(1) : "0.0"}%</strong></td>
+        <td style="font-size: 12px; color: #475569; font-weight: 600;">
+          Đã giải trình Top 3: <strong style="color: #0f172a;">${displayPairs.reduce((s, p) => s + p.explainedCount, 0).toLocaleString("vi-VN")}</strong> / ${displayPairs.reduce((s, p) => s + p.cancelCount, 0).toLocaleString("vi-VN")} đơn (${displayPairs.reduce((s, p) => s + p.cancelCount, 0) > 0 ? ((displayPairs.reduce((s, p) => s + p.explainedCount, 0) / displayPairs.reduce((s, p) => s + p.cancelCount, 0)) * 100).toFixed(1) : "0.0"}%)
+        </td>
+      </tr>
+    `;
+  }
 }
 
 // Trích xuất toàn bộ các chỉ số KPI Vận Hành & CSKH từ danh sách bản ghi
@@ -4042,12 +4222,20 @@ function initExportPngEvents() {
     };
   }
 
+  // Nút Xuất CSV & In PNG cho Top 3 Depot & Hãng Tàu
+  const btnTopDepotLineCsv = document.getElementById("btnExportTopDepotLineCsv");
+  if (btnTopDepotLineCsv) {
+    btnTopDepotLineCsv.onclick = () => {
+      exportTopDepotLineCancelCsv();
+    };
+  }
+
   const btnTopDepotLinePng = document.getElementById("btnExportTopDepotLinePng");
   if (btnTopDepotLinePng) {
     btnTopDepotLinePng.onclick = () => {
       const card = document.getElementById("topDepotLineCancelCard");
       const dateStr = new Date().toISOString().substring(0, 10);
-      exportElementToPng(card, `top_depot_hang_tau_huy_${dateStr}.png`, btnTopDepotLinePng);
+      exportElementToPng(card, `top_3_depot_hang_tau_huy_${dateStr}.png`, btnTopDepotLinePng);
     };
   }
 
