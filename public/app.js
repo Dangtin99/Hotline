@@ -20,7 +20,7 @@ if (!window.SYSTEM_DEPOTS_LIST) {
 }
 
 // Bộ lọc Dashboard Toàn Diện
-let currentDashboardTab = "unpaid"; // "unpaid" hoặc "cancelled"
+let currentDashboardTab = (typeof document !== "undefined" && document.getElementById("tabBtnUnpaid")) ? "unpaid" : "cancelled"; // Mặc định "cancelled" nếu không có tabs
 let currentDatasetId = "sql_all";
 let masterDashboardRecords = [];
 let allDashboardDepots = [];
@@ -1719,6 +1719,11 @@ function renderDashboard(data, records = []) {
 function initDashboardTabControls() {
   const btnUnpaid = document.getElementById("tabBtnUnpaid");
   const btnCancelled = document.getElementById("tabBtnCancelled");
+
+  if (!btnUnpaid && !btnCancelled) {
+    currentDashboardTab = "cancelled";
+    return;
+  }
 
   if (btnUnpaid) {
     btnUnpaid.onclick = (e) => {

@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bảng Điều Hành Phân Tích Đơn Hủy Logistics & Depot</title>
-  <link rel="stylesheet" href="style.css?v=20261017_1154">
-  <script src="auth.js?v=20261017_1154"></script>
+  <link rel="stylesheet" href="style.css?v=20261020_1020">
+  <script src="auth.js?v=20261020_1020"></script>
   <!-- Chart.js CDN (Tải ngầm không chặn render) -->
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 </head>
@@ -14,15 +14,10 @@
     <!-- Thanh Tab Bên Trái (Left Sidebar) -->
     <aside class="app-sidebar">
       <div class="sidebar-brand">
-        <div class="sidebar-brand-text">
+        <div>
           <div class="brand-title">GPG LOGISTICS</div>
           <div class="brand-subtitle">Quản Trị Đơn Hủy 24/7</div>
         </div>
-        <button type="button" class="sidebar-collapse-btn" id="btnCollapseSidebar" title="Ẩn thanh tab" aria-label="Ẩn thanh tab">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="15 18 9 12 15 6"></polyline>
-          </svg>
-        </button>
       </div>
 
       <nav class="sidebar-nav">
@@ -86,13 +81,6 @@
       <!-- Header -->
       <header class="app-header">
         <div class="header-brand">
-          <button type="button" class="sidebar-header-toggle-btn" id="headerSidebarToggleBtn" title="Hiện thanh tab" aria-label="Hiện thanh tab">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="3" y1="12" x2="21" y2="12"></line>
-              <line x1="3" y1="6" x2="21" y2="6"></line>
-              <line x1="3" y1="18" x2="21" y2="18"></line>
-            </svg>
-          </button>
           <div>
             <h1>HỆ THỐNG TRỢ LÝ AI - PHÂN TÍCH ĐƠN HỦY 24/7</h1>
             <p class="subtitle">Bảng Điều Hành Quản Trị Logistics, Vận Hành Bãi Depot & Hãng Tàu</p>
@@ -149,30 +137,20 @@
             </select>
           </div>
 
-          <!-- Hàng 1 - Cột 2: Từ Ngày & Giờ -->
+          <!-- Hàng 1 - Cột 2: Từ Ngày -->
           <div class="filter-field date-field">
-            <label for="filterDateFrom">Từ ngày & Giờ</label>
-            <div class="date-time-container">
+            <label for="filterDateFrom">Từ ngày</label>
+            <div class="date-input-container">
               <input type="date" id="filterDateFrom" class="filter-select filter-date-input" title="Lọc từ ngày" placeholder="Từ ngày">
-              <div class="timepicker-wrapper">
-                <input type="text" id="filterHourFrom" class="filter-select filter-time-input timepicker-24h" placeholder="00:00" title="Chọn giờ & phút bắt đầu (Hệ 24h)" readonly autocomplete="off">
-                <span class="timepicker-icon" title="Nhấn để chọn giờ & phút">🕒</span>
-              </div>
             </div>
           </div>
 
-          <!-- Hàng 1 - Cột 3: Đến Ngày & Giờ -->
+          <!-- Hàng 1 - Cột 3: Đến Ngày -->
           <div class="filter-field date-field">
-            <label for="filterDateTo">Đến ngày & Giờ</label>
-            <div class="date-time-container">
-              <div style="position: relative; flex: 1; min-width: 0;">
-                <input type="date" id="filterDateTo" class="filter-select filter-date-input" title="Lọc đến ngày" placeholder="Đến ngày" style="width: 100%;">
-                <button type="button" id="btnClearDateFilter" class="btn-clear-date" title="Xóa bộ lọc ngày & giờ" style="display: none; position: absolute; right: 28px; top: 50%; transform: translateY(-50%); z-index: 2;">×</button>
-              </div>
-              <div class="timepicker-wrapper">
-                <input type="text" id="filterHourTo" class="filter-select filter-time-input timepicker-24h" placeholder="23:59" title="Chọn giờ & phút kết thúc (Hệ 24h)" readonly autocomplete="off">
-                <span class="timepicker-icon" title="Nhấn để chọn giờ & phút">🕒</span>
-              </div>
+            <label for="filterDateTo">Đến ngày</label>
+            <div class="date-input-container" style="position: relative; display: flex; align-items: center;">
+              <input type="date" id="filterDateTo" class="filter-select filter-date-input" title="Lọc đến ngày" placeholder="Đến ngày" style="width: 100%;">
+              <button type="button" id="btnClearDateFilter" class="btn-clear-date" title="Xóa bộ lọc ngày" style="display: none; position: absolute; right: 30px;">×</button>
             </div>
           </div>
 
@@ -238,8 +216,8 @@
             </div>
           </div>
 
-          <!-- Hàng 2 - Cột 4: Khung Giờ Duyệt (Đã ẩn theo yêu cầu) -->
-          <div class="filter-field dropdown-field" style="display: none;">
+          <!-- Hàng 2 - Cột 4: Khung Giờ Duyệt -->
+          <div class="filter-field dropdown-field">
             <label for="filterApprovedHour">Khung giờ duyệt</label>
             <select id="filterApprovedHour" class="filter-select" title="Lọc theo khung giờ của cột Ngày được duyệt">
               <option value="">Tất cả giờ duyệt</option>
@@ -288,19 +266,20 @@
             <label for="filterContactStatus">Trạng thái CSKH</label>
             <select id="filterContactStatus" class="filter-select" title="Lọc theo trạng thái xử lý CSKH">
               <option value="">Tất cả trạng thái CSKH</option>
-              <option value="Đã liên hệ - Chờ">Đã liên hệ - Chờ</option>
-              <option value="Đã thanh toán">Đã thanh toán</option>
-              <option value="Đã thành công">Đã thành công</option>
-              <option value="Đã đặt lại">Đã đặt lại</option>
-              <option value="Đã liên hệ - Không thành công">Đã liên hệ - Không thành công</option>
-              <option value="Đã Liên hệ - Không đặt lại">Đã Liên hệ - Không đặt lại</option>
-              <option value="Không liên hệ được">Không liên hệ được</option>
+              <option value="Thanh toán thành công">Thanh toán thành công</option>
+              <option value="Đã liên hệ - Chờ đặt lại">Đã liên hệ - Chờ đặt lại</option>
+              <option value="Đã liên hệ - Chờ thanh toán">Đã liên hệ - Chờ thanh toán</option>
+              <option value="Đã liên hệ - Đã đặt lại">Đã liên hệ - Đã đặt lại</option>
+              <option value="Đã liên hệ - Không đặt lại">Đã liên hệ - Không đặt lại</option>
+              <option value="Không liên hệ được - Chờ thanh toán">Không liên hệ được - Chờ thanh toán</option>
+              <option value="Không liên hệ được - Hủy">Không liên hệ được - Hủy</option>
+              <option value="Tự động đặt lại">Tự động đặt lại</option>
               <option value="__EMPTY__">Chưa cập nhật trạng thái</option>
             </select>
           </div>
 
-          <!-- Hàng 3 - Cột 2, 3, 4: Tìm Nhanh (chiếm 3 cột) -->
-          <div class="filter-field search-field" style="grid-column: span 3;">
+          <!-- Hàng 3 - Cột 3 & 4: Tìm Nhanh (chiếm 2 cột) -->
+          <div class="filter-field search-field" style="grid-column: span 2;">
             <label for="dashboardSearchInput">Tìm nhanh</label>
             <div class="search-box">
               <input type="text" id="dashboardSearchInput" placeholder="Container, Booking, Tài xế, Nhà xe, Lý do...">
@@ -319,11 +298,6 @@
             <button type="button" class="btn btn-outline btn-sm btn-quick-range" data-days="30" title="Xem 30 ngày gần nhất và so sánh với 30 ngày trước đó">30 ngày</button>
           </div>
           <div class="filter-action-buttons">
-            <button id="btnReloadData" class="btn btn-outline btn-sm" type="button" title="Tải lại dữ liệu mới nhất mà không làm mất điều kiện lọc hiện tại">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 4px;">
-                <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
-              </svg>Tải Lại
-            </button>
             <button id="btnResetFilter" class="btn btn-outline btn-sm" type="button" title="Đặt lại tất cả các bộ lọc về mặc định">Đặt Lại</button>
           </div>
         </div>
@@ -332,36 +306,8 @@
         <div id="dashboardDateFilterGroup" style="display: none;"></div>
       </section>
 
-      <!-- Dashboard Tabs: Chuyển Đổi Chuyên Biệt 2 Báo Cáo (Đơn Chưa Thanh Toán & Đơn Đã Hủy) -->
-      <section class="dashboard-tabs-section">
-        <div class="dashboard-tabs-wrapper">
-          <div class="dashboard-tabs-group" role="tablist" aria-label="Phân hệ Báo cáo Tổng quan">
-            <button type="button" class="dashboard-tab-btn tab-unpaid active" id="tabBtnUnpaid" role="tab" aria-selected="true" onclick="switchDashboardTab('unpaid')">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"></circle>
-                <polyline points="12 6 12 12 16 14"></polyline>
-              </svg>
-              <span>BÁO CÁO ĐƠN CHƯA THANH TOÁN</span>
-              <span class="tab-badge" id="tabBadgeUnpaid">0 đơn</span>
-            </button>
-            <button type="button" class="dashboard-tab-btn tab-cancelled" id="tabBtnCancelled" role="tab" aria-selected="false" onclick="switchDashboardTab('cancelled')">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="15" y1="9" x2="9" y2="15"></line>
-                <line x1="9" y1="9" x2="15" y2="15"></line>
-              </svg>
-              <span>BÁO CÁO ĐƠN ĐÃ HỦY</span>
-              <span class="tab-badge" id="tabBadgeCancelled">0 đơn</span>
-            </button>
-          </div>
-          <div class="dashboard-tab-caption" id="dashboardTabCaption">
-            Đang phân tích điểm nghẽn & tình trạng xử lý đơn Chưa thanh toán
-          </div>
-        </div>
-      </section>
-
-      <!-- KPIs Overview (Ẩn theo yêu cầu) -->
-      <section class="kpi-grid" style="display: none;">
+      <!-- KPIs Overview -->
+      <section class="kpi-grid">
         <div class="kpi-card kpi-card-orders">
           <div class="kpi-title">TỔNG SỐ ĐƠN HỦY</div>
           <div class="kpi-value" id="kpiTotalOrders">0</div>
@@ -414,51 +360,8 @@
         </div>
       </section>
 
-      <!-- Phân Tích Đơn Hủy Theo Nguồn & Xu Hướng Đặt Lại (Chỉ xét đơn có giải trình) -->
-      <section class="source-cancellation-section tab-sec-cancelled" id="sourceCancellationSection" style="margin-bottom: 24px;">
-        <div class="table-card" id="sourceCancellationCard">
-          <div class="d-flex-between" style="margin-bottom: 14px; align-items: center; flex-wrap: wrap; gap: 10px;">
-            <div>
-              <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: #0f172a;">Phân Tích Đơn Hủy Theo Nguồn & Xu Hướng Đặt Lại</h3>
-              <span class="text-muted" style="font-size: 13px; font-weight: 500;">
-                Thống kê trên các đơn hàng có giải trình (<span id="sourceCancelExplainedCount" style="font-weight: 700; color: #1d4ed8;">0</span> / <span id="sourceCancelTotalCount">0</span> đơn)
-              </span>
-            </div>
-            <div style="display: flex; gap: 8px;">
-              <button type="button" class="btn btn-outline btn-sm" id="btnExportSourceCancelPng" title="Xuất ảnh PNG bảng phân tích nguồn hủy">In PNG</button>
-              <button type="button" class="btn btn-outline btn-sm" id="btnExportSourceCancelCsv" title="Xuất CSV bảng phân tích nguồn hủy">Xuất CSV</button>
-            </div>
-          </div>
-          <div class="table-responsive">
-            <table class="data-table source-cancellation-table" id="tableSourceCancellation">
-              <thead>
-                <tr class="header-level-1">
-                  <th colspan="3" class="source-header-customer" style="text-align: center; background: #f0fdf4; border-bottom: 2px solid #bbf7d0; font-size: 14px; font-weight: 700; color: #166534; padding: 10px;">
-                    HỦY TỪ KHÁCH (Nhóm 1 - 4)
-                  </th>
-                  <th colspan="3" class="source-header-center" style="text-align: center; background: #eff6ff; border-bottom: 2px solid #bfdbfe; font-size: 14px; font-weight: 700; color: #1e40af; border-left: 2px solid #cbd5e1; padding: 10px;">
-                    HỦY TỪ TRUNG TÂM (Nhóm 5 - 7)
-                  </th>
-                </tr>
-                <tr class="header-level-2">
-                  <th style="width: 16%; text-align: right;">Tổng</th>
-                  <th style="width: 17%; text-align: center;">Dự đoán đặt lại<br/><span style="font-size: 11px; font-weight: 500; color: #64748b;">Tỷ lệ %</span></th>
-                  <th style="width: 17%; text-align: center;">Không đặt lại<br/><span style="font-size: 11px; font-weight: 500; color: #64748b;">Tỷ lệ %</span></th>
-                  <th style="width: 16%; text-align: right; border-left: 2px solid #cbd5e1;">Tổng đơn</th>
-                  <th style="width: 17%; text-align: center;">Dự đoán đặt lại<br/><span style="font-size: 11px; font-weight: 500; color: #64748b;">Tỷ lệ %</span></th>
-                  <th style="width: 17%; text-align: center;">Không đặt lại<br/><span style="font-size: 11px; font-weight: 500; color: #64748b;">Tỷ lệ %</span></th>
-                </tr>
-              </thead>
-              <tbody id="tbodySourceCancellation">
-                <!-- Sẽ được render động từ app.js -->
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
       <!-- Charts Row -->
-      <section class="charts-grid tab-sec-cancelled" id="chartsGridSection">
+      <section class="charts-grid">
         <div class="chart-card">
           <h3>Cơ Cấu Lý Do Hủy Đơn</h3>
           <div class="chart-container">
@@ -479,76 +382,6 @@
         </div>
       </section>
 
-      <!-- Dashboard Line: Biến Động Đơn Hủy & Chưa Thanh Toán 24 Giờ Theo Depot -->
-      <section class="hourly-dashboard-section" style="margin-bottom: 24px;">
-        <div class="chart-card hourly-chart-card" style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);">
-          <!-- Header: Tiêu đề + Thống kê tóm tắt nhanh -->
-          <div class="hourly-chart-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; margin-bottom: 16px; border-bottom: 1px solid #f1f5f9; padding-bottom: 14px;">
-            <div>
-              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap;">
-                <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: #0f172a;">Biến Động Đơn Hủy & Chưa Thanh Toán 24 Giờ Theo Depot</h3>
-                <span id="hourlyUserPermissionBadge" class="badge" style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 9999px;">Phân quyền: Đang xác thực...</span>
-                <span id="hourlyChartScopeBadge" class="badge" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 9999px;">Đang xem: Tất Cả Depot</span>
-              </div>
-              <p style="margin: 0; font-size: 13px; color: #64748b;">
-                Theo dõi số lượng đơn hủy và đơn chưa thanh toán phát sinh theo từng khung giờ trong 24 tiếng. Bấm vào Depot bên dưới để xem chi tiết hoặc xem tổng hợp toàn bộ quyền truy cập.
-              </p>
-            </div>
-
-            <!-- Thống kê tóm tắt theo Depot đang chọn -->
-            <div class="hourly-summary-badges" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-              <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 6px 14px; min-width: 110px; text-align: right;">
-                <div style="font-size: 11px; font-weight: 700; color: #991b1b; text-transform: uppercase; letter-spacing: 0.3px;">Đơn Hủy</div>
-                <div id="hourlyDepotTotalCancelled" style="font-size: 16px; font-weight: 800; color: #dc2626;">0 đơn</div>
-              </div>
-              <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 6px 14px; min-width: 110px; text-align: right;">
-                <div style="font-size: 11px; font-weight: 700; color: #92400e; text-transform: uppercase; letter-spacing: 0.3px;">Chưa Thanh Toán</div>
-                <div id="hourlyDepotTotalUnpaid" style="font-size: 16px; font-weight: 800; color: #d97706;">0 đơn</div>
-              </div>
-              <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 6px 14px; min-width: 110px; text-align: right;">
-                <div style="font-size: 11px; font-weight: 700; color: #166534; text-transform: uppercase; letter-spacing: 0.3px;">Tổng Phát Sinh</div>
-                <div id="hourlyDepotTotalCombined" style="font-size: 16px; font-weight: 800; color: #15803d;">0 đơn</div>
-              </div>
-              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 14px; min-width: 130px; text-align: right;">
-                <div style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.3px;">Giờ Cao Điểm</div>
-                <div id="hourlyDepotPeakHour" style="font-size: 16px; font-weight: 800; color: #0f172a;">-</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Thanh điều khiển: Nút chọn Depot + Nút tùy chọn thể hiện -->
-          <div class="hourly-depot-selector-row" style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex: 1;">
-              <span style="font-size: 13px; font-weight: 700; color: #334155; white-space: nowrap;">
-                Depot phân quyền:
-              </span>
-              <div id="hourlyDepotTabsList" class="depot-tabs-list" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-                <!-- Render động các nút chọn depot -->
-              </div>
-            </div>
-
-            <!-- Tùy chọn thể hiện (View Mode Controls) -->
-            <div class="hourly-view-controls" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-              <!-- Nút chuyển đổi Đường / Cột -->
-              <div class="btn-group" style="display: inline-flex; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; background: #ffffff;">
-                <button type="button" id="btnHourlyViewLine" class="btn-hourly-view active" title="Biểu đồ đường 24h" style="padding: 5px 12px; font-size: 12px; font-weight: 600; border: none; background: #1d4ed8; color: #ffffff; cursor: pointer;">Đường</button>
-                <button type="button" id="btnHourlyViewBar" class="btn-hourly-view" title="Biểu đồ cột 24h" style="padding: 5px 12px; font-size: 12px; font-weight: 600; border: none; background: #ffffff; color: #475569; cursor: pointer; border-left: 1px solid #cbd5e1;">Cột</button>
-              </div>
-
-              <!-- Nút Toggle Đường Tổng Đơn -->
-              <button type="button" id="btnHourlyToggleTotal" class="btn btn-outline btn-sm" title="Bật/Tắt hiển thị đường Tổng cộng (Hủy + Chưa TT)" style="font-size: 12px; padding: 5px 10px; display: inline-flex; align-items: center; gap: 4px; background: #ffffff;">
-                <span id="txtHourlyToggleTotal">Hiện Đường Tổng</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Chart Canvas -->
-          <div class="chart-container" style="position: relative; height: 350px; width: 100%;">
-            <canvas id="chartHourlyDepot"></canvas>
-          </div>
-        </div>
-      </section>
-
       <!-- Anomalies Alert Section -->
       <section class="anomalies-section">
         <div class="section-header">
@@ -559,12 +392,12 @@
       </section>
 
       <!-- Matrix Cross-Tabulation: Depot & Hãng Tàu x Trạng Thái -->
-      <section class="matrix-section tab-sec-cancelled" id="matrixSection">
+      <section class="matrix-section">
         <div class="matrix-card" id="matrixCard">
           <div class="matrix-header">
             <div class="matrix-title-group">
               <div>
-                <h3 class="matrix-title">Ma Trận Phân Bố Số Lượng Đơn</h3>
+                <h3 class="matrix-title">Ma Trận Phân Bố Số Lượng Đơn (Depot & Hãng Tàu × Trạng Thái)</h3>
                 <p class="matrix-subtitle">Thống kê số lượng đơn theo <strong>Depot & Hãng Tàu (Dòng)</strong> và <strong>Trạng Thái (Cột)</strong>. Bấm nút dấu [+] hoặc [-] để đóng / mở rộng chi tiết các Depot.</p>
               </div>
             </div>
@@ -593,59 +426,12 @@
             <div class="matrix-legend">
               <span class="legend-label">Mật độ đơn:</span>
               <span class="legend-item"><span class="legend-box val-0">-</span> 0 đơn</span>
-              <span class="legend-item"><span class="legend-box val-lvl1">1-5</span> 1 - 5 đơn</span>
-              <span class="legend-item"><span class="legend-box val-lvl2">5-10</span> 5 - 10 đơn</span>
-              <span class="legend-item"><span class="legend-box val-lvl3">10-15</span> 10 - 15 đơn</span>
-              <span class="legend-item"><span class="legend-box val-lvl4">&ge;15</span> &ge;15 đơn</span>
+              <span class="legend-item"><span class="legend-box val-low">1-3</span> 1-3 đơn</span>
+              <span class="legend-item"><span class="legend-box val-med">4-8</span> 4-8 đơn</span>
+              <span class="legend-item"><span class="legend-box val-high">&ge;9</span> &ge;9 đơn</span>
             </div>
             <div class="matrix-summary-text" id="matrixSummaryText">
               Đang tải dữ liệu ma trận...
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Matrix Cross-Tabulation 2: Depot & Trạng Thái Đơn x Trạng Thái Liên Hệ -->
-      <section class="matrix-section" id="contactMatrixSection">
-        <div class="matrix-card" id="contactMatrixCard">
-          <div class="matrix-header">
-            <div class="matrix-title-group">
-              <div>
-                <h3 class="matrix-title">Ma Trận Phân Bố Đơn Hủy</h3>
-                <p class="matrix-subtitle">Thống kê số lượng đơn theo từng <strong>Trạng Thái Đơn (Dòng)</strong> và <strong>Trạng Thái Liên Hệ CSKH (Cột)</strong>. Nhấp vào bất kỳ ô số lượng nào để lọc danh sách chi tiết bên dưới.</p>
-              </div>
-            </div>
-
-            <!-- Nút điều khiển in PNG & xuất CSV -->
-            <div class="matrix-controls">
-              <button type="button" class="btn btn-outline btn-sm" id="btnExportContactMatrixPng" title="Xuất ảnh PNG bảng ma trận liên hệ">In PNG</button>
-              <button type="button" class="btn btn-outline btn-sm" id="btnExportContactMatrixCsv" title="Xuất CSV bảng ma trận liên hệ">Xuất CSV</button>
-            </div>
-          </div>
-
-          <!-- Bảng Ma Trận Liên Hệ -->
-          <div class="table-responsive matrix-table-container">
-            <table class="data-table matrix-contact-table" id="tableContactMatrix">
-              <thead id="theadContactMatrix">
-                <!-- Nạp động thead -->
-              </thead>
-              <tbody id="tbodyContactMatrix">
-                <!-- Nạp động tbody -->
-              </tbody>
-            </table>
-          </div>
-
-          <div class="matrix-footer-info">
-            <div class="matrix-legend">
-              <span class="legend-label">Mật độ đơn:</span>
-              <span class="legend-item"><span class="legend-box val-0">-</span> 0 đơn</span>
-              <span class="legend-item"><span class="legend-box val-lvl1">1-5</span> 1 - 5 đơn</span>
-              <span class="legend-item"><span class="legend-box val-lvl2">5-10</span> 5 - 10 đơn</span>
-              <span class="legend-item"><span class="legend-box val-lvl3">10-15</span> 10 - 15 đơn</span>
-              <span class="legend-item"><span class="legend-box val-lvl4">&ge;15</span> &ge;15 đơn</span>
-            </div>
-            <div class="matrix-summary-text" id="contactMatrixSummaryText">
-              Đang tải dữ liệu ma trận liên hệ...
             </div>
           </div>
         </div>
@@ -694,7 +480,6 @@
                   <th>Trạng Thái Đơn</th>
                   <th>Ngày Duyệt / Hủy</th>
                   <th>Lý Do Hủy / Từ Chối</th>
-                  <th>Giải Trình Chi Tiết</th>
                   <th>Xử Lý CSKH</th>
                 </tr>
               </thead>
@@ -703,39 +488,17 @@
               </tbody>
             </table>
           </div>
-
-          <!-- Thanh Phân Trang Bảng Chi Tiết (No-Icon, Chuẩn GEMINI.md) -->
-          <div class="inline-pagination-bar" id="inlinePaginationBar">
-            <div class="pagination-info" id="inlinePaginationInfo">
-              Đang hiển thị 0 - 0 trong tổng số 0 đơn
-            </div>
-            <div class="pagination-controls">
-              <label class="pagination-size-label" for="inlinePageSizeSelect">Hiển thị:</label>
-              <select id="inlinePageSizeSelect" class="pagination-size-select">
-                <option value="50" selected>50 dòng/trang</option>
-                <option value="100">100 dòng/trang</option>
-                <option value="200">200 dòng/trang</option>
-              </select>
-              <div class="pagination-btn-group">
-                <button type="button" class="btn btn-outline btn-sm btn-page-nav" id="btnInlinePageFirst" title="Về trang đầu">[Đầu]</button>
-                <button type="button" class="btn btn-outline btn-sm btn-page-nav" id="btnInlinePagePrev" title="Trang trước">[Trước]</button>
-                <span class="pagination-current-page" id="inlinePaginationCurrentPage">Trang 1 / 1</span>
-                <button type="button" class="btn btn-outline btn-sm btn-page-nav" id="btnInlinePageNext" title="Trang tiếp theo">[Tiếp]</button>
-                <button type="button" class="btn btn-outline btn-sm btn-page-nav" id="btnInlinePageLast" title="Đến trang cuối">[Cuối]</button>
-              </div>
-            </div>
-          </div>
         </div>
       </section>
 
       <!-- Detailed Tables -->
-      <section class="tables-grid tab-sec-cancelled" id="topDepotLineCancelSection" style="grid-template-columns: 1fr; margin-bottom: 24px;">
+      <section class="tables-grid" style="grid-template-columns: 1fr; margin-bottom: 24px;">
         <!-- Bảng Báo Cáo Top Depot & Hãng Tàu Có Số Lượng Đơn Hủy Nhiều Nhất Kèm Lý Do Phổ Biến -->
         <div class="table-card" id="topDepotLineCancelCard">
           <div class="d-flex-between" style="margin-bottom: 12px; align-items: center; flex-wrap: wrap; gap: 10px;">
             <div>
               <h3 style="margin: 0;">Top 3 Depot & Hãng Tàu Có Số Lượng Đơn Hủy Nhiều Nhất</h3>
-              <p class="text-muted" style="font-size: 13px; margin: 3px 0 0 0;">Thống kê chi tiết 3 cặp Depot - Hãng tàu có tỷ trọng đơn hủy cao nhất kèm các nhóm giải trình hủy đơn phổ biến nhất</p>
+              <p class="text-muted" style="font-size: 13px; margin: 3px 0 0 0;">Thống kê chi tiết 3 cặp Depot - Hãng tàu có tỷ trọng đơn hủy cao nhất kèm các lý do hủy đơn phổ biến nhất</p>
             </div>
             <button type="button" class="btn btn-outline btn-sm" id="btnExportTopDepotLinePng" title="Xuất ảnh PNG bảng thống kê Top Depot & Hãng tàu">In PNG</button>
           </div>
@@ -749,7 +512,7 @@
                   <th style="width: 120px; text-align: right;">Số Đơn Hủy</th>
                   <th style="width: 120px; text-align: right;">Sản Lượng (TEUs)</th>
                   <th style="width: 110px; text-align: right;">Tỷ Lệ / Tổng Hủy</th>
-                  <th style="min-width: 320px;">Top Lý Do Hủy Phổ Biến Nhất (Theo Nhóm Giải Trình)</th>
+                  <th style="min-width: 320px;">Top Lý Do Hủy Phổ Biến Nhất</th>
                 </tr>
               </thead>
               <tbody id="tbodyTopDepotLineCancel">
@@ -772,7 +535,7 @@
               <thead>
                 <tr>
                   <th>Mã Depot</th>
-                  <th id="thDepotOrderCount">Số Đơn</th>
+                  <th>Số Đơn Hủy</th>
                   <th>Sản Lượng (TEUs)</th>
                   <th>Chiều IN</th>
                   <th>Chiều OUT</th>
@@ -784,7 +547,7 @@
           </div>
         </div>
 
-        <div class="table-card" id="reasonsTableCard" style="display: none !important;">
+        <div class="table-card" id="reasonsTableCard">
           <div class="d-flex-between" style="margin-bottom: 12px; align-items: center;">
             <h3 style="margin: 0;">Top Lý Do Hủy & Phản Hồi Từ Chối Điều Độ</h3>
             <button type="button" class="btn btn-outline btn-sm" id="btnExportReasonsPng" title="Xuất ảnh PNG bảng top lý do">In PNG</button>
@@ -852,7 +615,6 @@
                   <th>Trạng Thái Đơn</th>
                   <th>Ngày Duyệt</th>
                   <th>Lý Do Hủy</th>
-                  <th>Giải Trình Chi Tiết</th>
                   <th>Xử Lý CSKH</th>
                 </tr>
               </thead>
@@ -873,7 +635,6 @@
     </div>
   </div>
 
-  <script src="timepicker-24h.js?v=20261017_1154"></script>
-  <script src="app.js?v=20261017_1154"></script>
+  <script src="app.js?v=20261020_1020"></script>
 </body>
 </html>
