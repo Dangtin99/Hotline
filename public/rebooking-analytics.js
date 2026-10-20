@@ -476,46 +476,109 @@
       pass3Map.get(pass3Key).memberGroups.push(candidate);
     });
 
-    // Xử lý kết quả Vòng 3:
-    // - Nếu có >= 2 nhóm từ Vòng 2 trùng khóa Vòng 3 -> Hợp nhất thành OUT_REPLACED
-    // - Nếu chỉ có 1 nhóm -> Giữ nguyên đưa vào kết quả cuối
+    // Xử lý kết quả Vòng 3 (Quy chuẩn Phương án 3: Xét các đơn có Booking khác nhau & Số Cont khác nhau):
+    // 1. Chỉ gom khi số Booking KHÁC NHAU và số Cont KHÁC NHAU.
+    // 2. Tuyệt đối KHÔNG gom nếu cùng số Booking (vì các cont khác nhau trong cùng booking là lô hàng nhiều cont độc lập).
+    // 3. Đơn trước đó trong chuỗi gom bắt buộc phải là đơn bị HỦY/THẤT BẠI.
+    // 4. Khoảng cách thời gian tạo đơn thay thế không quá 24h.
+    function isCancelledOrFailedRecord(r) {
+      if (!r) return true;
+      const s = String(r.trangThaiDonHang || "").toLowerCase();
+      return s.includes("hủy") || s.includes("huy") || s.includes("từ chối") || s.includes("tu choi") || s.includes("chưa thanh toán") || s.includes("chua thanh toan");
+    }
+
     pass3Map.forEach(p3 => {
-      if (p3.memberGroups.length >= 2) {
-        const combinedRecords = [];
-        const seenBookings = new Set();
-        const seenConts = new Set();
-
-        p3.memberGroups.forEach(mg => {
-          mg.records.forEach(r => {
-            combinedRecords.push(r);
-            if (r.soBooking) seenBookings.add(r.soBooking.toString().trim().toUpperCase());
-            if (r.soContainer) seenConts.add(r.soContainer.toString().trim().toUpperCase());
-          });
-          if (mg.allBookings) mg.allBookings.forEach(b => seenBookings.add(b));
-          if (mg.allConts) mg.allConts.forEach(c => seenConts.add(c));
-        });
-
-        combinedRecords.sort((a, b) => parseRecordTimestamp(b) - parseRecordTimestamp(a));
-
-        const latestRecord = combinedRecords[0];
-        const latestBooking = (latestRecord.soBooking || "").toString().trim().toUpperCase() || "-";
-        const latestCont = (latestRecord.soContainer || "").toString().trim().toUpperCase() || "-";
-
-        finalizedGroups.push({
-          groupKey: `PASS3__${p3.pass3Key}`,
-          soBooking: latestBooking,
-          soContainer: latestCont,
-          loaiDonHang: "OUT",
-          depot: p3.depot,
-          hangTau: p3.line,
-          records: combinedRecords,
-          matchType: "OUT_REPLACED",
-          allBookings: Array.from(seenBookings),
-          allConts: Array.from(seenConts)
-        });
-      } else {
+      if (p3.memberGroups.length <= 1) {
         finalizedGroups.push(p3.memberGroups[0]);
+        return;
       }
+
+      // Sắp xếp các memberGroups theo thời gian cũ nhất lên đầu
+      const sortedMembers = [...p3.memberGroups].sort((a, b) => {
+        const tA = parseRecordTimestamp(a.records[a.records.length - 1]);
+        const tB = parseRecordTimestamp(b.records[b.records.length - 1]);
+        return tA - tB;
+      });
+
+      const clusters = [];
+      sortedMembers.forEach(curr => {
+        const currBooking = (curr.soBooking || "").toString().trim().toUpperCase();
+        const currCont = (curr.soContainer || "").toString().trim().toUpperCase();
+
+        // Tìm cluster gần nhất mà curr có thể ghép vào:
+        let matchedCluster = null;
+        for (let i = clusters.length - 1; i >= 0; i--) {
+          const c = clusters[i];
+          const last = c[c.length - 1];
+          const lastBooking = (last.soBooking || "").toString().trim().toUpperCase();
+          const lastCont = (last.soContainer || "").toString().trim().toUpperCase();
+
+          const hasValidBk = currBooking && currBooking !== "-" && lastBooking && lastBooking !== "-";
+          const hasValidCt = currCont && currCont !== "-" && lastCont && lastCont !== "-";
+          const isDiffBk = currBooking !== lastBooking;
+          const isDiffCt = currCont !== lastCont;
+
+          // Không được trùng số booking với bất kỳ đơn nào đã có trong cluster đó
+          const isBookingDuplicateInCluster = c.some(m => (m.soBooking || "").toString().trim().toUpperCase() === currBooking);
+
+          // Đơn cuối trong cluster bắt buộc phải là đơn bị hủy/thất bại
+          const isLastFailed = isCancelledOrFailedRecord(last.records[0]);
+
+          // Khoảng cách thời gian không quá 24h
+          const timeDiff = Math.abs(parseRecordTimestamp(curr.records[curr.records.length - 1]) - parseRecordTimestamp(last.records[0]));
+          const isWithin24h = timeDiff <= 24 * 3600 * 1000;
+
+          if (hasValidBk && hasValidCt && isDiffBk && isDiffCt && !isBookingDuplicateInCluster && isLastFailed && isWithin24h) {
+            matchedCluster = c;
+            break;
+          }
+        }
+
+        if (matchedCluster) {
+          matchedCluster.push(curr);
+        } else {
+          clusters.push([curr]);
+        }
+      });
+
+      clusters.forEach(c => {
+        if (c.length >= 2) {
+          const combinedRecords = [];
+          const seenBookings = new Set();
+          const seenConts = new Set();
+
+          c.forEach(mg => {
+            mg.records.forEach(r => {
+              combinedRecords.push(r);
+              if (r.soBooking) seenBookings.add(r.soBooking.toString().trim().toUpperCase());
+              if (r.soContainer) seenConts.add(r.soContainer.toString().trim().toUpperCase());
+            });
+            if (mg.allBookings) mg.allBookings.forEach(b => seenBookings.add(b));
+            if (mg.allConts) mg.allConts.forEach(c => seenConts.add(c));
+          });
+
+          combinedRecords.sort((a, b) => parseRecordTimestamp(b) - parseRecordTimestamp(a));
+
+          const latestRecord = combinedRecords[0];
+          const latestBooking = (latestRecord.soBooking || "").toString().trim().toUpperCase() || "-";
+          const latestCont = (latestRecord.soContainer || "").toString().trim().toUpperCase() || "-";
+
+          finalizedGroups.push({
+            groupKey: `PASS3__${p3.pass3Key}__${latestBooking}__${latestCont}`,
+            soBooking: latestBooking,
+            soContainer: latestCont,
+            loaiDonHang: "OUT",
+            depot: p3.depot,
+            hangTau: p3.line,
+            records: combinedRecords,
+            matchType: "OUT_REPLACED",
+            allBookings: Array.from(seenBookings),
+            allConts: Array.from(seenConts)
+          });
+        } else {
+          finalizedGroups.push(c[0]);
+        }
+      });
     });
 
     // ----------------------------------------------------
