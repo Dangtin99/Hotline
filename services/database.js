@@ -1278,6 +1278,11 @@ function getAllVerificationRecords() {
   return memoryVerificationOrders;
 }
 
+function getVerificationRecordsByUploadId(uploadId) {
+  loadVerificationFromStore();
+  return memoryVerificationOrders.filter(o => o.uploadId === uploadId);
+}
+
 function deleteVerificationRecordsByUploadId(uploadId) {
   memoryVerificationOrders = memoryVerificationOrders.filter(o => o.uploadId !== uploadId);
   persistVerificationStore();
@@ -2709,6 +2714,7 @@ module.exports = {
   insertVerificationRecordsAsync,
   getAllVerificationRecords,
   getAllVerificationRecordsAsync,
+  getVerificationRecordsByUploadId,
   deleteVerificationRecordsByUploadId,
   deleteVerificationRecordsByUploadIdAsync,
   clearAllVerificationRecords,

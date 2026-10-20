@@ -49,6 +49,7 @@ const {
   insertVerificationRecordsAsync,
   getAllVerificationRecords,
   getAllVerificationRecordsAsync,
+  getVerificationRecordsByUploadId,
   deleteVerificationRecordsByUploadId,
   deleteVerificationRecordsByUploadIdAsync,
   clearAllVerificationRecords,
@@ -804,12 +805,15 @@ app.get("/api/template/:type", (req, res) => {
     let filePath = "";
     let downloadFileName = "";
 
+    const customId = req.query.id || req.query.batchId;
+    const cleanId = customId ? String(customId).replace(/[^a-zA-Z0-9_-]/g, "") : "";
+
     if (type === "approved" || type === "cancellation") {
       filePath = path.join(__dirname, "sample-data", "mau_dang_tai_don_duyet.xlsx");
-      downloadFileName = "mau_dang_tai_don_duyet.xlsx";
+      downloadFileName = cleanId ? `mau_dang_tai_don_duyet_${cleanId}.xlsx` : "mau_dang_tai_don_duyet.xlsx";
     } else if (type === "verification" || type === "eir") {
       filePath = path.join(__dirname, "sample-data", "mau_kiem_tra_don.xlsx");
-      downloadFileName = "mau_kiem_tra_don.xlsx";
+      downloadFileName = cleanId ? `mau_kiem_tra_don_${cleanId}.xlsx` : "mau_kiem_tra_don.xlsx";
     } else {
       return res.status(404).json({ status: "error", message: "Loại bản mẫu không hợp lệ." });
     }
@@ -1455,6 +1459,65 @@ app.get("/api/rebooking/grouped-orders", authRequired, async (req, res) => {
 /**
  * API: Tải file SQL Dump (.sql) của bảng dữ liệu kiểm tra đơn
  */
+/**
+ * API: Tải file dữ liệu hoặc bản mẫu theo Mã Đợt (ID) của dòng lịch sử kiểm tra đơn
+ * Cấu trúc tên file: mau_kiem_tra_don_[ID].xlsx
+ */
+app.get("/api/verification/history/:id/download", async (req, res) => {
+  try {
+    const uploadId = req.params.id;
+    const cleanId = String(uploadId).replace(/[^a-zA-Z0-9_-]/g, "");
+    const downloadFileName = `mau_kiem_tra_don_${cleanId}.xlsx`;
+    const templatePath = path.join(__dirname, "sample-data", "mau_kiem_tra_don.xlsx");
+
+    const records = getVerificationRecordsByUploadId(uploadId);
+    if (!records || records.length === 0) {
+      if (fs.existsSync(templatePath)) {
+        res.setHeader("Content-Disposition", `attachment; filename="${downloadFileName}"`);
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        return res.sendFile(templatePath);
+      }
+      return res.status(404).json({ status: "error", message: "Không tìm thấy dữ liệu đợt kiểm tra." });
+    }
+
+    // Xuất dữ liệu đợt này sang định dạng Excel
+    const rows = records.map(r => ({
+      "Số EIR": r.sttFile || "",
+      "Depot": r.depot || "",
+      "Hãng tàu": r.hangTau || "",
+      "Số booking": r.soBooking || "",
+      "Số cont": r.soContainer || "",
+      "Loại container": r.loaiContainer || "",
+      "Loại đơn hàng": r.loaiDonHang || "",
+      "Size": r.sizeTeus || "",
+      "Trạng thái đơn hàng": r.trangThaiDonHang || "",
+      "Trạng thái kích hoạt": r.trangThaiKichHoat || "",
+      "Thời gian kích hoạt": r.thoiGianKichHoat || "",
+      "Ngày tạo": r.ngayHuyDon || "",
+      "Ngày được duyệt": r.ngayDuocDuyet || "",
+      "Lý do Huỷ": r.lyDoHuy || "",
+      "Ghi chú (Lý do từ chối duyệt)": r.lyDoTuChoi || "",
+      "Lý do hủy check": r.lyDoHuyCheck || "",
+      "Họ tên tài xế": r.tenTaiXe || "",
+      "SĐT": r.sdtTaiXe || "",
+      "Đơn vị vận tải": r.tenNhaXe || "",
+      "Số xe": r.soXe || "",
+      "Người tạo": r.nguoiTao || ""
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, "KiemTraDon");
+    const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+
+    res.setHeader("Content-Disposition", `attachment; filename="${downloadFileName}"`);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    return res.send(buffer);
+  } catch (err) {
+    return res.status(500).json({ status: "error", message: err.message });
+  }
+});
+
 app.get("/api/verification/download-sql", authRequired, (req, res) => {
   try {
     if (fs.existsSync(VERIFICATION_SQL_DUMP_PATH)) {

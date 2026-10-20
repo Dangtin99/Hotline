@@ -687,14 +687,19 @@ function renderVerificationHistoryTable() {
   tbodyVerificationHistory.innerHTML = pageItems.map(item => {
     return `
       <tr>
-        <td><code>${item.id}</code></td>
+        <td>
+          <a href="javascript:void(0)" onclick="downloadVerificationHistoryItem('${item.id}')" title="Bấm để tải về file bản mẫu kiểm tra đơn (${item.id})" style="text-decoration:none;cursor:pointer;">
+            <code>${item.id}</code>
+          </a>
+        </td>
         <td style="word-break: break-all;">
           <strong>${item.fileName}</strong>
           <span class="text-muted" style="font-size: 0.85rem; margin-left: 6px;">(${item.fileSize})</span>
         </td>
         <td class="text-center"><strong>${Number(item.recordCount || 0).toLocaleString()}</strong> dòng</td>
         <td class="text-center">${formatVietnamDateTime(item.uploadedAt, item.id)}</td>
-        <td class="text-center">
+        <td class="text-center" style="white-space: nowrap;">
+          <button type="button" class="btn btn-outline btn-sm" style="margin-right: 6px; font-weight: 600;" onclick="downloadVerificationHistoryItem('${item.id}')">Tải Về</button>
           <button type="button" class="btn btn-outline btn-sm text-danger" onclick="deleteVerificationHistoryItem('${item.id}')">Xóa</button>
         </td>
       </tr>
@@ -853,12 +858,72 @@ async function handleClearAllVerificationHistory() {
 // HÀM TẢI FILE EXCEL BẢN MẪU
 // =========================================================================
 
-function downloadTemplate(type) {
-  const fileName = type === "approved" ? "mau_dang_tai_don_duyet.xlsx" : "mau_kiem_tra_don.xlsx";
+function generateVerificationId() {
+  const now = new Date();
+  const vParts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(now);
+  const vp = {};
+  for (const part of vParts) { vp[part.type] = part.value; }
+  return `VER-${vp.year}${vp.month}${vp.day}-${String(Date.now()).slice(-4)}`;
+}
+
+function downloadTemplate(type, customId) {
+  let fileName = "";
+  let url = `/api/template/${type}`;
+
+  if (type === "verification" || type === "eir") {
+    const id = customId || generateVerificationId();
+    fileName = `mau_kiem_tra_don_${id}.xlsx`;
+    url += `?id=${encodeURIComponent(id)}`;
+  } else {
+    fileName = customId ? `mau_dang_tai_don_duyet_${customId}.xlsx` : "mau_dang_tai_don_duyet.xlsx";
+    if (customId) url += `?id=${encodeURIComponent(customId)}`;
+  }
+
   const link = document.createElement("a");
-  link.href = `/api/template/${type}`;
+  link.href = url;
   link.setAttribute("download", fileName);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
 }
+
+// Tải file bản mẫu dữ liệu kiểm tra đơn theo ID của dòng dữ liệu đó
+window.downloadVerificationHistoryItem = async function(id) {
+  const cleanId = String(id || "").trim();
+  if (!cleanId) return;
+
+  const fileName = `mau_kiem_tra_don_${cleanId}.xlsx`;
+  const primaryUrl = `/api/verification/history/${encodeURIComponent(cleanId)}/download`;
+  const fallbackUrl = `/api/template/verification?id=${encodeURIComponent(cleanId)}`;
+
+  try {
+    const res = await fetch(primaryUrl);
+    if (res.ok) {
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.setAttribute("download", fileName);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+      return;
+    }
+  } catch (e) {
+    console.warn("Lỗi tải file trực tiếp, kích hoạt tải fallback bản mẫu", e);
+  }
+
+  // Fallback tải qua template với tên mau_kiem_tra_don_[ID].xlsx
+  const link = document.createElement("a");
+  link.href = fallbackUrl;
+  link.setAttribute("download", fileName);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
