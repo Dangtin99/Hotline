@@ -288,20 +288,48 @@
             </div>
           </div>
 
-          <!-- Hàng 1 - Cột 3: Depot -->
+          <!-- Hàng 1 - Cột 3: Depot (Đa chọn) -->
           <div class="filter-field dropdown-field">
-            <label for="filterDepot">Depot</label>
-            <select id="filterDepot" class="filter-select">
-              <option value="">Tất cả Depot</option>
-            </select>
+            <label>Depot</label>
+            <div class="multiselect-dropdown" id="depotMultiselect" style="width: 100%;">
+              <button type="button" class="multiselect-btn" id="depotDropdownBtn" aria-haspopup="true" aria-expanded="false" title="Nhấn để chọn một hoặc nhiều Depot" style="width: 100%;">
+                <span class="multiselect-label" id="depotSelectedLabel">Tất cả Depot</span>
+                <span class="multiselect-arrow">▼</span>
+              </button>
+              <div class="multiselect-panel" id="depotDropdownPanel">
+                <div class="multiselect-header">
+                  <label class="multiselect-item select-all-item">
+                    <input type="checkbox" id="depotSelectAll" checked>
+                    <span><strong>Tất cả Depot</strong></span>
+                  </label>
+                </div>
+                <div class="multiselect-list" id="depotOptionsList">
+                  <!-- Checkboxes Depot nạp động -->
+                </div>
+              </div>
+            </div>
           </div>
 
-          <!-- Hàng 1 - Cột 4: Hãng Tàu -->
+          <!-- Hàng 1 - Cột 4: Hãng Tàu (Đa chọn) -->
           <div class="filter-field dropdown-field">
-            <label for="filterLine">Hãng tàu (Line)</label>
-            <select id="filterLine" class="filter-select">
-              <option value="">Tất cả Hãng tàu</option>
-            </select>
+            <label>Hãng tàu (Line)</label>
+            <div class="multiselect-dropdown" id="lineMultiselect" style="width: 100%;">
+              <button type="button" class="multiselect-btn" id="lineDropdownBtn" aria-haspopup="true" aria-expanded="false" title="Nhấn để chọn một hoặc nhiều Hãng tàu" style="width: 100%;">
+                <span class="multiselect-label" id="lineSelectedLabel">Tất cả Hãng tàu</span>
+                <span class="multiselect-arrow">▼</span>
+              </button>
+              <div class="multiselect-panel" id="lineDropdownPanel">
+                <div class="multiselect-header">
+                  <label class="multiselect-item select-all-item">
+                    <input type="checkbox" id="lineSelectAll" checked>
+                    <span><strong>Tất cả Hãng tàu</strong></span>
+                  </label>
+                </div>
+                <div class="multiselect-list" id="lineOptionsList">
+                  <!-- Checkboxes Hãng tàu nạp động -->
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- Hàng 2 - Cột 1: Chiều Vận Hành -->
@@ -461,6 +489,6 @@
 
   <!-- Thư viện xuất Excel & Mã điều khiển nghiệp vụ -->
   <script src="/vendor/xlsx/xlsx.full.min.js"></script>
-  <script src="rebooking-analytics.js?v=20261020_1030"></script>
+  <script src="rebooking-analytics.js?v=20261020_1220"></script>
 </body>
 </html>

@@ -27,6 +27,26 @@
   const btnClearDateFilter = document.getElementById("btnClearDateFilter");
   const filterDepot = document.getElementById("filterDepot");
   const filterLine = document.getElementById("filterLine");
+
+  // Multi-select Depot
+  const depotMultiselect = document.getElementById("depotMultiselect");
+  const depotDropdownBtn = document.getElementById("depotDropdownBtn");
+  const depotDropdownPanel = document.getElementById("depotDropdownPanel");
+  const depotSelectedLabel = document.getElementById("depotSelectedLabel");
+  const depotSelectAll = document.getElementById("depotSelectAll");
+  const depotOptionsList = document.getElementById("depotOptionsList");
+  let allDepotValues = [];
+  let selectedDepots = [];
+
+  // Multi-select Hãng tàu (Line)
+  const lineMultiselect = document.getElementById("lineMultiselect");
+  const lineDropdownBtn = document.getElementById("lineDropdownBtn");
+  const lineDropdownPanel = document.getElementById("lineDropdownPanel");
+  const lineSelectedLabel = document.getElementById("lineSelectedLabel");
+  const lineSelectAll = document.getElementById("lineSelectAll");
+  const lineOptionsList = document.getElementById("lineOptionsList");
+  let allLineValues = [];
+  let selectedLines = [];
   const filterDirection = document.getElementById("filterDirection");
   const filterStatus = document.getElementById("filterStatus");
   const filterRebookCount = document.getElementById("filterRebookCount");
@@ -85,6 +105,80 @@
 
     if (filterDepot) filterDepot.addEventListener("change", onFilterChanged);
     if (filterLine) filterLine.addEventListener("change", onFilterChanged);
+
+    // Toggle dropdown đa chọn Depot
+    if (depotDropdownBtn && depotDropdownPanel) {
+      depotDropdownBtn.onclick = (e) => {
+        e.stopPropagation();
+        if (lineDropdownPanel) {
+          lineDropdownPanel.classList.remove("show");
+          if (lineDropdownBtn) {
+            lineDropdownBtn.classList.remove("active");
+            lineDropdownBtn.setAttribute("aria-expanded", "false");
+          }
+        }
+        const isOpen = depotDropdownPanel.classList.contains("show");
+        if (isOpen) {
+          depotDropdownPanel.classList.remove("show");
+          depotDropdownBtn.classList.remove("active");
+          depotDropdownBtn.setAttribute("aria-expanded", "false");
+        } else {
+          depotDropdownPanel.classList.add("show");
+          depotDropdownBtn.classList.add("active");
+          depotDropdownBtn.setAttribute("aria-expanded", "true");
+        }
+      };
+
+      depotDropdownPanel.onclick = (e) => {
+        e.stopPropagation();
+      };
+    }
+
+    // Toggle dropdown đa chọn Hãng tàu
+    if (lineDropdownBtn && lineDropdownPanel) {
+      lineDropdownBtn.onclick = (e) => {
+        e.stopPropagation();
+        if (depotDropdownPanel) {
+          depotDropdownPanel.classList.remove("show");
+          if (depotDropdownBtn) {
+            depotDropdownBtn.classList.remove("active");
+            depotDropdownBtn.setAttribute("aria-expanded", "false");
+          }
+        }
+        const isOpen = lineDropdownPanel.classList.contains("show");
+        if (isOpen) {
+          lineDropdownPanel.classList.remove("show");
+          lineDropdownBtn.classList.remove("active");
+          lineDropdownBtn.setAttribute("aria-expanded", "false");
+        } else {
+          lineDropdownPanel.classList.add("show");
+          lineDropdownBtn.classList.add("active");
+          lineDropdownBtn.setAttribute("aria-expanded", "true");
+        }
+      };
+
+      lineDropdownPanel.onclick = (e) => {
+        e.stopPropagation();
+      };
+    }
+
+    // Đóng dropdown khi click ngoài
+    document.addEventListener("click", () => {
+      if (depotDropdownPanel) {
+        depotDropdownPanel.classList.remove("show");
+        if (depotDropdownBtn) {
+          depotDropdownBtn.classList.remove("active");
+          depotDropdownBtn.setAttribute("aria-expanded", "false");
+        }
+      }
+      if (lineDropdownPanel) {
+        lineDropdownPanel.classList.remove("show");
+        if (lineDropdownBtn) {
+          lineDropdownBtn.classList.remove("active");
+          lineDropdownBtn.setAttribute("aria-expanded", "false");
+        }
+      }
+    });
     if (filterDirection) filterDirection.addEventListener("change", onFilterChanged);
     if (filterStatus) filterStatus.addEventListener("change", onFilterChanged);
     if (filterRebookCount) filterRebookCount.addEventListener("change", onFilterChanged);
@@ -710,20 +804,178 @@
     return result;
   }
 
-  // Trích xuất danh sách Depot & Hãng tàu cho dropdown
+  // Cập nhật nhãn nút đa chọn Depot
+  function updateDepotButtonLabel() {
+    if (!depotSelectedLabel || !depotDropdownBtn) return;
+    const count = selectedDepots.length;
+    const total = allDepotValues.length;
+
+    if (count === 0) {
+      depotSelectedLabel.textContent = "Chưa chọn Depot";
+      depotDropdownBtn.classList.remove("has-selection");
+    } else if (count === total) {
+      depotSelectedLabel.textContent = "Tất cả Depot";
+      depotDropdownBtn.classList.remove("has-selection");
+    } else if (count === 1) {
+      depotSelectedLabel.textContent = `Depot: ${selectedDepots[0]}`;
+      depotDropdownBtn.classList.add("has-selection");
+    } else {
+      depotSelectedLabel.textContent = `Depot (${count})`;
+      depotDropdownBtn.classList.add("has-selection");
+    }
+
+    if (depotSelectAll) {
+      if (count === total && total > 0) {
+        depotSelectAll.checked = true;
+        depotSelectAll.indeterminate = false;
+      } else if (count === 0) {
+        depotSelectAll.checked = false;
+        depotSelectAll.indeterminate = false;
+      } else {
+        depotSelectAll.checked = false;
+        depotSelectAll.indeterminate = true;
+      }
+    }
+  }
+
+  // Khởi tạo danh sách đa chọn Depot
+  function initDepotMultiSelect(depots) {
+    allDepotValues = [...depots];
+    if (selectedDepots.length === 0) {
+      selectedDepots = [...depots];
+    } else {
+      selectedDepots = selectedDepots.filter(d => allDepotValues.includes(d));
+      if (selectedDepots.length === 0) selectedDepots = [...depots];
+    }
+    if (!depotOptionsList) return;
+
+    depotOptionsList.innerHTML = allDepotValues.map(d => `
+      <label class="multiselect-item">
+        <input type="checkbox" class="depot-cb" value="${escapeHtml(d)}" ${selectedDepots.includes(d) ? "checked" : ""}>
+        <span>${escapeHtml(d)}</span>
+      </label>
+    `).join("");
+
+    if (depotSelectAll) {
+      depotSelectAll.onchange = () => {
+        const isChecked = depotSelectAll.checked;
+        selectedDepots = isChecked ? [...allDepotValues] : [];
+        const checkboxes = depotOptionsList.querySelectorAll(".depot-cb");
+        checkboxes.forEach(cb => cb.checked = isChecked);
+        updateDepotButtonLabel();
+        currentPage = 1;
+        applyFilters();
+      };
+    }
+
+    const checkboxes = depotOptionsList.querySelectorAll(".depot-cb");
+    checkboxes.forEach(cb => {
+      cb.onchange = () => {
+        selectedDepots = Array.from(checkboxes)
+          .filter(c => c.checked)
+          .map(c => c.value);
+        updateDepotButtonLabel();
+        currentPage = 1;
+        applyFilters();
+      };
+    });
+
+    updateDepotButtonLabel();
+  }
+
+  // Cập nhật nhãn nút đa chọn Hãng tàu
+  function updateLineButtonLabel() {
+    if (!lineSelectedLabel || !lineDropdownBtn) return;
+    const count = selectedLines.length;
+    const total = allLineValues.length;
+
+    if (count === 0) {
+      lineSelectedLabel.textContent = "Chưa chọn Hãng tàu";
+      lineDropdownBtn.classList.remove("has-selection");
+    } else if (count === total) {
+      lineSelectedLabel.textContent = "Tất cả Hãng tàu";
+      lineDropdownBtn.classList.remove("has-selection");
+    } else if (count === 1) {
+      lineSelectedLabel.textContent = `Hãng tàu: ${selectedLines[0]}`;
+      lineDropdownBtn.classList.add("has-selection");
+    } else {
+      lineSelectedLabel.textContent = `Hãng tàu (${count})`;
+      lineDropdownBtn.classList.add("has-selection");
+    }
+
+    if (lineSelectAll) {
+      if (count === total && total > 0) {
+        lineSelectAll.checked = true;
+        lineSelectAll.indeterminate = false;
+      } else if (count === 0) {
+        lineSelectAll.checked = false;
+        lineSelectAll.indeterminate = false;
+      } else {
+        lineSelectAll.checked = false;
+        lineSelectAll.indeterminate = true;
+      }
+    }
+  }
+
+  // Khởi tạo danh sách đa chọn Hãng tàu
+  function initLineMultiSelect(lines) {
+    allLineValues = [...lines];
+    if (selectedLines.length === 0) {
+      selectedLines = [...lines];
+    } else {
+      selectedLines = selectedLines.filter(l => allLineValues.includes(l));
+      if (selectedLines.length === 0) selectedLines = [...lines];
+    }
+    if (!lineOptionsList) return;
+
+    lineOptionsList.innerHTML = allLineValues.map(l => `
+      <label class="multiselect-item">
+        <input type="checkbox" class="line-cb" value="${escapeHtml(l)}" ${selectedLines.includes(l) ? "checked" : ""}>
+        <span>${escapeHtml(l)}</span>
+      </label>
+    `).join("");
+
+    if (lineSelectAll) {
+      lineSelectAll.onchange = () => {
+        const isChecked = lineSelectAll.checked;
+        selectedLines = isChecked ? [...allLineValues] : [];
+        const checkboxes = lineOptionsList.querySelectorAll(".line-cb");
+        checkboxes.forEach(cb => cb.checked = isChecked);
+        updateLineButtonLabel();
+        currentPage = 1;
+        applyFilters();
+      };
+    }
+
+    const checkboxes = lineOptionsList.querySelectorAll(".line-cb");
+    checkboxes.forEach(cb => {
+      cb.onchange = () => {
+        selectedLines = Array.from(checkboxes)
+          .filter(c => c.checked)
+          .map(c => c.value);
+        updateLineButtonLabel();
+        currentPage = 1;
+        applyFilters();
+      };
+    });
+
+    updateLineButtonLabel();
+  }
+
+  // Trích xuất danh sách Depot & Hãng tàu cho dropdown đa chọn
   function populateDropdownFilters() {
     const depots = new Set();
     const lines = new Set();
     const statuses = new Set();
 
     allGroupedOrders.forEach(o => {
-      if (o.depot && o.depot !== "-") depots.add(o.depot);
-      if (o.hangTau && o.hangTau !== "-") lines.add(o.hangTau);
+      if (o.depot && o.depot !== "-") depots.add(o.depot.toUpperCase());
+      if (o.hangTau && o.hangTau !== "-") lines.add(o.hangTau.toUpperCase());
       if (o.latestStatus && o.latestStatus !== "-") statuses.add(o.latestStatus);
     });
 
-    populateSelect(filterDepot, Array.from(depots).sort(), "Tất cả Depot");
-    populateSelect(filterLine, Array.from(lines).sort(), "Tất cả Hãng tàu");
+    initDepotMultiSelect(Array.from(depots).sort());
+    initLineMultiSelect(Array.from(lines).sort());
     populateSelect(filterStatus, Array.from(statuses).sort(), "Tất cả trạng thái mới nhất");
   }
 
@@ -778,11 +1030,23 @@
         if (toTime && orderTime > toTime) return false;
       }
 
-      // 2. Lọc theo Depot
-      if (depotVal && o.depot.toUpperCase() !== depotVal) return false;
+      // 2. Lọc theo Depot (Đa chọn)
+      if (allDepotValues.length > 0) {
+        if (selectedDepots.length === 0) return false;
+        if (selectedDepots.length < allDepotValues.length) {
+          const d = (o.depot || "").toUpperCase();
+          if (!selectedDepots.includes(d)) return false;
+        }
+      }
 
-      // 3. Lọc theo Hãng tàu
-      if (lineVal && o.hangTau.toUpperCase() !== lineVal) return false;
+      // 3. Lọc theo Hãng tàu (Đa chọn)
+      if (allLineValues.length > 0) {
+        if (selectedLines.length === 0) return false;
+        if (selectedLines.length < allLineValues.length) {
+          const l = (o.hangTau || "").toUpperCase();
+          if (!selectedLines.includes(l)) return false;
+        }
+      }
 
       // 4. Lọc theo Chiều
       if (dirVal && o.loaiDonHang.toUpperCase() !== dirVal) return false;
@@ -1072,6 +1336,24 @@
     if (btnClearDateFilter) btnClearDateFilter.style.display = "none";
     if (filterDepot) filterDepot.value = "";
     if (filterLine) filterLine.value = "";
+
+    // Đặt lại đa chọn Depot
+    if (allDepotValues.length > 0) {
+      selectedDepots = [...allDepotValues];
+      if (depotOptionsList) {
+        depotOptionsList.querySelectorAll(".depot-cb").forEach(cb => cb.checked = true);
+      }
+      updateDepotButtonLabel();
+    }
+
+    // Đặt lại đa chọn Hãng tàu
+    if (allLineValues.length > 0) {
+      selectedLines = [...allLineValues];
+      if (lineOptionsList) {
+        lineOptionsList.querySelectorAll(".line-cb").forEach(cb => cb.checked = true);
+      }
+      updateLineButtonLabel();
+    }
     if (filterDirection) filterDirection.value = "";
     if (filterStatus) filterStatus.value = "";
     if (filterRebookCount) filterRebookCount.value = "rebooked";
