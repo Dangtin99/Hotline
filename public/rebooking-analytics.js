@@ -870,25 +870,9 @@
         totalAttemptsBadge = `<span class="badge" style="background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;">${o.totalAttempts} lần</span>`;
       }
 
-      // Booking display with indicator if booking was changed
-      let bookingDisplay = `<code>${escapeHtml(o.soBooking)}</code>`;
-      if (o.matchType === "CHANGED_BOOKING" && o.allBookings && o.allBookings.length > 1) {
-        const otherBookings = o.allBookings.filter(b => b !== o.soBooking);
-        bookingDisplay += `<br><span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;font-size:10px;margin-top:2px;" title="Đơn đã đổi từ booking cũ: ${escapeHtml(otherBookings.join(', '))}">[Đổi Booking]</span>`;
-      } else if (o.matchType === "OUT_REPLACED") {
-        const otherBookings = (o.allBookings || []).filter(b => b !== o.soBooking);
-        const tip = otherBookings.length > 0 ? `Đơn OUT đổi booking từ: ${otherBookings.join(', ')}` : "Đơn OUT tạo lại thay thế";
-        bookingDisplay += `<br><span class="badge" style="background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;font-size:10px;margin-top:2px;" title="${escapeHtml(tip)}">[OUT Đặt Lại]</span>`;
-      }
-
-      // Container display with indicator if cont was changed in OUT_REPLACED
-      let contDisplay = `<strong>${escapeHtml(o.soContainer)}</strong>`;
-      if (o.matchType === "OUT_REPLACED" && o.allConts && o.allConts.length > 1) {
-        const otherConts = o.allConts.filter(c => c !== o.soContainer);
-        if (otherConts.length > 0) {
-          contDisplay += `<br><span style="font-size:10px;color:var(--text-muted);" title="Cont ban đầu: ${escapeHtml(otherConts.join(', '))}">Gốc: ${escapeHtml(otherConts[0])}</span>`;
-        }
-      }
+      // Booking & Container display tinh gọn (đã ẩn nhãn ghi chú [Đổi Booking], [OUT Đặt Lại])
+      const bookingDisplay = `<code>${escapeHtml(o.soBooking)}</code>`;
+      const contDisplay = `<strong>${escapeHtml(o.soContainer)}</strong>`;
 
       return `
         <tr style="cursor: pointer;" onclick="window.viewRebookingHistory('${escapeHtml(o.groupKey)}')" title="Nhấn để xem toàn bộ lịch sử các lần đặt của đơn này">
