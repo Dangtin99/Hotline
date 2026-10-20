@@ -3737,14 +3737,25 @@ function renderKpiSummaryTable(records, totalMasterCount, comparisonInfo = null)
   if (scopeEl) {
     if (hasComp && comparisonInfo) {
       const daysText = comparisonInfo.diffDays === 1 ? "1 ngày" : `${comparisonInfo.diffDays} ngày`;
-      const curFrom = formatDateDisplay(comparisonInfo.currentFrom);
-      const curTo = formatDateDisplay(comparisonInfo.currentTo);
+      const rawCurFrom = comparisonInfo.currentFrom || comparisonInfo.dateFrom;
+      const rawCurTo = comparisonInfo.currentTo || comparisonInfo.dateTo;
+      const curFrom = formatDateDisplay(rawCurFrom);
+      const curTo = formatDateDisplay(rawCurTo);
       const prevFrom = formatDateDisplay(comparisonInfo.prevFrom);
       const prevTo = formatDateDisplay(comparisonInfo.prevTo);
+
+      const hFrom = comparisonInfo.hourFrom || (typeof filterHourFrom !== "undefined" && filterHourFrom ? filterHourFrom.value : "");
+      const hTo = comparisonInfo.hourTo || (typeof filterHourTo !== "undefined" && filterHourTo ? filterHourTo.value : "");
+      const hasCustomHour = Boolean(hFrom && hTo && (hFrom !== "00:00" || hTo !== "23:59"));
+      const timeRangeText = hasCustomHour ? ` (${hFrom} - ${hTo})` : "";
+
+      const curLabel = curFrom === curTo ? `${curFrom}${timeRangeText}` : `${curFrom} - ${curTo}${timeRangeText}`;
+      const prevLabel = prevFrom === prevTo ? `${prevFrom}${timeRangeText}` : `${prevFrom} - ${prevTo}${timeRangeText}`;
+
       scopeEl.innerHTML = `
-        <span>Kỳ này (${daysText}): <strong style="color: #1e293b;">${curFrom} - ${curTo}</strong> (${currentTotal.toLocaleString("vi-VN")} đơn)</span>
+        <span>Kỳ này (${daysText}): <strong style="color: #1e293b;">${curLabel}</strong> (${currentTotal.toLocaleString("vi-VN")} đơn)</span>
         <span style="margin: 0 8px; color: #cbd5e1;">|</span>
-        <span style="color: #475569;">Cùng kỳ trước: <strong style="color: #1e293b;">${prevFrom} - ${prevTo}</strong> (${prevList.length.toLocaleString("vi-VN")} đơn)</span>
+        <span style="color: #475569;">Cùng kỳ trước: <strong style="color: #1e293b;">${prevLabel}</strong> (${prevList.length.toLocaleString("vi-VN")} đơn)</span>
       `;
     } else {
       if (totalMasterCount && totalMasterCount > currentTotal) {
