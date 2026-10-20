@@ -330,52 +330,48 @@
       pass1Groups.push(g);
     });
 
-    // Tách phần đệm thành 2 luồng:
-    // 1. Nhóm đã có >= 2 lần tạo ngay ở Vòng 1 / 1.5 (Trùng Booking hoặc đã cập nhật Booking)
-    // 2. Nhóm đơn lẻ (= 1 lần tạo) hoặc cần đối soát Vòng 2
-    const finalizedGroups = [];
-    const candidatesForPass2 = [];
-
-    pass1Groups.forEach(g => {
-      if (g.records.length >= 2) {
-        // Nhóm đã có >= 2 lần tạo, giữ nguyên
-        finalizedGroups.push({
-          ...g,
-          matchType: g.matchType || "SAME_BOOKING"
-        });
-      } else {
-        // Nhóm đơn lẻ 1 lần tạo trong phần đệm -> Đưa vào kiểm tra Vòng 2
-        candidatesForPass2.push(g);
-      }
-    });
-
-    // ----------------------------------------------------
-    // VÒNG 2: Kiểm tra tiếp các đơn ở phần đệm có Khác Số Booking
-    // Khóa xét: Số Container + Chiều + Người tạo
     // Hàm chuẩn hóa biển số xe để so khớp (bỏ khoảng trắng, dấu gạch ngang, chấm)
     function cleanTruckPlate(t) {
       if (!t || t === "-" || t === "null" || t === "undefined") return "";
       return String(t).toUpperCase().replace(/[^A-Z0-9]/g, "");
     }
 
+    // Chuẩn hóa thuộc tính cơ sở cho các nhóm từ Vòng 1
+    pass1Groups.forEach(g => {
+      if (!g.allBookings) {
+        const bks = new Set();
+        g.records.forEach(r => { if (r.soBooking) bks.add(r.soBooking.toString().trim().toUpperCase()); });
+        g.allBookings = Array.from(bks);
+      }
+      if (!g.allConts) {
+        const cts = new Set();
+        g.records.forEach(r => { if (r.soContainer) cts.add(r.soContainer.toString().trim().toUpperCase()); });
+        g.allConts = Array.from(cts);
+      }
+      if (!g.matchType) {
+        g.matchType = g.records.length >= 2 ? "SAME_BOOKING" : "SINGLE";
+      }
+    });
+
     // ----------------------------------------------------
-    // VÒNG 2: Quét phần đệm cho các đơn khác Booking
-    // gom theo: Số Container + Chiều + Người tạo + SỐ XE
+    // VÒNG 2: Pipeline xét và lọc dựa trên kết quả từ Vòng 1
+    // Toàn bộ các nhóm từ Vòng 1 (cả đơn 1 lần và >= 2 lần) được đưa vào Vòng 2
+    // Khóa xét: Số Container + Chiều + Người tạo + Số Xe
     // ----------------------------------------------------
     const pass2Map = new Map();
-    const candidatesForPass3 = [];
+    const pass2Groups = [];
 
-    candidatesForPass2.forEach(candidate => {
-      const singleRecord = candidate.records[0];
+    pass1Groups.forEach(candidate => {
+      const latestRec = candidate.records[0];
       const cont = (candidate.soContainer || "").trim().toUpperCase();
       const dir = (candidate.loaiDonHang || "").trim().toUpperCase();
-      const creator = (singleRecord.nguoiTao || "").toString().trim().toUpperCase();
-      const truck = cleanTruckPlate(singleRecord.soXe);
+      const creator = (latestRec.nguoiTao || "").toString().trim().toUpperCase();
+      const truck = cleanTruckPlate(latestRec.soXe);
 
-      // Nếu không có số container hợp lệ hoặc không đủ người tạo / số xe
-      // Chuyển tiếp thẳng vào danh sách ứng viên Pass 3 để kiểm tra các đơn OUT
+      // Nếu không đủ điều kiện xét Vòng 2 (thiếu số cont hợp lệ, người tạo hoặc số xe)
+      // Chuyển tiếp thẳng vào kết quả Vòng 2 để Vòng 3 xét tiếp
       if (!cont || cont === "-" || cont === "CHUA_CO_CONT" || !creator || creator === "-" || !truck) {
-        candidatesForPass3.push(candidate);
+        pass2Groups.push(candidate);
         return;
       }
 
@@ -396,12 +392,11 @@
       pass2Map.get(pass2Key).memberGroups.push(candidate);
     });
 
-    // Tách kết quả Vòng 2 thành 2 luồng:
-    // 1. Nhóm đã có >= 2 lần tạo ở Vòng 2 (CHANGED_BOOKING)
-    // 2. Nhóm vẫn là đơn đơn lẻ = 1 lần tạo -> Đưa vào kiểm tra Vòng 3
+    // Xử lý kết quả Vòng 2:
+    // - Nếu có >= 2 nhóm Vòng 1 trùng khóa Vòng 2 -> Hợp nhất thành 1 nhóm CHANGED_BOOKING
+    // - Nếu chỉ có 1 nhóm -> Giữ nguyên nhóm đó
     pass2Map.forEach(p2 => {
       if (p2.memberGroups.length >= 2) {
-        // Gom toàn bộ records của các nhóm khác booking lại
         const combinedRecords = [];
         const seenBookings = new Set();
         const seenConts = new Set();
@@ -412,59 +407,55 @@
             if (r.soBooking) seenBookings.add(r.soBooking.toString().trim().toUpperCase());
             if (r.soContainer) seenConts.add(r.soContainer.toString().trim().toUpperCase());
           });
+          if (mg.allBookings) mg.allBookings.forEach(b => seenBookings.add(b));
+          if (mg.allConts) mg.allConts.forEach(c => seenConts.add(c));
         });
 
-        // Sắp xếp lại theo thứ tự thời gian giảm dần (Mới nhất lên đầu)
         combinedRecords.sort((a, b) => parseRecordTimestamp(b) - parseRecordTimestamp(a));
 
         const latestRecord = combinedRecords[0];
         const latestBooking = (latestRecord.soBooking || "").toString().trim().toUpperCase() || "-";
 
-        // Tạo nhóm hợp nhất với SỐ BOOKING MỚI NHẤT
-        finalizedGroups.push({
+        pass2Groups.push({
           groupKey: `PASS2__${p2.pass2Key}`,
-          soBooking: latestBooking, // Cập nhật lại số booking mới
+          soBooking: latestBooking,
           soContainer: p2.soContainer,
           loaiDonHang: p2.loaiDonHang,
+          depot: latestRecord.depot || p2.memberGroups[0].depot || "-",
+          hangTau: latestRecord.hangTau || p2.memberGroups[0].hangTau || "-",
           records: combinedRecords,
-          matchType: "CHANGED_BOOKING", // Đánh dấu đã đổi số booking
+          matchType: "CHANGED_BOOKING",
           allBookings: Array.from(seenBookings),
           allConts: Array.from(seenConts)
         });
       } else {
-        // Vẫn chỉ có 1 lần tạo duy nhất trong phần đệm -> Đưa tiếp vào Vòng 3
-        candidatesForPass3.push(p2.memberGroups[0]);
+        pass2Groups.push(p2.memberGroups[0]);
       }
     });
 
     // ----------------------------------------------------
-    // VÒNG 3: Kiểm tra chuyên biệt các ĐƠN OUT (Gate OUT - Lấy cont)
-    // Khác Booking, Khác Cont nhưng CÙNG:
-    // 1. Chiều = "OUT"
-    // 2. Người tạo (Bắt buộc trùng chính xác người tạo hợp lệ)
-    // 3. Depot
-    // 4. Hãng tàu
-    // 5. Số xe (Bắt buộc trùng chính xác số xe vận chuyển)
+    // VÒNG 3: Pipeline xét và lọc dựa trên kết quả từ Vòng 2
+    // Toàn bộ các nhóm từ Vòng 2 được đưa vào Vòng 3
+    // Khóa xét chuyên biệt cho đơn OUT: OUT + Người tạo + Depot + Hãng tàu + Số xe
     // ----------------------------------------------------
     const pass3Map = new Map();
+    const finalizedGroups = [];
 
-    candidatesForPass3.forEach(candidate => {
-      const singleRecord = candidate.records[0];
+    pass2Groups.forEach(candidate => {
+      const latestRec = candidate.records[0];
       const dir = (candidate.loaiDonHang || "").trim().toUpperCase();
-      const creator = (singleRecord.nguoiTao || "").toString().trim().toUpperCase();
-      const depot = (singleRecord.depot || candidate.depot || "").toString().trim().toUpperCase();
-      const line = (singleRecord.hangTau || candidate.hangTau || "").toString().trim().toUpperCase();
-      const truck = cleanTruckPlate(singleRecord.soXe);
+      const creator = (latestRec.nguoiTao || "").toString().trim().toUpperCase();
+      const depot = (latestRec.depot || candidate.depot || "").toString().trim().toUpperCase();
+      const line = (latestRec.hangTau || candidate.hangTau || "").toString().trim().toUpperCase();
+      const truck = cleanTruckPlate(latestRec.soXe);
 
-      // Chỉ xét đơn chiều OUT và bắt buộc có người tạo, depot, hãng tàu, số xe
       const isValidCreator = creator && creator !== "-" && creator !== "UNKNOWN" && creator !== "UNDEFINED";
       const isOutDirection = dir === "OUT";
 
+      // Nếu không đủ điều kiện xét Vòng 3 (không phải đơn OUT, hoặc thiếu thông tin)
+      // Chuyển thẳng vào kết quả cuối cùng
       if (!isOutDirection || !isValidCreator || !depot || depot === "-" || !line || line === "-" || !truck) {
-        finalizedGroups.push({
-          ...candidate,
-          matchType: "SINGLE"
-        });
+        finalizedGroups.push(candidate);
         return;
       }
 
@@ -485,10 +476,11 @@
       pass3Map.get(pass3Key).memberGroups.push(candidate);
     });
 
-    // Xử lý kết quả Vòng 3 từ phần đệm
+    // Xử lý kết quả Vòng 3:
+    // - Nếu có >= 2 nhóm từ Vòng 2 trùng khóa Vòng 3 -> Hợp nhất thành OUT_REPLACED
+    // - Nếu chỉ có 1 nhóm -> Giữ nguyên đưa vào kết quả cuối
     pass3Map.forEach(p3 => {
       if (p3.memberGroups.length >= 2) {
-        // Gom toàn bộ records của các đơn OUT khác booking & khác cont
         const combinedRecords = [];
         const seenBookings = new Set();
         const seenConts = new Set();
@@ -499,35 +491,30 @@
             if (r.soBooking) seenBookings.add(r.soBooking.toString().trim().toUpperCase());
             if (r.soContainer) seenConts.add(r.soContainer.toString().trim().toUpperCase());
           });
+          if (mg.allBookings) mg.allBookings.forEach(b => seenBookings.add(b));
+          if (mg.allConts) mg.allConts.forEach(c => seenConts.add(c));
         });
 
-        // Sắp xếp lại theo thời gian giảm dần (Bản ghi mới nhất lên đầu)
         combinedRecords.sort((a, b) => parseRecordTimestamp(b) - parseRecordTimestamp(a));
 
         const latestRecord = combinedRecords[0];
         const latestBooking = (latestRecord.soBooking || "").toString().trim().toUpperCase() || "-";
         const latestCont = (latestRecord.soContainer || "").toString().trim().toUpperCase() || "-";
 
-        // Tạo nhóm hợp nhất thay thế bằng SỐ BOOKING MỚI NHẤT & SỐ CONTAINER MỚI NHẤT
         finalizedGroups.push({
           groupKey: `PASS3__${p3.pass3Key}`,
-          soBooking: latestBooking,    // Cập nhật lại số booking mới nhất
-          soContainer: latestCont,     // Cập nhật lại số cont mới nhất
+          soBooking: latestBooking,
+          soContainer: latestCont,
           loaiDonHang: "OUT",
           depot: p3.depot,
           hangTau: p3.line,
           records: combinedRecords,
-          matchType: "OUT_REPLACED",   // Đánh dấu đơn OUT đặt lại thay thế
+          matchType: "OUT_REPLACED",
           allBookings: Array.from(seenBookings),
           allConts: Array.from(seenConts)
         });
       } else {
-        // Đơn lẻ 1 lần trong phần đệm
-        const single = p3.memberGroups[0];
-        finalizedGroups.push({
-          ...single,
-          matchType: "SINGLE"
-        });
+        finalizedGroups.push(p3.memberGroups[0]);
       }
     });
 
