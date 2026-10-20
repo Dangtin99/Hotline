@@ -236,22 +236,22 @@
     return isNaN(t) ? 0 : t;
   }
 
-  // Nạp dữ liệu từ backend (Tối ưu hóa: Client Cache + Background Refresh)
+  // Nạp dữ liệu từ backend (Tối ưu hóa Server-Side: Nhận kết quả đã tính sẵn từ máy chủ)
   async function loadVerificationData(forceRefresh = false) {
     let hasRenderedFromCache = false;
 
-    // 1. Nếu không phải forceRefresh, kiểm tra cache Client để hiển thị lập tức 0ms
+    // 1. Kiểm tra cache Client để hiển thị lập tức 0ms
     if (!forceRefresh) {
       try {
         const cachedRaw = sessionStorage.getItem(CLIENT_CACHE_KEY);
         if (cachedRaw) {
           const cached = JSON.parse(cachedRaw);
-          if (cached && Array.isArray(cached.records) && cached.records.length > 0) {
-            allRawRecords = cached.records;
+          if (cached && Array.isArray(cached.groups) && cached.groups.length > 0) {
+            allGroupedOrders = cached.groups;
+            allRawRecords = { length: cached.rawCount || cached.groups.length };
             if (badgeFileCount) {
               badgeFileCount.textContent = `${cached.stats?.fileCount || 0} tệp đã tích lũy`;
             }
-            allGroupedOrders = groupOrders(allRawRecords);
             populateDropdownFilters();
             applyFilters();
             hideAlert();
@@ -262,12 +262,12 @@
     }
 
     if (!hasRenderedFromCache) {
-      showAlert("info", "Đang tải dữ liệu kiểm tra đơn và xử lý gom nhóm theo Booking...");
+      showAlert("info", "Đang tải dữ liệu đơn đặt lại đã tính toán sẵn từ máy chủ...");
       if (tbodyRebookingData) {
         tbodyRebookingData.innerHTML = `
           <tr>
             <td colspan="15" class="text-center py-4" style="color:var(--text-muted);font-weight:500;">
-              Đang nạp và phân tích dữ liệu đơn đặt lại...
+              Đang nạp dữ liệu đơn đặt lại từ máy chủ...
             </td>
           </tr>
         `;
@@ -275,19 +275,22 @@
     }
 
     try {
-      const url = forceRefresh ? "/api/verification/all-data?refresh=1" : "/api/verification/all-data";
+      const url = forceRefresh ? "/api/rebooking/grouped-orders?refresh=1" : "/api/rebooking/grouped-orders";
       const res = await fetch(url);
       if (!res.ok) {
         throw new Error(`Mã lỗi máy chủ: ${res.status}`);
       }
 
       const json = await res.json();
-      if (json.status !== "success" || !Array.isArray(json.records)) {
+      if (json.status !== "success" || !Array.isArray(json.groups)) {
         throw new Error(json.message || "Dữ liệu trả về không đúng định dạng chuẩn");
       }
 
-      allRawRecords = json.records;
+      // Nhận kết quả tính sẵn từ Backend
+      allGroupedOrders = json.groups;
       const stats = json.stats || { fileCount: 0 };
+      const rawCount = json.totalRawRecords || allGroupedOrders.length;
+      allRawRecords = { length: rawCount };
 
       if (badgeFileCount) {
         badgeFileCount.textContent = `${stats.fileCount || 0} tệp đã tích lũy`;
@@ -295,11 +298,8 @@
 
       // Lưu sessionStorage cho các lần mở tab tiếp theo
       try {
-        sessionStorage.setItem(CLIENT_CACHE_KEY, JSON.stringify({ records: allRawRecords, stats }));
+        sessionStorage.setItem(CLIENT_CACHE_KEY, JSON.stringify({ groups: allGroupedOrders, stats, rawCount }));
       } catch (e) {}
-
-      // Tiến hành gom nhóm theo quy tắc: Booking + Container + Chiều
-      allGroupedOrders = groupOrders(allRawRecords);
 
       // Cập nhật các dropdown chọn lựa
       populateDropdownFilters();

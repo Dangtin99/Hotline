@@ -80,6 +80,7 @@ const {
 } = require("./services/database");
 const backupService = require("./services/backupService");
 const tursoClient = require("./services/tursoClient");
+const rebookingAnalyzer = require("./services/rebookingAnalyzer");
 const {
   authenticate,
   verifyToken,
@@ -1372,6 +1373,7 @@ app.post("/api/verification/upload", authRequired, upload.single("file"), async 
     };
 
     await saveVerificationHistoryAsync(historyItem);
+    rebookingAnalyzer.invalidateRebookingCache();
 
     return res.json({
       status: "success",
@@ -1426,6 +1428,31 @@ app.get("/api/verification/all-data", authRequired, async (req, res) => {
 });
 
 /**
+ * API: Lấy danh sách nhóm đơn đặt lại đã được gom nhóm tính toán sẵn tại Backend (Server-Side Calculation)
+ * Tối ưu hóa siêu tốc: Giảm 100% CPU phía client, trả về kết quả ngay tức thì từ bộ nhớ đệm máy chủ
+ */
+app.get("/api/rebooking/grouped-orders", authRequired, async (req, res) => {
+  try {
+    const forceRefresh = req.query.refresh === "1" || req.query.refresh === "true";
+    let allRecords = await getAllVerificationRecordsAsync(forceRefresh);
+    allRecords = filterRecordsByDepotPermission(allRecords, req.user);
+    const stats = getVerificationDatabaseStats();
+
+    const groups = rebookingAnalyzer.getPrecomputedRebookingGroups(allRecords, forceRefresh);
+
+    return res.json({
+      status: "success",
+      totalGroups: groups.length,
+      totalRawRecords: allRecords.length,
+      stats,
+      groups
+    });
+  } catch (err) {
+    return res.status(500).json({ status: "error", message: err.message });
+  }
+});
+
+/**
  * API: Tải file SQL Dump (.sql) của bảng dữ liệu kiểm tra đơn
  */
 app.get("/api/verification/download-sql", authRequired, (req, res) => {
@@ -1457,6 +1484,7 @@ app.delete("/api/verification/history/:id", authRequired, async (req, res) => {
       await tursoClient.deleteVerificationHistoryItemFromTurso(req.params.id);
     }
     await deleteVerificationRecordsByUploadIdAsync(req.params.id);
+    rebookingAnalyzer.invalidateRebookingCache();
     return res.json({ status: "success", message: "Đã xóa dữ liệu kiểm tra đơn khỏi hệ thống SQL thành công!" });
   } catch (err) {
     return res.status(500).json({ status: "error", message: err.message });
@@ -1473,6 +1501,7 @@ app.delete("/api/verification/history", authRequired, async (req, res) => {
       await tursoClient.clearAllVerificationOrdersInTurso();
     }
     await clearAllVerificationRecordsAsync();
+    rebookingAnalyzer.invalidateRebookingCache();
     return res.json({ status: "success", message: "Đã dọn dẹp sạch toàn bộ lịch sử và bảng SQL dữ liệu kiểm tra đơn." });
   } catch (err) {
     return res.status(500).json({ status: "error", message: err.message });
