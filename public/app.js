@@ -3771,259 +3771,123 @@ function renderKpiSummaryTable(records, totalMasterCount, comparisonInfo = null)
 
   const kpiRows = [];
 
-  if (currentDashboardTab === "unpaid") {
-    // Chỉ số tập trung cho Đơn Chưa Thanh Toán
-    kpiRows.push(
-      {
-        stt: 1,
-        title: "Tổng số đơn chưa thanh toán",
-        count: curM.totalUnpaid,
-        pct: calcPct(curM.totalUnpaid),
-        compareHtml: formatCountDiff(curM.totalUnpaid, prevM ? prevM.totalUnpaid : 0, hasComp, true),
-        note: "Đơn có trạng thái đơn hàng là Chưa thanh toán",
-        badgeClass: "badge-warning",
-        isHighlight: true
-      },
-      {
-        stt: 2,
-        title: "Tổng số đơn đã được CSKH xử lý / liên hệ",
-        count: curM.totalProcessed,
-        pct: calcPct(curM.totalProcessed),
-        compareHtml: formatCountDiff(curM.totalProcessed, prevM ? prevM.totalProcessed : 0, hasComp, false),
-        note: "Các đơn Chưa thanh toán đã được cập nhật trạng thái xử lý",
-        badgeClass: "badge-info",
-        isHighlight: true
-      },
-      {
-        stt: 3,
-        title: "Đã thanh toán / Đã thành công",
-        count: curM.countSuccess,
-        pct: calcPct(curM.countSuccess),
-        compareHtml: formatCountDiff(curM.countSuccess, prevM ? prevM.countSuccess : 0, hasComp, false),
-        note: "Khách hàng đã thanh toán thành công sau khi hỗ trợ",
-        badgeClass: "badge-success",
-        isHighlight: true
-      },
-      {
-        stt: 4,
-        title: "Đã liên hệ - Chờ xử lý",
-        count: curM.countContactWait,
-        pct: calcPct(curM.countContactWait),
-        compareHtml: formatCountDiff(curM.countContactWait, prevM ? prevM.countContactWait : 0, hasComp, false),
-        note: "Đã liên hệ khách hàng và đang chờ phản hồi/thanh toán",
-        badgeClass: "badge-warning",
-        isHighlight: false
-      },
-      {
-        stt: 5,
-        title: "Không liên hệ được",
-        count: curM.countUncontacted,
-        pct: calcPct(curM.countUncontacted),
-        compareHtml: formatCountDiff(curM.countUncontacted, prevM ? prevM.countUncontacted : 0, hasComp, true),
-        note: "Không thể liên lạc được với khách hàng/tài xế",
-        badgeClass: "badge-danger",
-        isHighlight: false
-      },
-      {
-        stt: 6,
-        title: "Tỉ lệ liên hệ thành công",
-        count: `${curM.totalContacted} / ${curM.totalCalls} cuộc`,
-        pct: `${curM.rateContacted}%`,
-        compareHtml: formatRateDiff(curM.rateContacted, prevM ? prevM.rateContacted : "0.0", curM.totalCalls, prevM ? prevM.totalCalls : 0, hasComp, false),
-        note: `Tổng số cuộc gọi đã kết nối thành công (${curM.totalContacted} cuộc)`,
-        badgeClass: "badge-success",
-        isHighlight: true
-      },
-      {
-        stt: 7,
-        title: "Tỉ lệ không liên hệ được",
-        count: `${curM.countUncontacted} / ${curM.totalCalls} cuộc`,
-        pct: `${curM.rateUncontacted}%`,
-        compareHtml: formatRateDiff(curM.rateUncontacted, prevM ? prevM.rateUncontacted : "0.0", curM.totalCalls, prevM ? prevM.totalCalls : 0, hasComp, true),
-        note: `Số cuộc gọi không thể liên lạc được (${curM.countUncontacted} cuộc)`,
-        badgeClass: "badge-danger",
-        isHighlight: true
-      }
-    );
-  } else if (currentDashboardTab === "cancelled") {
-    // Chỉ số tập trung cho Đơn Đã Hủy
-    kpiRows.push(
-      {
-        stt: 1,
-        title: "Tổng số đơn hủy",
-        count: curM.totalCancelled,
-        pct: calcPct(curM.totalCancelled),
-        compareHtml: formatCountDiff(curM.totalCancelled, prevM ? prevM.totalCancelled : 0, hasComp, true),
-        note: "Đơn có trạng thái đơn hàng là Đã hủy",
-        badgeClass: "badge-danger",
-        isHighlight: true
-      },
-      {
-        stt: 2,
-        title: "Tổng số đơn đã được CSKH xử lý / liên hệ",
-        count: curM.totalProcessed,
-        pct: calcPct(curM.totalProcessed),
-        compareHtml: formatCountDiff(curM.totalProcessed, prevM ? prevM.totalProcessed : 0, hasComp, false),
-        note: "Các đơn Đã hủy đã được cập nhật trạng thái xử lý",
-        badgeClass: "badge-info",
-        isHighlight: true
-      },
-      {
-        stt: 3,
-        title: "Đã đặt lại đơn",
-        count: curM.countRebooked,
-        pct: calcPct(curM.countRebooked),
-        compareHtml: formatCountDiff(curM.countRebooked, prevM ? prevM.countRebooked : 0, hasComp, false),
-        note: "Khách hàng đã đặt lại đơn mới thành công",
-        badgeClass: "badge-success",
-        isHighlight: true
-      },
-      {
-        stt: 4,
-        title: "Đã liên hệ - Không đặt lại / Thất bại",
-        count: curM.countContactFailed,
-        pct: calcPct(curM.countContactFailed),
-        compareHtml: formatCountDiff(curM.countContactFailed, prevM ? prevM.countContactFailed : 0, hasComp, false),
-        note: "Đã liên hệ nhưng khách từ chối đặt lại hoặc hủy luôn",
-        badgeClass: "badge-danger",
-        isHighlight: false
-      },
-      {
-        stt: 5,
-        title: "Không liên hệ được",
-        count: curM.countUncontacted,
-        pct: calcPct(curM.countUncontacted),
-        compareHtml: formatCountDiff(curM.countUncontacted, prevM ? prevM.countUncontacted : 0, hasComp, true),
-        note: "Không thể liên lạc được với khách hàng/tài xế",
-        badgeClass: "badge-warning",
-        isHighlight: false
-      },
-      {
-        stt: 6,
-        title: "Tỉ lệ liên hệ thành công",
-        count: `${curM.totalContacted} / ${curM.totalCalls} cuộc`,
-        pct: `${curM.rateContacted}%`,
-        compareHtml: formatRateDiff(curM.rateContacted, prevM ? prevM.rateContacted : "0.0", curM.totalCalls, prevM ? prevM.totalCalls : 0, hasComp, false),
-        note: `Tổng số cuộc gọi đã kết nối thành công (${curM.totalContacted} cuộc)`,
-        badgeClass: "badge-success",
-        isHighlight: true
-      },
-      {
-        stt: 7,
-        title: "Tỉ lệ không liên hệ được",
-        count: `${curM.countUncontacted} / ${curM.totalCalls} cuộc`,
-        pct: `${curM.rateUncontacted}%`,
-        compareHtml: formatRateDiff(curM.rateUncontacted, prevM ? prevM.rateUncontacted : "0.0", curM.totalCalls, prevM ? prevM.totalCalls : 0, hasComp, true),
-        note: `Số cuộc gọi không thể liên lạc được (${curM.countUncontacted} cuộc)`,
-        badgeClass: "badge-danger",
-        isHighlight: true
-      }
-    );
-  } else {
-    // Toàn bộ 10 chỉ số cho trường hợp xem tất cả
-    kpiRows.push(
-      {
-        stt: 1,
-        title: "Tổng số đơn hủy",
-        count: curM.totalCancelled,
-        pct: calcPct(curM.totalCancelled),
-        compareHtml: formatCountDiff(curM.totalCancelled, prevM ? prevM.totalCancelled : 0, hasComp, true),
-        note: "Đơn có trạng thái đơn hàng là Đã hủy",
-        badgeClass: "badge-danger",
-        isHighlight: true
-      },
-      {
-        stt: 2,
-        title: "Số đơn chưa thanh toán",
-        count: curM.totalUnpaid,
-        pct: calcPct(curM.totalUnpaid),
-        compareHtml: formatCountDiff(curM.totalUnpaid, prevM ? prevM.totalUnpaid : 0, hasComp, true),
-        note: "Đơn có trạng thái đơn hàng là Chưa thanh toán",
-        badgeClass: "badge-warning",
-        isHighlight: true
-      },
-      {
-        stt: 3,
-        title: "Tổng số đơn đã được phân loại trạng thái đã xử lý",
-        count: curM.totalProcessed,
-        pct: calcPct(curM.totalProcessed),
-        compareHtml: formatCountDiff(curM.totalProcessed, prevM ? prevM.totalProcessed : 0, hasComp, false),
-        note: "Các đơn CSKH đã cập nhật trạng thái xử lý",
-        badgeClass: "badge-info",
-        isHighlight: true
-      },
-      {
-        stt: 4,
-        title: "Đã thanh toán / Đã thành công",
-        count: curM.countSuccess,
-        pct: calcPct(curM.countSuccess),
-        compareHtml: formatCountDiff(curM.countSuccess, prevM ? prevM.countSuccess : 0, hasComp, false),
-        note: "Trạng thái xử lý: Đã thanh toán / Đã thành công",
-        badgeClass: "badge-success",
-        isHighlight: false
-      },
-      {
-        stt: 5,
-        title: "Đã đặt lại",
-        count: curM.countRebooked,
-        pct: calcPct(curM.countRebooked),
-        compareHtml: formatCountDiff(curM.countRebooked, prevM ? prevM.countRebooked : 0, hasComp, false),
-        note: "Trạng thái xử lý: Đã đặt lại",
-        badgeClass: "badge-secondary",
-        isHighlight: false
-      },
-      {
-        stt: 6,
-        title: "Không liên hệ được",
-        count: curM.countUncontacted,
-        pct: calcPct(curM.countUncontacted),
-        compareHtml: formatCountDiff(curM.countUncontacted, prevM ? prevM.countUncontacted : 0, hasComp, true),
-        note: "Trạng thái xử lý: Không liên hệ được",
-        badgeClass: "badge-warning",
-        isHighlight: false
-      },
-      {
-        stt: 7,
-        title: "Đã liên hệ - Chờ",
-        count: curM.countContactWait,
-        pct: calcPct(curM.countContactWait),
-        compareHtml: formatCountDiff(curM.countContactWait, prevM ? prevM.countContactWait : 0, hasComp, false),
-        note: "Trạng thái xử lý: Đã liên hệ - Chờ",
-        badgeClass: "badge-warning",
-        isHighlight: false
-      },
-      {
-        stt: 8,
-        title: "Đã liên hệ - Không thành công / Không đặt lại",
-        count: curM.countContactFailed,
-        pct: calcPct(curM.countContactFailed),
-        compareHtml: formatCountDiff(curM.countContactFailed, prevM ? prevM.countContactFailed : 0, hasComp, false),
-        note: "Trạng thái xử lý: Đã liên hệ - Không thành công / Đã Liên hệ - Không đặt lại",
-        badgeClass: "badge-danger",
-        isHighlight: false
-      },
-      {
-        stt: 9,
-        title: "Tỉ lệ liên hệ được",
-        count: `${curM.totalContacted} / ${curM.totalCalls} cuộc`,
-        pct: `${curM.rateContacted}%`,
-        compareHtml: formatRateDiff(curM.rateContacted, prevM ? prevM.rateContacted : "0.0", curM.totalCalls, prevM ? prevM.totalCalls : 0, hasComp, false),
-        note: `Tổng số cuộc gọi đã kết nối thành công (${curM.totalContacted} cuộc)`,
-        badgeClass: "badge-success",
-        isHighlight: true
-      },
-      {
-        stt: 10,
-        title: "Tỉ lệ liên hệ không được",
-        count: `${curM.countUncontacted} / ${curM.totalCalls} cuộc`,
-        pct: `${curM.rateUncontacted}%`,
-        compareHtml: formatRateDiff(curM.rateUncontacted, prevM ? prevM.rateUncontacted : "0.0", curM.totalCalls, prevM ? prevM.totalCalls : 0, hasComp, true),
-        note: `Số cuộc gọi không thể liên lạc được (${curM.countUncontacted} cuộc)`,
-        badgeClass: "badge-danger",
-        isHighlight: true
-      }
-    );
-  }
+  // Tính tổng phát sinh cần xử lý (Hủy + Chưa thanh toán)
+  const curCombined = curM.totalCancelled + curM.totalUnpaid;
+  const prevCombined = prevM ? (prevM.totalCancelled + prevM.totalUnpaid) : 0;
+
+  // Bảng Chỉ Số KPI Vận Hành & CSKH Thống Kê Toàn Diện Cả Đơn Hủy & Đơn Chưa Thanh Toán
+  kpiRows.push(
+    {
+      stt: 1,
+      title: "Tổng số đơn hủy",
+      count: curM.totalCancelled,
+      pct: calcPct(curM.totalCancelled),
+      compareHtml: formatCountDiff(curM.totalCancelled, prevM ? prevM.totalCancelled : 0, hasComp, true),
+      note: "Đơn có trạng thái đơn hàng là Đã hủy",
+      badgeClass: "badge-danger",
+      isHighlight: true
+    },
+    {
+      stt: 2,
+      title: "Tổng số đơn chưa thanh toán",
+      count: curM.totalUnpaid,
+      pct: calcPct(curM.totalUnpaid),
+      compareHtml: formatCountDiff(curM.totalUnpaid, prevM ? prevM.totalUnpaid : 0, hasComp, true),
+      note: "Đơn có trạng thái đơn hàng là Chưa thanh toán",
+      badgeClass: "badge-warning",
+      isHighlight: true
+    },
+    {
+      stt: 3,
+      title: "Tổng phát sinh cần xử lý (Hủy + Chưa TT)",
+      count: curCombined,
+      pct: calcPct(curCombined),
+      compareHtml: formatCountDiff(curCombined, prevCombined, hasComp, true),
+      note: "Tổng đơn Hủy và Chưa thanh toán phát sinh trong kỳ",
+      badgeClass: "badge-info",
+      isHighlight: true
+    },
+    {
+      stt: 4,
+      title: "Tổng số đơn đã được CSKH xử lý / liên hệ",
+      count: curM.totalProcessed,
+      pct: calcPct(curM.totalProcessed),
+      compareHtml: formatCountDiff(curM.totalProcessed, prevM ? prevM.totalProcessed : 0, hasComp, false),
+      note: "Các đơn Đã hủy & Chưa thanh toán đã được cập nhật trạng thái xử lý",
+      badgeClass: "badge-info",
+      isHighlight: true
+    },
+    {
+      stt: 5,
+      title: "Đã đặt lại đơn (Sau hủy)",
+      count: curM.countRebooked,
+      pct: calcPct(curM.countRebooked),
+      compareHtml: formatCountDiff(curM.countRebooked, prevM ? prevM.countRebooked : 0, hasComp, false),
+      note: "Khách hàng đã đặt lại đơn mới thành công",
+      badgeClass: "badge-success",
+      isHighlight: true
+    },
+    {
+      stt: 6,
+      title: "Đã thanh toán thành công (Sau hỗ trợ)",
+      count: curM.countSuccess,
+      pct: calcPct(curM.countSuccess),
+      compareHtml: formatCountDiff(curM.countSuccess, prevM ? prevM.countSuccess : 0, hasComp, false),
+      note: "Đơn chưa thanh toán được khách thanh toán thành công",
+      badgeClass: "badge-success",
+      isHighlight: true
+    },
+    {
+      stt: 7,
+      title: "Đang chờ xử lý (Chờ đặt lại / Chờ thanh toán)",
+      count: curM.countContactWait,
+      pct: calcPct(curM.countContactWait),
+      compareHtml: formatCountDiff(curM.countContactWait, prevM ? prevM.countContactWait : 0, hasComp, false),
+      note: "Đã liên hệ và đang chờ khách đặt lại hoặc thanh toán",
+      badgeClass: "badge-warning",
+      isHighlight: false
+    },
+    {
+      stt: 8,
+      title: "Đã liên hệ - Không đặt lại / Thất bại",
+      count: curM.countContactFailed,
+      pct: calcPct(curM.countContactFailed),
+      compareHtml: formatCountDiff(curM.countContactFailed, prevM ? prevM.countContactFailed : 0, hasComp, false),
+      note: "Đã liên hệ nhưng khách từ chối đặt lại hoặc hủy luôn",
+      badgeClass: "badge-danger",
+      isHighlight: false
+    },
+    {
+      stt: 9,
+      title: "Không liên hệ được",
+      count: curM.countUncontacted,
+      pct: calcPct(curM.countUncontacted),
+      compareHtml: formatCountDiff(curM.countUncontacted, prevM ? prevM.countUncontacted : 0, hasComp, true),
+      note: "Không thể liên lạc được với khách hàng/tài xế",
+      badgeClass: "badge-danger",
+      isHighlight: false
+    },
+    {
+      stt: 10,
+      title: "Tỉ lệ liên hệ thành công",
+      count: `${curM.totalContacted} / ${curM.totalCalls} cuộc`,
+      pct: `${curM.rateContacted}%`,
+      compareHtml: formatRateDiff(curM.rateContacted, prevM ? prevM.rateContacted : "0.0", curM.totalCalls, prevM ? prevM.totalCalls : 0, hasComp, false),
+      note: `Tổng số cuộc gọi đã kết nối thành công (${curM.totalContacted} cuộc)`,
+      badgeClass: "badge-success",
+      isHighlight: true
+    },
+    {
+      stt: 11,
+      title: "Tỉ lệ không liên hệ được",
+      count: `${curM.countUncontacted} / ${curM.totalCalls} cuộc`,
+      pct: `${curM.rateUncontacted}%`,
+      compareHtml: formatRateDiff(curM.rateUncontacted, prevM ? prevM.rateUncontacted : "0.0", curM.totalCalls, prevM ? prevM.totalCalls : 0, hasComp, true),
+      note: `Số cuộc gọi không thể liên lạc được (${curM.countUncontacted} cuộc)`,
+      badgeClass: "badge-danger",
+      isHighlight: true
+    }
+  );
 
   tbody.innerHTML = kpiRows.map(row => {
     const rowClass = row.isHighlight ? "kpi-summary-row-highlight" : "";
