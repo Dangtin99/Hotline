@@ -275,31 +275,61 @@
     }
 
     try {
-      const url = forceRefresh ? "/api/rebooking/grouped-orders?refresh=1" : "/api/rebooking/grouped-orders";
-      const res = await fetch(url);
-      if (!res.ok) {
-        throw new Error(`Mã lỗi máy chủ: ${res.status}`);
-      }
+      let isLoadedFromBackend = false;
 
-      const json = await res.json();
-      if (json.status !== "success" || !Array.isArray(json.groups)) {
-        throw new Error(json.message || "Dữ liệu trả về không đúng định dạng chuẩn");
-      }
-
-      // Nhận kết quả tính sẵn từ Backend
-      allGroupedOrders = json.groups;
-      const stats = json.stats || { fileCount: 0 };
-      const rawCount = json.totalRawRecords || allGroupedOrders.length;
-      allRawRecords = { length: rawCount };
-
-      if (badgeFileCount) {
-        badgeFileCount.textContent = `${stats.fileCount || 0} tệp đã tích lũy`;
-      }
-
-      // Lưu sessionStorage cho các lần mở tab tiếp theo
+      // 1. Ưu tiên gọi API tính sẵn từ Backend (Server-side Precomputed - Siêu tốc)
       try {
-        sessionStorage.setItem(CLIENT_CACHE_KEY, JSON.stringify({ groups: allGroupedOrders, stats, rawCount }));
-      } catch (e) {}
+        const url = forceRefresh ? "/api/rebooking/grouped-orders?refresh=1" : "/api/rebooking/grouped-orders";
+        const res = await fetch(url);
+        if (res.ok) {
+          const json = await res.json();
+          if (json && json.status === "success" && Array.isArray(json.groups)) {
+            allGroupedOrders = json.groups;
+            const stats = json.stats || { fileCount: 0 };
+            const rawCount = json.totalRawRecords || allGroupedOrders.length;
+            allRawRecords = { length: rawCount };
+
+            if (badgeFileCount) {
+              badgeFileCount.textContent = `${stats.fileCount || 0} tệp đã tích lũy`;
+            }
+
+            try {
+              sessionStorage.setItem(CLIENT_CACHE_KEY, JSON.stringify({ groups: allGroupedOrders, stats, rawCount }));
+            } catch (e) {}
+
+            isLoadedFromBackend = true;
+          }
+        }
+      } catch (backendErr) {
+        console.warn("[RebookingAnalytics] API Backend /api/rebooking/grouped-orders chưa sẵn sàng, kích hoạt fallback:", backendErr);
+      }
+
+      // 2. Tự động Fallback: Nếu API Backend 404 hoặc chưa khởi động lại, lấy all-data và gom nhóm phía Client
+      if (!isLoadedFromBackend) {
+        console.info("[RebookingAnalytics] Đang sử dụng cơ chế dự phòng Client-side qua /api/verification/all-data");
+        const fallbackUrl = forceRefresh ? "/api/verification/all-data?refresh=1" : "/api/verification/all-data";
+        const fallbackRes = await fetch(fallbackUrl);
+        if (!fallbackRes.ok) {
+          throw new Error(`Mã lỗi máy chủ: ${fallbackRes.status}`);
+        }
+
+        const fallbackJson = await fallbackRes.json();
+        if (fallbackJson.status !== "success" || !Array.isArray(fallbackJson.records)) {
+          throw new Error(fallbackJson.message || "Dữ liệu trả về không đúng định dạng chuẩn");
+        }
+
+        allRawRecords = fallbackJson.records;
+        const stats = fallbackJson.stats || { fileCount: 0 };
+        if (badgeFileCount) {
+          badgeFileCount.textContent = `${stats.fileCount || 0} tệp đã tích lũy`;
+        }
+
+        allGroupedOrders = groupOrders(allRawRecords);
+
+        try {
+          sessionStorage.setItem(CLIENT_CACHE_KEY, JSON.stringify({ groups: allGroupedOrders, stats, rawCount: allRawRecords.length }));
+        } catch (e) {}
+      }
 
       // Cập nhật các dropdown chọn lựa
       populateDropdownFilters();
