@@ -4011,3 +4011,93 @@ html.non-admin-user [data-admin-only="true"] {
   transform: translateY(-1px);
 }
 
+/* ==========================================================================
+   DASHBOARD TABS (BÁO CÁO ĐƠN CHƯA THANH TOÁN & ĐƠN ĐÃ HỦY)
+   ========================================================================== */
+.dashboard-tabs-section {
+  margin-bottom: 22px;
+}
+
+.dashboard-tabs-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 6px 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.dashboard-tabs-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dashboard-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 700;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+  user-select: none;
+}
+
+.dashboard-tab-btn:hover {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.dashboard-tab-btn.tab-unpaid.active {
+  background: #fffbeb;
+  color: #b45309;
+  border-color: #fde68a;
+  box-shadow: 0 2px 4px rgba(217, 119, 6, 0.12);
+}
+
+.dashboard-tab-btn.tab-cancelled.active {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fecaca;
+  box-shadow: 0 2px 4px rgba(220, 38, 38, 0.12);
+}
+
+.dashboard-tab-btn .tab-badge {
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: #e2e8f0;
+  color: #475569;
+  transition: all 0.2s;
+}
+
+.dashboard-tab-btn.tab-unpaid.active .tab-badge {
+  background: #d97706;
+  color: #ffffff;
+}
+
+.dashboard-tab-btn.tab-cancelled.active .tab-badge {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.dashboard-tab-caption {
+  font-size: 12.5px;
+  color: #64748b;
+  font-weight: 500;
+  padding-right: 8px;
+}
+

@@ -50,6 +50,9 @@
         <a href="verification-table.html" class="sidebar-link" id="navVerificationTable" data-admin-only="true">
           <span>Dữ Liệu Check Đơn</span>
         </a>
+        <a href="new-feature.html" class="sidebar-link" id="navNewFeature" data-admin-only="true">
+          <span>Báo Cáo Mới</span>
+        </a>
 
         <div class="sidebar-heading" id="sidebarHeadingUpload" data-admin-only="true" style="margin-top: 10px;">
           <span>QUẢN TRỊ TẢI LÊN</span>
@@ -329,6 +332,34 @@
         <div id="dashboardDateFilterGroup" style="display: none;"></div>
       </section>
 
+      <!-- Dashboard Tabs: Chuyển Đổi Chuyên Biệt 2 Báo Cáo (Đơn Chưa Thanh Toán & Đơn Đã Hủy) -->
+      <section class="dashboard-tabs-section">
+        <div class="dashboard-tabs-wrapper">
+          <div class="dashboard-tabs-group" role="tablist" aria-label="Phân hệ Báo cáo Tổng quan">
+            <button type="button" class="dashboard-tab-btn tab-unpaid active" id="tabBtnUnpaid" role="tab" aria-selected="true" onclick="switchDashboardTab('unpaid')">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+              <span>BÁO CÁO ĐƠN CHƯA THANH TOÁN</span>
+              <span class="tab-badge" id="tabBadgeUnpaid">0 đơn</span>
+            </button>
+            <button type="button" class="dashboard-tab-btn tab-cancelled" id="tabBtnCancelled" role="tab" aria-selected="false" onclick="switchDashboardTab('cancelled')">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="15" y1="9" x2="9" y2="15"></line>
+                <line x1="9" y1="9" x2="15" y2="15"></line>
+              </svg>
+              <span>BÁO CÁO ĐƠN ĐÃ HỦY</span>
+              <span class="tab-badge" id="tabBadgeCancelled">0 đơn</span>
+            </button>
+          </div>
+          <div class="dashboard-tab-caption" id="dashboardTabCaption">
+            Đang phân tích điểm nghẽn & tình trạng xử lý đơn Chưa thanh toán
+          </div>
+        </div>
+      </section>
+
       <!-- KPIs Overview (Ẩn theo yêu cầu) -->
       <section class="kpi-grid" style="display: none;">
         <div class="kpi-card kpi-card-orders">
@@ -384,7 +415,7 @@
       </section>
 
       <!-- Phân Tích Đơn Hủy Theo Nguồn & Xu Hướng Đặt Lại (Chỉ xét đơn có giải trình) -->
-      <section class="source-cancellation-section" style="margin-bottom: 24px;">
+      <section class="source-cancellation-section tab-sec-cancelled" id="sourceCancellationSection" style="margin-bottom: 24px;">
         <div class="table-card" id="sourceCancellationCard">
           <div class="d-flex-between" style="margin-bottom: 14px; align-items: center; flex-wrap: wrap; gap: 10px;">
             <div>
@@ -427,7 +458,7 @@
       </section>
 
       <!-- Charts Row -->
-      <section class="charts-grid">
+      <section class="charts-grid tab-sec-cancelled" id="chartsGridSection">
         <div class="chart-card">
           <h3>Cơ Cấu Lý Do Hủy Đơn</h3>
           <div class="chart-container">
@@ -528,7 +559,7 @@
       </section>
 
       <!-- Matrix Cross-Tabulation: Depot & Hãng Tàu x Trạng Thái -->
-      <section class="matrix-section">
+      <section class="matrix-section tab-sec-cancelled" id="matrixSection">
         <div class="matrix-card" id="matrixCard">
           <div class="matrix-header">
             <div class="matrix-title-group">
@@ -698,7 +729,7 @@
       </section>
 
       <!-- Detailed Tables -->
-      <section class="tables-grid" style="grid-template-columns: 1fr; margin-bottom: 24px;">
+      <section class="tables-grid tab-sec-cancelled" id="topDepotLineCancelSection" style="grid-template-columns: 1fr; margin-bottom: 24px;">
         <!-- Bảng Báo Cáo Top Depot & Hãng Tàu Có Số Lượng Đơn Hủy Nhiều Nhất Kèm Lý Do Phổ Biến -->
         <div class="table-card" id="topDepotLineCancelCard">
           <div class="d-flex-between" style="margin-bottom: 12px; align-items: center; flex-wrap: wrap; gap: 10px;">
@@ -741,7 +772,7 @@
               <thead>
                 <tr>
                   <th>Mã Depot</th>
-                  <th>Số Đơn Hủy</th>
+                  <th id="thDepotOrderCount">Số Đơn</th>
                   <th>Sản Lượng (TEUs)</th>
                   <th>Chiều IN</th>
                   <th>Chiều OUT</th>

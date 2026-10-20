@@ -2394,6 +2394,55 @@ function extractTimeOnly(dateStr) {
   return "00:00";
 }
 
+function normalizeHour(hourStr, defaultVal = "00:00") {
+  if (!hourStr) return defaultVal;
+  const s = String(hourStr).trim();
+  if (!s) return defaultVal;
+  if (s === "24:00") return "23:59";
+  const parts = s.split(":");
+  const h = (parts[0] || "0").padStart(2, "0");
+  const m = (parts[1] || "00").padStart(2, "0");
+  return `${h}:${m}`;
+}
+
+function extractDateTime(dateStr) {
+  if (!dateStr || dateStr === "-" || dateStr === "null" || dateStr === "undefined") return null;
+  const str = String(dateStr).trim().replace("T", " ");
+  // Format YYYY-MM-DD HH:mm:ss
+  const mYmd = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (mYmd) {
+    const y = mYmd[1];
+    const m = mYmd[2].padStart(2, "0");
+    const d = mYmd[3].padStart(2, "0");
+    const h = (mYmd[4] !== undefined ? mYmd[4] : "00").padStart(2, "0");
+    const min = (mYmd[5] !== undefined ? mYmd[5] : "00").padStart(2, "0");
+    const s = (mYmd[6] !== undefined ? mYmd[6] : "00").padStart(2, "0");
+    return `${y}-${m}-${d} ${h}:${min}:${s}`;
+  }
+  // Format DD/MM/YYYY HH:mm:ss
+  const mDmy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (mDmy) {
+    const y = mDmy[3];
+    const m = mDmy[2].padStart(2, "0");
+    const d = mDmy[1].padStart(2, "0");
+    const h = (mDmy[4] !== undefined ? mDmy[4] : "00").padStart(2, "0");
+    const min = (mDmy[5] !== undefined ? mDmy[5] : "00").padStart(2, "0");
+    const s = (mDmy[6] !== undefined ? mDmy[6] : "00").padStart(2, "0");
+    return `${y}-${m}-${d} ${h}:${min}:${s}`;
+  }
+  const dObj = new Date(str);
+  if (!isNaN(dObj.getTime())) {
+    const y = dObj.getFullYear();
+    const m = String(dObj.getMonth() + 1).padStart(2, "0");
+    const day = String(dObj.getDate()).padStart(2, "0");
+    const h = String(dObj.getHours()).padStart(2, "0");
+    const min = String(dObj.getMinutes()).padStart(2, "0");
+    const s = String(dObj.getSeconds()).padStart(2, "0");
+    return `${y}-${m}-${day} ${h}:${min}:${s}`;
+  }
+  return null;
+}
+
 function getVietnamTodayYmd() {
   const now = new Date();
   const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
@@ -2559,23 +2608,23 @@ async function getDashboardDataAsync(params = {}) {
   const currentRecords = [];
   const previousRecords = [];
 
-  const hStart = hourFrom || "00:00";
-  const hEnd = hourTo || "23:59";
+  const hStart = normalizeHour(hourFrom, "00:00");
+  const hEnd = normalizeHour(hourTo, "23:59");
+
+  const currStart = `${dateFrom} ${hStart}:00`;
+  const currEnd = `${dateTo} ${hEnd}:59`;
+  const prevStart = `${prevFrom} ${hStart}:00`;
+  const prevEnd = `${prevTo} ${hEnd}:59`;
 
   orders.forEach(o => {
     const rawVal = o[dateProp];
-    const itemDate = extractDateOnly(rawVal);
-    if (!itemDate) return;
-    const itemTime = extractTimeOnly(rawVal);
+    const itemDateTime = extractDateTime(rawVal);
+    if (!itemDateTime) return;
 
-    if (itemDate >= dateFrom && itemDate <= dateTo) {
-      if (itemTime >= hStart && itemTime <= hEnd) {
-        currentRecords.push(o);
-      }
-    } else if (itemDate >= prevFrom && itemDate <= prevTo) {
-      if (itemTime >= hStart && itemTime <= hEnd) {
-        previousRecords.push(o);
-      }
+    if (itemDateTime >= currStart && itemDateTime <= currEnd) {
+      currentRecords.push(o);
+    } else if (itemDateTime >= prevStart && itemDateTime <= prevEnd) {
+      previousRecords.push(o);
     }
   });
 

@@ -630,6 +630,18 @@ function extractDateTime(dateStr) {
   return null;
 }
 
+// Chuẩn hóa chuỗi giờ HH:mm (2 chữ số giờ và phút)
+function normalizeHour(hourStr, defaultVal = "") {
+  if (!hourStr) return defaultVal;
+  const s = String(hourStr).trim();
+  if (!s) return defaultVal;
+  if (s === "24:00") return "23:59";
+  const parts = s.split(":");
+  const h = (parts[0] || "0").padStart(2, "0");
+  const m = (parts[1] || "00").padStart(2, "0");
+  return `${h}:${m}`;
+}
+
 // Chuẩn hóa và trích xuất chuỗi ngày YYYY-MM-DD
 function extractDateOnly(dateStr) {
   if (!dateStr) return null;
@@ -2395,19 +2407,22 @@ function applyFilters() {
 
       if (dateFromVal || dateToVal) {
         if (dateFromVal) {
-          const fromTime = hourFromVal ? `${hourFromVal}:00` : "00:00:00";
+          const normHFrom = normalizeHour(hourFromVal, "00:00");
+          const fromTime = `${normHFrom}:00`;
           const fromDateTime = `${dateFromVal} ${fromTime}`;
           if (recDateTime < fromDateTime) return false;
         }
         if (dateToVal) {
           let toTime = "23:59:59";
           if (hourToVal) {
+            const normHTo = normalizeHour(hourToVal, "23:59");
+            const normHFrom = normalizeHour(hourFromVal, "00:00");
             if (hourToVal === "24:00") {
               toTime = "23:59:59";
-            } else if (hourFromVal && hourToVal === hourFromVal) {
-              toTime = `${hourToVal.substring(0, 2)}:59:59`;
+            } else if (hourFromVal && normHTo === normHFrom) {
+              toTime = `${normHTo.substring(0, 2)}:59:59`;
             } else {
-              toTime = `${hourToVal}:59`;
+              toTime = `${normHTo}:59`;
             }
           }
           const toDateTime = `${dateToVal} ${toTime}`;
@@ -2417,17 +2432,20 @@ function applyFilters() {
         // Chỉ chọn giờ mà không chọn ngày
         const recTime = recDateTime.substring(11, 19);
         if (hourFromVal) {
-          const fromTime = `${hourFromVal}:00`;
+          const normHFrom = normalizeHour(hourFromVal, "00:00");
+          const fromTime = `${normHFrom}:00`;
           if (recTime < fromTime) return false;
         }
         if (hourToVal) {
           let toTime = "23:59:59";
+          const normHTo = normalizeHour(hourToVal, "23:59");
+          const normHFrom = normalizeHour(hourFromVal, "00:00");
           if (hourToVal === "24:00") {
             toTime = "23:59:59";
-          } else if (hourFromVal && hourToVal === hourFromVal) {
-            toTime = `${hourToVal.substring(0, 2)}:59:59`;
+          } else if (hourFromVal && normHTo === normHFrom) {
+            toTime = `${normHTo.substring(0, 2)}:59:59`;
           } else {
-            toTime = `${hourToVal}:59`;
+            toTime = `${normHTo}:59`;
           }
           if (recTime > toTime) return false;
         }

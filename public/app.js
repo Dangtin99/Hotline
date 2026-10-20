@@ -20,6 +20,7 @@ if (!window.SYSTEM_DEPOTS_LIST) {
 }
 
 // Bộ lọc Dashboard Toàn Diện
+let currentDashboardTab = "unpaid"; // "unpaid" hoặc "cancelled"
 let currentDatasetId = "sql_all";
 let masterDashboardRecords = [];
 let allDashboardDepots = [];
@@ -71,6 +72,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (btnExportJson) btnExportJson.onclick = downloadJsonData;
   initModalEvents();
   initExportPngEvents();
+  initDashboardTabControls();
 
   // Khôi phục tùy chọn ghim cột đã lưu
   try {
@@ -209,12 +211,14 @@ async function fetchDashboardDataByRange(dateFrom, dateTo, dateType = "ngayHuy",
   }
 
   try {
+    const normHourFrom = normalizeHour(hourFrom, "00:00");
+    const normHourTo = normalizeHour(hourTo, "23:59");
     const query = new URLSearchParams({
       dateType,
       dateFrom,
       dateTo,
-      hourFrom: hourFrom || "00:00",
-      hourTo: (hourTo === "24:00" ? "23:59" : (hourTo || "23:59"))
+      hourFrom: normHourFrom,
+      hourTo: normHourTo
     });
 
     const res = await fetch(`/api/dashboard-data?${query.toString()}`);
@@ -276,6 +280,8 @@ async function fetchDashboardDataByRange(dateFrom, dateTo, dateType = "ngayHuy",
     }
 
     initDashboardFilterControls(masterDashboardRecords, result.allDepots);
+    currentAnalyticsData = result.data;
+    initDashboardTabControls();
     renderDashboardViews(result.data, currentRecords, currentComparisonInfo);
     clearAlert();
   } catch (err) {
@@ -474,6 +480,18 @@ function extractDateTime(dateStr) {
     return `${y}-${m}-${day} ${h}:${min}:${s}`;
   }
   return null;
+}
+
+// Chuẩn hóa chuỗi giờ HH:mm (2 chữ số giờ và phút)
+function normalizeHour(hourStr, defaultVal = "") {
+  if (!hourStr) return defaultVal;
+  const s = String(hourStr).trim();
+  if (!s) return defaultVal;
+  if (s === "24:00") return "23:59";
+  const parts = s.split(":");
+  const h = (parts[0] || "0").padStart(2, "0");
+  const m = (parts[1] || "00").padStart(2, "0");
+  return `${h}:${m}`;
 }
 
 // Chuẩn hóa và trích xuất chuỗi ngày YYYY-MM-DD
@@ -1235,19 +1253,22 @@ function applyDashboardFilters() {
 
       if (dateFromVal || dateToVal) {
         if (dateFromVal) {
-          const fromTime = hourFromVal ? `${hourFromVal}:00` : "00:00:00";
+          const normHFrom = normalizeHour(hourFromVal, "00:00");
+          const fromTime = `${normHFrom}:00`;
           const fromDateTime = `${dateFromVal} ${fromTime}`;
           if (recDateTime < fromDateTime) return false;
         }
         if (dateToVal) {
           let toTime = "23:59:59";
           if (hourToVal) {
+            const normHTo = normalizeHour(hourToVal, "23:59");
+            const normHFrom = normalizeHour(hourFromVal, "00:00");
             if (hourToVal === "24:00") {
               toTime = "23:59:59";
-            } else if (hourFromVal && hourToVal === hourFromVal) {
-              toTime = `${hourToVal.substring(0, 2)}:59:59`;
+            } else if (hourFromVal && normHTo === normHFrom) {
+              toTime = `${normHTo.substring(0, 2)}:59:59`;
             } else {
-              toTime = `${hourToVal}:59`;
+              toTime = `${normHTo}:59`;
             }
           }
           const toDateTime = `${dateToVal} ${toTime}`;
@@ -1257,17 +1278,20 @@ function applyDashboardFilters() {
         // Chỉ chọn giờ & phút mà không chọn ngày
         const recTime = recDateTime.substring(11, 19);
         if (hourFromVal) {
-          const fromTime = `${hourFromVal}:00`;
+          const normHFrom = normalizeHour(hourFromVal, "00:00");
+          const fromTime = `${normHFrom}:00`;
           if (recTime < fromTime) return false;
         }
         if (hourToVal) {
           let toTime = "23:59:59";
+          const normHTo = normalizeHour(hourToVal, "23:59");
+          const normHFrom = normalizeHour(hourFromVal, "00:00");
           if (hourToVal === "24:00") {
             toTime = "23:59:59";
-          } else if (hourFromVal && hourToVal === hourFromVal) {
-            toTime = `${hourToVal.substring(0, 2)}:59:59`;
+          } else if (hourFromVal && normHTo === normHFrom) {
+            toTime = `${normHTo.substring(0, 2)}:59:59`;
           } else {
-            toTime = `${hourToVal}:59`;
+            toTime = `${normHTo}:59`;
           }
           if (recTime > toTime) return false;
         }
@@ -1286,16 +1310,18 @@ function applyDashboardFilters() {
       const recDateTime = extractDateTime(rawDate);
       if (!recDateTime) return false;
 
-      const fromTime = hourFromVal ? `${hourFromVal}:00` : "00:00:00";
+      const normHFrom = normalizeHour(hourFromVal, "00:00");
+      const fromTime = `${normHFrom}:00`;
       const fromDateTime = `${compRange.prevFrom} ${fromTime}`;
       let toTime = "23:59:59";
       if (hourToVal) {
+        const normHTo = normalizeHour(hourToVal, "23:59");
         if (hourToVal === "24:00") {
           toTime = "23:59:59";
-        } else if (hourFromVal && hourToVal === hourFromVal) {
-          toTime = `${hourToVal.substring(0, 2)}:59:59`;
+        } else if (hourFromVal && normHTo === normHFrom) {
+          toTime = `${normHTo.substring(0, 2)}:59:59`;
         } else {
-          toTime = `${hourToVal}:59`;
+          toTime = `${normHTo}:59`;
         }
       }
       const toDateTime = `${compRange.prevTo} ${toTime}`;
@@ -1685,12 +1711,115 @@ function renderDashboard(data, records = []) {
   });
 
   initDashboardFilterControls(masterDashboardRecords);
+  initDashboardTabControls();
   renderDashboardViews(data, currentRecords);
 }
+
+// Khởi tạo các sự kiện và chuyển đổi Tab Dashboard (Đơn Chưa Thanh Toán / Đơn Đã Hủy)
+function initDashboardTabControls() {
+  const btnUnpaid = document.getElementById("tabBtnUnpaid");
+  const btnCancelled = document.getElementById("tabBtnCancelled");
+
+  if (btnUnpaid) {
+    btnUnpaid.onclick = (e) => {
+      if (e) e.preventDefault();
+      switchDashboardTab("unpaid");
+    };
+  }
+  if (btnCancelled) {
+    btnCancelled.onclick = (e) => {
+      if (e) e.preventDefault();
+      switchDashboardTab("cancelled");
+    };
+  }
+
+  // Cập nhật trạng thái active & nhãn ban đầu
+  updateDashboardTabUi();
+}
+
+function updateDashboardTabUi() {
+  const btnUnpaid = document.getElementById("tabBtnUnpaid");
+  const btnCancelled = document.getElementById("tabBtnCancelled");
+  const captionEl = document.getElementById("dashboardTabCaption");
+
+  if (btnUnpaid) {
+    const isActive = currentDashboardTab === "unpaid";
+    btnUnpaid.classList.toggle("active", isActive);
+    btnUnpaid.setAttribute("aria-selected", isActive ? "true" : "false");
+  }
+
+  if (btnCancelled) {
+    const isActive = currentDashboardTab === "cancelled";
+    btnCancelled.classList.toggle("active", isActive);
+    btnCancelled.setAttribute("aria-selected", isActive ? "true" : "false");
+  }
+
+  if (captionEl) {
+    if (currentDashboardTab === "unpaid") {
+      captionEl.textContent = "Đang phân tích điểm nghẽn & tình trạng xử lý đơn Chưa thanh toán";
+    } else {
+      captionEl.textContent = "Đang phân tích chi tiết nguyên nhân, nguồn hủy & xu hướng đặt lại của đơn Đã hủy";
+    }
+  }
+
+  // Ẩn / Hiện các section đặc thù theo Tab
+  const secSource = document.getElementById("sourceCancellationSection");
+  const secCharts = document.getElementById("chartsGridSection");
+  const secTopDepot = document.getElementById("topDepotLineCancelSection");
+  const secMatrix = document.getElementById("matrixSection");
+
+  if (currentDashboardTab === "unpaid") {
+    if (secSource) secSource.style.display = "none";
+    if (secCharts) secCharts.style.display = "none";
+    if (secTopDepot) secTopDepot.style.display = "none";
+    if (secMatrix) secMatrix.style.display = "none";
+  } else {
+    if (secSource) secSource.style.display = "";
+    if (secCharts) secCharts.style.display = "";
+    if (secTopDepot) secTopDepot.style.display = "";
+    if (secMatrix) secMatrix.style.display = "";
+  }
+}
+
+function switchDashboardTab(tabName) {
+  try {
+    if (currentDashboardTab === tabName) return;
+    currentDashboardTab = tabName;
+    updateDashboardTabUi();
+
+    // Tự động tính toán analytics nếu chưa có
+    if (!currentAnalyticsData && currentRecords && currentRecords.length > 0) {
+      currentAnalyticsData = calculateAnalyticsFromRecords(currentRecords);
+    }
+
+    // Render lại các biểu đồ và bảng số liệu theo ngữ cảnh của Tab mới
+    if (currentAnalyticsData && currentRecords) {
+      renderDashboardViews(currentAnalyticsData, currentRecords, currentComparisonInfo);
+    }
+  } catch (err) {
+    console.error("Lỗi khi chuyển switchDashboardTab:", err);
+  }
+}
+
+// Gắn trực tiếp lên window để đảm bảo tương thích toàn cục
+window.switchDashboardTab = switchDashboardTab;
+window.initDashboardTabControls = initDashboardTabControls;
+window.updateDashboardTabUi = updateDashboardTabUi;
 
 // Render toàn bộ giao diện dashboard theo bộ dữ liệu (gốc hoặc đã lọc)
 function renderDashboardViews(data, records = [], comparisonInfo = null) {
   const { kpis, byDepot, byShippingLine, topCancelReasons, anomalies } = data;
+
+  // Cập nhật số liệu trên các badge của 2 Tab
+  const badgeUnpaid = document.getElementById("tabBadgeUnpaid");
+  const badgeCancelled = document.getElementById("tabBadgeCancelled");
+  const countUnpaid = (records || []).filter(isUnpaidOrder).length;
+  const countCancelled = (records || []).filter(isCancelledOrder).length;
+  if (badgeUnpaid) badgeUnpaid.textContent = `${countUnpaid.toLocaleString("vi-VN")} đơn`;
+  if (badgeCancelled) badgeCancelled.textContent = `${countCancelled.toLocaleString("vi-VN")} đơn`;
+
+  // Đồng bộ ẩn hiện các section theo tab
+  updateDashboardTabUi();
 
   // 1. KPIs
   document.getElementById("kpiTotalOrders").textContent = `${kpis.totalOrders} đơn`;
@@ -1711,10 +1840,9 @@ function renderDashboardViews(data, records = [], comparisonInfo = null) {
     ? `Thành công: ${successCount} | Hoàn: ${refundCount} đơn` 
     : `Hoàn tiền / Đang hoàn: ${refundCount} đơn`;
 
-  const unpaidCount = (kpis.byStatus && kpis.byStatus["Chưa thanh toán"]) || 
-    (records ? records.filter(r => normalizeStr(r.trangThaiDonHang).toLowerCase().includes("chưa thanh toán")).length : 0);
+  const unpaidCount = (kpis.byStatus && kpis.byStatus["Chưa thanh toán"]) || countUnpaid;
   const unpaidTeus = records 
-    ? records.filter(r => normalizeStr(r.trangThaiDonHang).toLowerCase().includes("chưa thanh toán")).reduce((sum, r) => sum + (Number(r.sizeTeus) || 0), 0) 
+    ? records.filter(isUnpaidOrder).reduce((sum, r) => sum + (Number(r.sizeTeus) || 0), 0) 
     : 0;
   const unpaidPct = ((unpaidCount / (kpis.totalOrders || 1)) * 100).toFixed(1);
 
@@ -1722,42 +1850,116 @@ function renderDashboardViews(data, records = [], comparisonInfo = null) {
   document.getElementById("kpiActivatedSub").textContent = `${unpaidPct}% tổng đơn (${unpaidTeus} TEUs)`;
 
   // 2. Charts
-  renderReasonsChart(topCancelReasons);
-  renderDepotsChart(byDepot);
-  renderShippingLinesChart(byShippingLine);
-  renderHourlyDashboardSection(records);
+  if (currentDashboardTab === "cancelled") {
+    try {
+      renderReasonsChart(topCancelReasons || []);
+    } catch (e) {
+      console.warn("Lỗi renderReasonsChart:", e);
+    }
+    try {
+      renderDepotsChart(byDepot || []);
+    } catch (e) {
+      console.warn("Lỗi renderDepotsChart:", e);
+    }
+    try {
+      renderShippingLinesChart(byShippingLine || []);
+    } catch (e) {
+      console.warn("Lỗi renderShippingLinesChart:", e);
+    }
+  }
+  try {
+    renderHourlyDashboardSection(records);
+  } catch (e) {
+    console.warn("Lỗi renderHourlyDashboardSection:", e);
+  }
 
   // 3. Anomalies
-  if (anomalies) renderAnomalies(anomalies);
+  if (anomalies) {
+    let filteredAnomalies = anomalies;
+    if (currentDashboardTab === "unpaid") {
+      filteredAnomalies = anomalies.filter(a => {
+        const m = (a.moTa || "").toLowerCase();
+        return m.includes("chưa thanh toán") || m.includes("quá 3 giờ") || m.includes("chờ duyệt") || m.includes("chờ thanh toán");
+      });
+    } else if (currentDashboardTab === "cancelled") {
+      filteredAnomalies = anomalies.filter(a => {
+        const m = (a.moTa || "").toLowerCase();
+        return !m.includes("chưa thanh toán");
+      });
+    }
+    try {
+      renderAnomalies(filteredAnomalies);
+    } catch (e) {
+      console.warn("Lỗi renderAnomalies:", e);
+    }
+  }
 
   // 4. Ma Trận Depot & Hãng Tàu × Trạng Thái, Ma Trận Depot & Trạng Thái Đơn × Trạng Thái Liên Hệ & Bảng Thống Kê Chi Tiết
   if (records) {
-    initMatrixStatusControls(records);
-    renderMatrixTable(records);
-    initContactMatrixControls(records);
-    renderContactStatusMatrixTable(records);
-    initInlineDetailControls();
-    renderInlineDetailTable(records, currentInlineLine || "ALL", currentInlineDepot || "ALL");
+    // Tập bản ghi phân luồng phù hợp theo tab
+    const tabFilteredRecords = currentDashboardTab === "unpaid"
+      ? records.filter(isUnpaidOrder)
+      : (currentDashboardTab === "cancelled" ? records.filter(isCancelledOrder) : records);
+
+    if (currentDashboardTab === "cancelled") {
+      try {
+        initMatrixStatusControls(records);
+        renderMatrixTable(records);
+      } catch (e) {
+        console.warn("Lỗi matrix table cancelled:", e);
+      }
+    }
+
+    try {
+      initContactMatrixControls(records);
+      renderContactStatusMatrixTable(tabFilteredRecords);
+    } catch (e) {
+      console.warn("Lỗi contact matrix table:", e);
+    }
+
+    try {
+      initInlineDetailControls();
+      const defaultDetailRecords = tabFilteredRecords.length > 0 ? tabFilteredRecords : records;
+      const tabTitleSuffix = currentDashboardTab === "unpaid" ? " (Đơn Chưa Thanh Toán)" : (currentDashboardTab === "cancelled" ? " (Đơn Đã Hủy)" : "");
+      renderInlineDetailTable(defaultDetailRecords, currentInlineLine || "ALL", currentInlineDepot || "ALL", `Bảng Thống Kê Chi Tiết Đơn Hàng${tabTitleSuffix}`);
+    } catch (e) {
+      console.warn("Lỗi inline detail table:", e);
+    }
   }
 
   // 5. Tables
-  renderKpiSummaryTable(
-    records, 
-    masterDashboardRecords ? masterDashboardRecords.length : (records ? records.length : 0),
-    comparisonInfo || currentComparisonInfo
-  );
-  renderSourceCancellationTable(records);
-  renderTopDepotLineCancelTable(records);
-  renderDepotTable(byDepot, kpis.totalOrders);
-  renderReasonsTable(topCancelReasons);
+  try {
+    renderKpiSummaryTable(
+      records, 
+      masterDashboardRecords ? masterDashboardRecords.length : (records ? records.length : 0),
+      comparisonInfo || currentComparisonInfo
+    );
+  } catch (e) {
+    console.warn("Lỗi renderKpiSummaryTable:", e);
+  }
+
+  if (currentDashboardTab === "cancelled") {
+    try { renderSourceCancellationTable(records); } catch (e) { console.warn("Lỗi renderSourceCancellationTable:", e); }
+    try { renderTopDepotLineCancelTable(records); } catch (e) { console.warn("Lỗi renderTopDepotLineCancelTable:", e); }
+    try { renderReasonsTable(topCancelReasons || []); } catch (e) { console.warn("Lỗi renderReasonsTable:", e); }
+  }
+
+  try {
+    renderDepotTable(byDepot, kpis.totalOrders, records);
+  } catch (e) {
+    console.warn("Lỗi renderDepotTable:", e);
+  }
 }
 
 // Chart: Lý do hủy (Bar - Dạng cột)
 function renderReasonsChart(reasons) {
-  const ctx = document.getElementById("chartReasons").getContext("2d");
+  const canvas = document.getElementById("chartReasons");
+  if (!canvas || typeof canvas.getContext !== "function") return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
   if (chartReasonsInstance) chartReasonsInstance.destroy();
 
-  const top6 = reasons.slice(0, 6);
+  const top6 = (reasons || []).slice(0, 6);
   const labels = top6.map(r => r.reason.length > 30 ? r.reason.substring(0, 30) + "..." : r.reason);
   const fullLabels = top6.map(r => r.reason);
   const counts = top6.map(r => r.count);
@@ -1828,23 +2030,26 @@ function renderReasonsChart(reasons) {
 
 // Chart: Depot (Bar)
 function renderDepotsChart(depots) {
-  const ctx = document.getElementById("chartDepots").getContext("2d");
+  const canvas = document.getElementById("chartDepots");
+  if (!canvas || typeof canvas.getContext !== "function") return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
   if (chartDepotsInstance) chartDepotsInstance.destroy();
 
   chartDepotsInstance = new Chart(ctx, {
     type: "bar",
     data: {
-      labels: depots.map(d => d.depot),
+      labels: (depots || []).map(d => d.depot),
       datasets: [
         {
           label: "Số đơn hủy",
-          data: depots.map(d => d.totalOrders),
+          data: (depots || []).map(d => d.totalOrders),
           backgroundColor: "#1d4ed8",
           borderRadius: 4
         },
         {
           label: "Sản lượng (TEUs)",
-          data: depots.map(d => d.totalTeus),
+          data: (depots || []).map(d => d.totalTeus),
           backgroundColor: "#60a5fa",
           borderRadius: 4
         }
@@ -1866,16 +2071,19 @@ function renderDepotsChart(depots) {
 
 // Chart: Shipping Lines (Horizontal Bar)
 function renderShippingLinesChart(lines) {
-  const ctx = document.getElementById("chartShippingLines").getContext("2d");
+  const canvas = document.getElementById("chartShippingLines");
+  if (!canvas || typeof canvas.getContext !== "function") return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
   if (chartLinesInstance) chartLinesInstance.destroy();
 
   chartLinesInstance = new Chart(ctx, {
     type: "bar",
     data: {
-      labels: lines.map(l => l.hangTau),
+      labels: (lines || []).map(l => l.hangTau),
       datasets: [{
         label: "Đơn hủy",
-        data: lines.map(l => l.count),
+        data: (lines || []).map(l => l.count),
         backgroundColor: "#0284c7",
         borderRadius: 4
       }]
@@ -1968,18 +2176,21 @@ function getRecordsForHourlyDepot(depot, records = []) {
       const recDateTime = extractDateTime(rawDate);
       if (!recDateTime) return false;
       if (dateFromVal) {
-        const fromTime = hourFromVal ? `${hourFromVal}:00` : "00:00:00";
+        const normHFrom = normalizeHour(hourFromVal, "00:00");
+        const fromTime = `${normHFrom}:00`;
         if (recDateTime < `${dateFromVal} ${fromTime}`) return false;
       }
       if (dateToVal) {
         let toTime = "23:59:59";
         if (hourToVal) {
+          const normHTo = normalizeHour(hourToVal, "23:59");
+          const normHFrom = normalizeHour(hourFromVal, "00:00");
           if (hourToVal === "24:00") {
             toTime = "23:59:59";
-          } else if (hourFromVal && hourToVal === hourFromVal) {
-            toTime = `${hourToVal.substring(0, 2)}:59:59`;
+          } else if (hourFromVal && normHTo === normHFrom) {
+            toTime = `${normHTo.substring(0, 2)}:59:59`;
           } else {
-            toTime = `${hourToVal}:59`;
+            toTime = `${normHTo}:59`;
           }
         }
         if (recDateTime > `${dateToVal} ${toTime}`) return false;
@@ -2056,7 +2267,7 @@ function renderHourlyDashboardSection(records = []) {
   const allDepotsRecords = getRecordsForHourlyDepot("ALL", records);
   const allCancelledCount = allDepotsRecords.filter(isCancelledOrder).length;
   const allUnpaidCount = allDepotsRecords.filter(isUnpaidOrder).length;
-  const allTotalCount = allCancelledCount + allUnpaidCount;
+  const allTotalCount = currentDashboardTab === "unpaid" ? allUnpaidCount : (currentDashboardTab === "cancelled" ? allCancelledCount : (allCancelledCount + allUnpaidCount));
 
   // 2. Render nút "Tất Cả Depot" (ALL)
   const isAllActive = currentHourlyDepot === "ALL";
@@ -2075,7 +2286,7 @@ function renderHourlyDashboardSection(records = []) {
     const dRecords = getRecordsForHourlyDepot(d, records);
     const cancelCount = dRecords.filter(isCancelledOrder).length;
     const unpaidCount = dRecords.filter(isUnpaidOrder).length;
-    const totalCount = cancelCount + unpaidCount;
+    const totalCount = currentDashboardTab === "unpaid" ? unpaidCount : (currentDashboardTab === "cancelled" ? cancelCount : (cancelCount + unpaidCount));
     const isActive = d === currentHourlyDepot;
 
     return `
@@ -2262,54 +2473,95 @@ function renderHourlyDepotChart(selectedDepot, records = []) {
     chartHourlyDepotInstance.destroy();
   }
 
-  // Xây dựng danh sách dataset
-  const datasets = [
-    {
-      label: "Số đơn hủy",
-      data: cancelledHours,
-      borderColor: "#dc2626",
-      backgroundColor: currentHourlyChartType === "bar" ? "rgba(220, 38, 38, 0.85)" : "rgba(220, 38, 38, 0.10)",
-      borderWidth: 2.2,
-      tension: 0.35,
-      fill: currentHourlyChartType === "line",
-      pointBackgroundColor: "#dc2626",
-      pointBorderColor: "#ffffff",
-      pointBorderWidth: 1.5,
-      pointRadius: 4,
-      pointHoverRadius: 6
-    },
-    {
-      label: "Số đơn chưa thanh toán",
-      data: unpaidHours,
-      borderColor: "#d97706",
-      backgroundColor: currentHourlyChartType === "bar" ? "rgba(217, 119, 6, 0.85)" : "rgba(217, 119, 6, 0.10)",
-      borderWidth: 2.2,
-      tension: 0.35,
-      fill: currentHourlyChartType === "line",
-      pointBackgroundColor: "#d97706",
-      pointBorderColor: "#ffffff",
-      pointBorderWidth: 1.5,
-      pointRadius: 4,
-      pointHoverRadius: 6
-    }
-  ];
+  // Xây dựng danh sách dataset dựa theo Tab đang chọn
+  const cancelDataset = {
+    label: "Số đơn hủy",
+    data: cancelledHours,
+    borderColor: "#dc2626",
+    backgroundColor: currentHourlyChartType === "bar" ? "rgba(220, 38, 38, 0.85)" : "rgba(220, 38, 38, 0.10)",
+    borderWidth: 2.2,
+    tension: 0.35,
+    fill: currentHourlyChartType === "line",
+    pointBackgroundColor: "#dc2626",
+    pointBorderColor: "#ffffff",
+    pointBorderWidth: 1.5,
+    pointRadius: 4,
+    pointHoverRadius: 6
+  };
 
-  if (showHourlyTotalLine) {
-    datasets.push({
-      label: "Tổng phát sinh (Hủy + Chưa TT)",
-      data: combinedHours,
-      borderColor: "#2563eb",
-      backgroundColor: currentHourlyChartType === "bar" ? "rgba(37, 99, 235, 0.85)" : "rgba(37, 99, 235, 0.08)",
-      borderWidth: 2.2,
-      borderDash: currentHourlyChartType === "line" ? [5, 5] : undefined,
-      tension: 0.35,
-      fill: false,
-      pointBackgroundColor: "#2563eb",
-      pointBorderColor: "#ffffff",
-      pointBorderWidth: 1.5,
-      pointRadius: 4,
-      pointHoverRadius: 6
-    });
+  const unpaidDataset = {
+    label: "Số đơn chưa thanh toán",
+    data: unpaidHours,
+    borderColor: "#d97706",
+    backgroundColor: currentHourlyChartType === "bar" ? "rgba(217, 119, 6, 0.85)" : "rgba(217, 119, 6, 0.10)",
+    borderWidth: 2.2,
+    tension: 0.35,
+    fill: currentHourlyChartType === "line",
+    pointBackgroundColor: "#d97706",
+    pointBorderColor: "#ffffff",
+    pointBorderWidth: 1.5,
+    pointRadius: 4,
+    pointHoverRadius: 6
+  };
+
+  const datasets = [];
+  if (currentDashboardTab === "unpaid") {
+    datasets.push(unpaidDataset);
+    if (showHourlyTotalLine) {
+      datasets.push({
+        label: "Tham chiếu Đơn Hủy",
+        data: cancelledHours,
+        borderColor: "#94a3b8",
+        backgroundColor: "rgba(148, 163, 184, 0.05)",
+        borderWidth: 1.8,
+        borderDash: [4, 4],
+        tension: 0.35,
+        fill: false,
+        pointBackgroundColor: "#94a3b8",
+        pointBorderColor: "#ffffff",
+        pointBorderWidth: 1.2,
+        pointRadius: 3,
+        pointHoverRadius: 5
+      });
+    }
+  } else if (currentDashboardTab === "cancelled") {
+    datasets.push(cancelDataset);
+    if (showHourlyTotalLine) {
+      datasets.push({
+        label: "Tham chiếu Chưa Thanh Toán",
+        data: unpaidHours,
+        borderColor: "#94a3b8",
+        backgroundColor: "rgba(148, 163, 184, 0.05)",
+        borderWidth: 1.8,
+        borderDash: [4, 4],
+        tension: 0.35,
+        fill: false,
+        pointBackgroundColor: "#94a3b8",
+        pointBorderColor: "#ffffff",
+        pointBorderWidth: 1.2,
+        pointRadius: 3,
+        pointHoverRadius: 5
+      });
+    }
+  } else {
+    datasets.push(cancelDataset, unpaidDataset);
+    if (showHourlyTotalLine) {
+      datasets.push({
+        label: "Tổng phát sinh (Hủy + Chưa TT)",
+        data: combinedHours,
+        borderColor: "#2563eb",
+        backgroundColor: currentHourlyChartType === "bar" ? "rgba(37, 99, 235, 0.85)" : "rgba(37, 99, 235, 0.08)",
+        borderWidth: 2.2,
+        borderDash: currentHourlyChartType === "line" ? [5, 5] : undefined,
+        tension: 0.35,
+        fill: false,
+        pointBackgroundColor: "#2563eb",
+        pointBorderColor: "#ffffff",
+        pointBorderWidth: 1.5,
+        pointRadius: 4,
+        pointHoverRadius: 6
+      });
+    }
   }
 
   const chartTitleScope = selectedDepot === "ALL" ? `Tất Cả Depot Phân Quyền (${depots.length} Depot)` : `Depot ${selectedDepot}`;
@@ -2348,6 +2600,16 @@ function renderHourlyDepotChart(selectedDepot, records = []) {
               return `Khung giờ: ${hLabel} - ${nextHour}:00 (${chartTitleScope})`;
             },
             footer: (items) => {
+              if (currentDashboardTab === "unpaid") {
+                const u = items.find(it => it.dataset.label.includes("chưa thanh toán"));
+                const uVal = u ? Number(u.raw) || 0 : 0;
+                return `Đơn Chưa Thanh Toán: ${uVal} đơn`;
+              }
+              if (currentDashboardTab === "cancelled") {
+                const c = items.find(it => it.dataset.label.includes("đơn hủy"));
+                const cVal = c ? Number(c.raw) || 0 : 0;
+                return `Đơn Đã Hủy: ${cVal} đơn`;
+              }
               let cancelVal = 0;
               let unpaidVal = 0;
               items.forEach(it => {
@@ -2414,8 +2676,59 @@ function renderAnomalies(anomalies) {
 }
 
 // Render Depot Table
-function renderDepotTable(depots, totalOrders) {
+function renderDepotTable(depots, totalOrders, records = []) {
   const tbody = document.getElementById("tbodyDepot");
+  if (!tbody) return;
+
+  const thOrderCount = document.getElementById("thDepotOrderCount");
+  if (thOrderCount) {
+    thOrderCount.textContent = currentDashboardTab === "unpaid" ? "Số Đơn Chưa TT" : (currentDashboardTab === "cancelled" ? "Số Đơn Hủy" : "Số Đơn");
+  }
+
+  // Nếu có records truyền vào, tính trực tiếp theo tab hiện tại để đảm bảo chính xác 100%
+  let list = records || [];
+  if (currentDashboardTab === "unpaid") {
+    list = list.filter(isUnpaidOrder);
+  } else if (currentDashboardTab === "cancelled") {
+    list = list.filter(isCancelledOrder);
+  }
+
+  if (list && list.length > 0) {
+    const dMap = {};
+    let totalFiltered = list.length;
+    list.forEach(r => {
+      const d = r.depot || "Chưa xác định";
+      const dir = normalizeStr(r.loaiDonHang).toUpperCase();
+      const teus = Number(r.sizeTeus) || 0;
+      if (!dMap[d]) dMap[d] = { count: 0, teus: 0, inOrders: 0, outOrders: 0 };
+      dMap[d].count += 1;
+      dMap[d].teus += teus;
+      if (dir === "IN") dMap[d].inOrders += 1;
+      if (dir === "OUT") dMap[d].outOrders += 1;
+    });
+
+    const depotList = Object.keys(dMap).map(d => ({
+      depot: d,
+      totalOrders: dMap[d].count,
+      totalTeus: dMap[d].teus,
+      inOrders: dMap[d].inOrders,
+      outOrders: dMap[d].outOrders,
+      pct: ((dMap[d].count / (totalFiltered || 1)) * 100).toFixed(1)
+    })).sort((a, b) => b.totalOrders - a.totalOrders);
+
+    tbody.innerHTML = depotList.map(d => `
+      <tr>
+        <td><strong style="color: #1d4ed8;">${d.depot}</strong></td>
+        <td><strong>${d.totalOrders.toLocaleString("vi-VN")}</strong></td>
+        <td>${d.totalTeus.toLocaleString("vi-VN")}</td>
+        <td>${d.inOrders.toLocaleString("vi-VN")}</td>
+        <td>${d.outOrders.toLocaleString("vi-VN")}</td>
+        <td><span style="font-weight: 600; color: #0f172a;">${d.pct}%</span></td>
+      </tr>
+    `).join("");
+    return;
+  }
+
   tbody.innerHTML = depots.map(d => {
     const pct = ((d.totalOrders / (totalOrders || 1)) * 100).toFixed(1);
     return `
@@ -3260,108 +3573,261 @@ function renderKpiSummaryTable(records, totalMasterCount, comparisonInfo = null)
   // Tính phần trăm so với tổng số đơn hiện tại
   const calcPct = cnt => currentTotal > 0 ? ((cnt / currentTotal) * 100).toFixed(1) + "%" : "0.0%";
 
-  const kpiRows = [
-    {
-      stt: 1,
-      title: "Tổng số đơn hủy",
-      count: curM.totalCancelled,
-      pct: calcPct(curM.totalCancelled),
-      compareHtml: formatCountDiff(curM.totalCancelled, prevM ? prevM.totalCancelled : 0, hasComp, true),
-      note: "Đơn có trạng thái đơn hàng là Đã hủy",
-      badgeClass: "badge-danger",
-      isHighlight: true
-    },
-    {
-      stt: 2,
-      title: "Số đơn chưa thanh toán",
-      count: curM.totalUnpaid,
-      pct: calcPct(curM.totalUnpaid),
-      compareHtml: formatCountDiff(curM.totalUnpaid, prevM ? prevM.totalUnpaid : 0, hasComp, true),
-      note: "Đơn có trạng thái đơn hàng là Chưa thanh toán",
-      badgeClass: "badge-warning",
-      isHighlight: true
-    },
-    {
-      stt: 3,
-      title: "Tổng số đơn đã được phân loại trạng thái đã xử lý",
-      count: curM.totalProcessed,
-      pct: calcPct(curM.totalProcessed),
-      compareHtml: formatCountDiff(curM.totalProcessed, prevM ? prevM.totalProcessed : 0, hasComp, false),
-      note: "Các đơn CSKH đã cập nhật trạng thái xử lý",
-      badgeClass: "badge-info",
-      isHighlight: true
-    },
-    {
-      stt: 4,
-      title: "Đã thanh toán / Đã thành công",
-      count: curM.countSuccess,
-      pct: calcPct(curM.countSuccess),
-      compareHtml: formatCountDiff(curM.countSuccess, prevM ? prevM.countSuccess : 0, hasComp, false),
-      note: "Trạng thái xử lý: Đã thanh toán / Đã thành công",
-      badgeClass: "badge-success",
-      isHighlight: false
-    },
-    {
-      stt: 5,
-      title: "Đã đặt lại",
-      count: curM.countRebooked,
-      pct: calcPct(curM.countRebooked),
-      compareHtml: formatCountDiff(curM.countRebooked, prevM ? prevM.countRebooked : 0, hasComp, false),
-      note: "Trạng thái xử lý: Đã đặt lại",
-      badgeClass: "badge-secondary",
-      isHighlight: false
-    },
-    {
-      stt: 6,
-      title: "Không liên hệ được",
-      count: curM.countUncontacted,
-      pct: calcPct(curM.countUncontacted),
-      compareHtml: formatCountDiff(curM.countUncontacted, prevM ? prevM.countUncontacted : 0, hasComp, true),
-      note: "Trạng thái xử lý: Không liên hệ được",
-      badgeClass: "badge-warning",
-      isHighlight: false
-    },
-    {
-      stt: 7,
-      title: "Đã liên hệ - Chờ",
-      count: curM.countContactWait,
-      pct: calcPct(curM.countContactWait),
-      compareHtml: formatCountDiff(curM.countContactWait, prevM ? prevM.countContactWait : 0, hasComp, false),
-      note: "Trạng thái xử lý: Đã liên hệ - Chờ",
-      badgeClass: "badge-warning",
-      isHighlight: false
-    },
-    {
-      stt: 8,
-      title: "Đã liên hệ - Không thành công / Không đặt lại",
-      count: curM.countContactFailed,
-      pct: calcPct(curM.countContactFailed),
-      compareHtml: formatCountDiff(curM.countContactFailed, prevM ? prevM.countContactFailed : 0, hasComp, false),
-      note: "Trạng thái xử lý: Đã liên hệ - Không thành công / Đã Liên hệ - Không đặt lại",
-      badgeClass: "badge-danger",
-      isHighlight: false
-    },
-    {
-      stt: 9,
-      title: "Tỉ lệ liên hệ được",
-      count: `${curM.totalContacted} / ${curM.totalCalls} cuộc`,
-      pct: `${curM.rateContacted}%`,
-      compareHtml: formatRateDiff(curM.rateContacted, prevM ? prevM.rateContacted : "0.0", curM.totalCalls, prevM ? prevM.totalCalls : 0, hasComp, false),
-      note: `Tổng số cuộc gọi đã kết nối thành công (${curM.totalContacted} cuộc)`,
-      badgeClass: "badge-success",
-      isHighlight: true
-    },
-    {
-      stt: 10,
-      title: "Tỉ lệ liên hệ không được",
-      count: `${curM.countUncontacted} / ${curM.totalCalls} cuộc`,
-      pct: `${curM.rateUncontacted}%`,
-      compareHtml: formatRateDiff(curM.rateUncontacted, prevM ? prevM.rateUncontacted : "0.0", curM.totalCalls, prevM ? prevM.totalCalls : 0, hasComp, true),
-      note: `Số cuộc gọi không thể liên lạc được (${curM.countUncontacted} cuộc)`,
-      badgeClass: "badge-danger",
-      isHighlight: true
-    }
-  ];
+  const kpiRows = [];
+
+  if (currentDashboardTab === "unpaid") {
+    // Chỉ số tập trung cho Đơn Chưa Thanh Toán
+    kpiRows.push(
+      {
+        stt: 1,
+        title: "Tổng số đơn chưa thanh toán",
+        count: curM.totalUnpaid,
+        pct: calcPct(curM.totalUnpaid),
+        compareHtml: formatCountDiff(curM.totalUnpaid, prevM ? prevM.totalUnpaid : 0, hasComp, true),
+        note: "Đơn có trạng thái đơn hàng là Chưa thanh toán",
+        badgeClass: "badge-warning",
+        isHighlight: true
+      },
+      {
+        stt: 2,
+        title: "Tổng số đơn đã được CSKH xử lý / liên hệ",
+        count: curM.totalProcessed,
+        pct: calcPct(curM.totalProcessed),
+        compareHtml: formatCountDiff(curM.totalProcessed, prevM ? prevM.totalProcessed : 0, hasComp, false),
+        note: "Các đơn Chưa thanh toán đã được cập nhật trạng thái xử lý",
+        badgeClass: "badge-info",
+        isHighlight: true
+      },
+      {
+        stt: 3,
+        title: "Đã thanh toán / Đã thành công",
+        count: curM.countSuccess,
+        pct: calcPct(curM.countSuccess),
+        compareHtml: formatCountDiff(curM.countSuccess, prevM ? prevM.countSuccess : 0, hasComp, false),
+        note: "Khách hàng đã thanh toán thành công sau khi hỗ trợ",
+        badgeClass: "badge-success",
+        isHighlight: true
+      },
+      {
+        stt: 4,
+        title: "Đã liên hệ - Chờ xử lý",
+        count: curM.countContactWait,
+        pct: calcPct(curM.countContactWait),
+        compareHtml: formatCountDiff(curM.countContactWait, prevM ? prevM.countContactWait : 0, hasComp, false),
+        note: "Đã liên hệ khách hàng và đang chờ phản hồi/thanh toán",
+        badgeClass: "badge-warning",
+        isHighlight: false
+      },
+      {
+        stt: 5,
+        title: "Không liên hệ được",
+        count: curM.countUncontacted,
+        pct: calcPct(curM.countUncontacted),
+        compareHtml: formatCountDiff(curM.countUncontacted, prevM ? prevM.countUncontacted : 0, hasComp, true),
+        note: "Không thể liên lạc được với khách hàng/tài xế",
+        badgeClass: "badge-danger",
+        isHighlight: false
+      },
+      {
+        stt: 6,
+        title: "Tỉ lệ liên hệ thành công",
+        count: `${curM.totalContacted} / ${curM.totalCalls} cuộc`,
+        pct: `${curM.rateContacted}%`,
+        compareHtml: formatRateDiff(curM.rateContacted, prevM ? prevM.rateContacted : "0.0", curM.totalCalls, prevM ? prevM.totalCalls : 0, hasComp, false),
+        note: `Tổng số cuộc gọi đã kết nối thành công (${curM.totalContacted} cuộc)`,
+        badgeClass: "badge-success",
+        isHighlight: true
+      },
+      {
+        stt: 7,
+        title: "Tỉ lệ không liên hệ được",
+        count: `${curM.countUncontacted} / ${curM.totalCalls} cuộc`,
+        pct: `${curM.rateUncontacted}%`,
+        compareHtml: formatRateDiff(curM.rateUncontacted, prevM ? prevM.rateUncontacted : "0.0", curM.totalCalls, prevM ? prevM.totalCalls : 0, hasComp, true),
+        note: `Số cuộc gọi không thể liên lạc được (${curM.countUncontacted} cuộc)`,
+        badgeClass: "badge-danger",
+        isHighlight: true
+      }
+    );
+  } else if (currentDashboardTab === "cancelled") {
+    // Chỉ số tập trung cho Đơn Đã Hủy
+    kpiRows.push(
+      {
+        stt: 1,
+        title: "Tổng số đơn hủy",
+        count: curM.totalCancelled,
+        pct: calcPct(curM.totalCancelled),
+        compareHtml: formatCountDiff(curM.totalCancelled, prevM ? prevM.totalCancelled : 0, hasComp, true),
+        note: "Đơn có trạng thái đơn hàng là Đã hủy",
+        badgeClass: "badge-danger",
+        isHighlight: true
+      },
+      {
+        stt: 2,
+        title: "Tổng số đơn đã được CSKH xử lý / liên hệ",
+        count: curM.totalProcessed,
+        pct: calcPct(curM.totalProcessed),
+        compareHtml: formatCountDiff(curM.totalProcessed, prevM ? prevM.totalProcessed : 0, hasComp, false),
+        note: "Các đơn Đã hủy đã được cập nhật trạng thái xử lý",
+        badgeClass: "badge-info",
+        isHighlight: true
+      },
+      {
+        stt: 3,
+        title: "Đã đặt lại đơn",
+        count: curM.countRebooked,
+        pct: calcPct(curM.countRebooked),
+        compareHtml: formatCountDiff(curM.countRebooked, prevM ? prevM.countRebooked : 0, hasComp, false),
+        note: "Khách hàng đã đặt lại đơn mới thành công",
+        badgeClass: "badge-success",
+        isHighlight: true
+      },
+      {
+        stt: 4,
+        title: "Đã liên hệ - Không đặt lại / Thất bại",
+        count: curM.countContactFailed,
+        pct: calcPct(curM.countContactFailed),
+        compareHtml: formatCountDiff(curM.countContactFailed, prevM ? prevM.countContactFailed : 0, hasComp, false),
+        note: "Đã liên hệ nhưng khách từ chối đặt lại hoặc hủy luôn",
+        badgeClass: "badge-danger",
+        isHighlight: false
+      },
+      {
+        stt: 5,
+        title: "Không liên hệ được",
+        count: curM.countUncontacted,
+        pct: calcPct(curM.countUncontacted),
+        compareHtml: formatCountDiff(curM.countUncontacted, prevM ? prevM.countUncontacted : 0, hasComp, true),
+        note: "Không thể liên lạc được với khách hàng/tài xế",
+        badgeClass: "badge-warning",
+        isHighlight: false
+      },
+      {
+        stt: 6,
+        title: "Tỉ lệ liên hệ thành công",
+        count: `${curM.totalContacted} / ${curM.totalCalls} cuộc`,
+        pct: `${curM.rateContacted}%`,
+        compareHtml: formatRateDiff(curM.rateContacted, prevM ? prevM.rateContacted : "0.0", curM.totalCalls, prevM ? prevM.totalCalls : 0, hasComp, false),
+        note: `Tổng số cuộc gọi đã kết nối thành công (${curM.totalContacted} cuộc)`,
+        badgeClass: "badge-success",
+        isHighlight: true
+      },
+      {
+        stt: 7,
+        title: "Tỉ lệ không liên hệ được",
+        count: `${curM.countUncontacted} / ${curM.totalCalls} cuộc`,
+        pct: `${curM.rateUncontacted}%`,
+        compareHtml: formatRateDiff(curM.rateUncontacted, prevM ? prevM.rateUncontacted : "0.0", curM.totalCalls, prevM ? prevM.totalCalls : 0, hasComp, true),
+        note: `Số cuộc gọi không thể liên lạc được (${curM.countUncontacted} cuộc)`,
+        badgeClass: "badge-danger",
+        isHighlight: true
+      }
+    );
+  } else {
+    // Toàn bộ 10 chỉ số cho trường hợp xem tất cả
+    kpiRows.push(
+      {
+        stt: 1,
+        title: "Tổng số đơn hủy",
+        count: curM.totalCancelled,
+        pct: calcPct(curM.totalCancelled),
+        compareHtml: formatCountDiff(curM.totalCancelled, prevM ? prevM.totalCancelled : 0, hasComp, true),
+        note: "Đơn có trạng thái đơn hàng là Đã hủy",
+        badgeClass: "badge-danger",
+        isHighlight: true
+      },
+      {
+        stt: 2,
+        title: "Số đơn chưa thanh toán",
+        count: curM.totalUnpaid,
+        pct: calcPct(curM.totalUnpaid),
+        compareHtml: formatCountDiff(curM.totalUnpaid, prevM ? prevM.totalUnpaid : 0, hasComp, true),
+        note: "Đơn có trạng thái đơn hàng là Chưa thanh toán",
+        badgeClass: "badge-warning",
+        isHighlight: true
+      },
+      {
+        stt: 3,
+        title: "Tổng số đơn đã được phân loại trạng thái đã xử lý",
+        count: curM.totalProcessed,
+        pct: calcPct(curM.totalProcessed),
+        compareHtml: formatCountDiff(curM.totalProcessed, prevM ? prevM.totalProcessed : 0, hasComp, false),
+        note: "Các đơn CSKH đã cập nhật trạng thái xử lý",
+        badgeClass: "badge-info",
+        isHighlight: true
+      },
+      {
+        stt: 4,
+        title: "Đã thanh toán / Đã thành công",
+        count: curM.countSuccess,
+        pct: calcPct(curM.countSuccess),
+        compareHtml: formatCountDiff(curM.countSuccess, prevM ? prevM.countSuccess : 0, hasComp, false),
+        note: "Trạng thái xử lý: Đã thanh toán / Đã thành công",
+        badgeClass: "badge-success",
+        isHighlight: false
+      },
+      {
+        stt: 5,
+        title: "Đã đặt lại",
+        count: curM.countRebooked,
+        pct: calcPct(curM.countRebooked),
+        compareHtml: formatCountDiff(curM.countRebooked, prevM ? prevM.countRebooked : 0, hasComp, false),
+        note: "Trạng thái xử lý: Đã đặt lại",
+        badgeClass: "badge-secondary",
+        isHighlight: false
+      },
+      {
+        stt: 6,
+        title: "Không liên hệ được",
+        count: curM.countUncontacted,
+        pct: calcPct(curM.countUncontacted),
+        compareHtml: formatCountDiff(curM.countUncontacted, prevM ? prevM.countUncontacted : 0, hasComp, true),
+        note: "Trạng thái xử lý: Không liên hệ được",
+        badgeClass: "badge-warning",
+        isHighlight: false
+      },
+      {
+        stt: 7,
+        title: "Đã liên hệ - Chờ",
+        count: curM.countContactWait,
+        pct: calcPct(curM.countContactWait),
+        compareHtml: formatCountDiff(curM.countContactWait, prevM ? prevM.countContactWait : 0, hasComp, false),
+        note: "Trạng thái xử lý: Đã liên hệ - Chờ",
+        badgeClass: "badge-warning",
+        isHighlight: false
+      },
+      {
+        stt: 8,
+        title: "Đã liên hệ - Không thành công / Không đặt lại",
+        count: curM.countContactFailed,
+        pct: calcPct(curM.countContactFailed),
+        compareHtml: formatCountDiff(curM.countContactFailed, prevM ? prevM.countContactFailed : 0, hasComp, false),
+        note: "Trạng thái xử lý: Đã liên hệ - Không thành công / Đã Liên hệ - Không đặt lại",
+        badgeClass: "badge-danger",
+        isHighlight: false
+      },
+      {
+        stt: 9,
+        title: "Tỉ lệ liên hệ được",
+        count: `${curM.totalContacted} / ${curM.totalCalls} cuộc`,
+        pct: `${curM.rateContacted}%`,
+        compareHtml: formatRateDiff(curM.rateContacted, prevM ? prevM.rateContacted : "0.0", curM.totalCalls, prevM ? prevM.totalCalls : 0, hasComp, false),
+        note: `Tổng số cuộc gọi đã kết nối thành công (${curM.totalContacted} cuộc)`,
+        badgeClass: "badge-success",
+        isHighlight: true
+      },
+      {
+        stt: 10,
+        title: "Tỉ lệ liên hệ không được",
+        count: `${curM.countUncontacted} / ${curM.totalCalls} cuộc`,
+        pct: `${curM.rateUncontacted}%`,
+        compareHtml: formatRateDiff(curM.rateUncontacted, prevM ? prevM.rateUncontacted : "0.0", curM.totalCalls, prevM ? prevM.totalCalls : 0, hasComp, true),
+        note: `Số cuộc gọi không thể liên lạc được (${curM.countUncontacted} cuộc)`,
+        badgeClass: "badge-danger",
+        isHighlight: true
+      }
+    );
+  }
 
   tbody.innerHTML = kpiRows.map(row => {
     const rowClass = row.isHighlight ? "kpi-summary-row-highlight" : "";
