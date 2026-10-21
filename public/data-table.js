@@ -1321,7 +1321,7 @@ document.addEventListener("DOMContentLoaded", () => {
           }
 
           // Nạp lại toàn bộ dữ liệu bảng để hiển thị dữ liệu mới nhất trên cả 3 view
-          await loadDataset();
+          await loadDataset(true);
         } else {
           showAlert(data.message || "Lỗi khi thực hiện cập nhật dữ liệu.", true);
         }
@@ -1358,7 +1358,7 @@ document.addEventListener("DOMContentLoaded", () => {
           showAlert(msg, false);
 
           // Nạp lại toàn bộ dữ liệu bảng để hiển thị dữ liệu mới nhất trên cả 3 view
-          await loadDataset();
+          await loadDataset(true);
         } else {
           showAlert(data.message || "Lỗi khi thực hiện lọc đơn trùng.", true);
         }
@@ -2045,8 +2045,8 @@ function switchTab(tabName, updateUrl = true) {
         updateStatusButtonLabel();
       }
       stopVietnamClock();
-      if (btnUpdateData) btnUpdateData.style.display = "none";
-      if (btnDeduplicateData) btnDeduplicateData.style.display = "none";
+      if (btnUpdateData) btnUpdateData.style.display = "inline-block";
+      if (btnDeduplicateData) btnDeduplicateData.style.display = "inline-block";
 
     } else if (currentTab === "pending") {
       if (tabPendingOrders) tabPendingOrders.classList.add("active");
@@ -2059,8 +2059,8 @@ function switchTab(tabName, updateUrl = true) {
         updateStatusButtonLabel();
       }
       stopVietnamClock();
-      if (btnUpdateData) btnUpdateData.style.display = "none";
-      if (btnDeduplicateData) btnDeduplicateData.style.display = "none";
+      if (btnUpdateData) btnUpdateData.style.display = "inline-block";
+      if (btnDeduplicateData) btnDeduplicateData.style.display = "inline-block";
 
     } else if (currentTab === "unpaid") {
       tabUnpaidOrders.classList.add("active");
@@ -2210,8 +2210,11 @@ function clearAlert() {
 }
 
 // Nạp dữ liệu
-async function loadDataset() {
+async function loadDataset(forceRefresh = false) {
   clearAlert();
+  if (forceRefresh) {
+    try { sessionStorage.removeItem("rebooking_analytics_cache_v2"); } catch (e) {}
+  }
   const urlParams = new URLSearchParams(window.location.search);
   const uploadId = urlParams.get("id");
   if (uploadId && uploadId !== "all") {
@@ -2233,7 +2236,8 @@ async function loadDataset() {
 
     if (uploadId && uploadId !== "all") {
       currentDatasetName.textContent = `Đang tải đợt ${uploadId}...`;
-      const res = await fetch(`/api/history/${uploadId}`);
+      const histUrl = forceRefresh ? `/api/history/${uploadId}?_t=${Date.now()}` : `/api/history/${uploadId}`;
+      const res = await fetch(histUrl, { cache: forceRefresh ? "no-store" : "default" });
       const result = await res.json();
       if (!res.ok || result.status !== "success") {
         throw new Error(result.message || "Không thể tải đợt này.");
@@ -2244,7 +2248,8 @@ async function loadDataset() {
     } else {
       // Mặc định: Nạp toàn bộ dữ liệu tích lũy từ CSDL SQL (Tất cả file đã tải)
       currentDatasetName.textContent = "Đang nạp toàn bộ CSDL SQL...";
-      const resAll = await fetch("/api/all-data");
+      const allDataUrl = forceRefresh ? `/api/all-data?refresh=1&_t=${Date.now()}` : "/api/all-data";
+      const resAll = await fetch(allDataUrl, { cache: forceRefresh ? "no-store" : "default" });
       const resultAll = await resAll.json();
 
       if (resAll.ok && resultAll.status === "success" && resultAll.totalRecords > 0) {

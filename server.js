@@ -893,6 +893,7 @@ app.get("/api/orders/operational-updates", authRequired, async (req, res) => {
 app.post("/api/orders/update-from-check", authRequired, async (req, res) => {
   try {
     const result = await updateOrdersFromCheckDataAsync();
+    try { if (rebookingAnalyzer && rebookingAnalyzer.invalidateRebookingCache) rebookingAnalyzer.invalidateRebookingCache(); } catch (e) {}
     return res.json({
       status: "success",
       ...result
@@ -913,6 +914,7 @@ app.post("/api/orders/update-from-check", authRequired, async (req, res) => {
 app.post("/api/orders/deduplicate-by-eir", authRequired, async (req, res) => {
   try {
     const result = await deduplicateOrdersByEirAsync();
+    try { if (rebookingAnalyzer && rebookingAnalyzer.invalidateRebookingCache) rebookingAnalyzer.invalidateRebookingCache(); } catch (e) {}
     return res.json({
       status: "success",
       ...result
@@ -1635,6 +1637,107 @@ app.get("/api/sample", authRequired, (req, res) => {
     }
 
     return res.status(404).json({ status: "error", message: "Chưa có dữ liệu mẫu." });
+  } catch (err) {
+    return res.status(500).json({ status: "error", message: err.message });
+  }
+});
+
+
+/**
+ * API Quản Lý Cuộc Gọi Tài Xế (OneStop@LTA & Nhà Xe)
+ */
+const DRIVER_CALLS_FILE = path.join(__dirname, "data", "driver_calls.json");
+
+function loadDriverCallsData() {
+  try {
+    if (fs.existsSync(DRIVER_CALLS_FILE)) {
+      const raw = fs.readFileSync(DRIVER_CALLS_FILE, "utf8");
+      return JSON.parse(raw);
+    }
+  } catch (e) {
+    console.error("Lỗi đọc driver_calls.json:", e.message);
+  }
+  return [];
+}
+
+function saveDriverCallsData(data) {
+  try {
+    fs.writeFileSync(DRIVER_CALLS_FILE, JSON.stringify(data, null, 2), "utf8");
+    return true;
+  } catch (e) {
+    console.error("Lỗi ghi driver_calls.json:", e.message);
+    return false;
+  }
+}
+
+app.get("/api/driver-calls", authRequired, (req, res) => {
+  try {
+    const list = loadDriverCallsData();
+    return res.json({ status: "success", total: list.length, data: list });
+  } catch (err) {
+    return res.status(500).json({ status: "error", message: err.message });
+  }
+});
+
+app.post("/api/driver-calls/update", authRequired, (req, res) => {
+  try {
+    const { stt, notes, callDate, caller, callStatus, driverStatus } = req.body;
+    if (stt === undefined) {
+      return res.status(400).json({ status: "error", message: "Thiếu STT tài xế." });
+    }
+    const list = loadDriverCallsData();
+    const idx = list.findIndex(d => String(d.stt) === String(stt));
+    if (idx === -1) {
+      return res.status(404).json({ status: "error", message: "Không tìm thấy tài xế." });
+    }
+
+    if (notes !== undefined) list[idx].notes = String(notes).trim();
+    if (callDate !== undefined) list[idx].callDate = String(callDate).trim();
+    if (caller !== undefined) list[idx].caller = String(caller).trim();
+    if (callStatus !== undefined) list[idx].callStatus = String(callStatus).trim();
+    if (driverStatus !== undefined) list[idx].driverStatus = String(driverStatus).trim();
+
+    saveDriverCallsData(list);
+    return res.json({ status: "success", data: list[idx] });
+  } catch (err) {
+    return res.status(500).json({ status: "error", message: err.message });
+  }
+});
+
+
+app.post("/api/driver-calls/add", authRequired, (req, res) => {
+  try {
+    const list = loadDriverCallsData();
+    let maxStt = 0;
+    list.forEach(d => {
+      const s = parseInt(d.stt, 10);
+      if (!isNaN(s) && s > maxStt) maxStt = s;
+    });
+
+    const now = new Date();
+    const pad = n => String(n).padStart(2, "0");
+    const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+
+    const newDriver = {
+      stt: maxStt + 1,
+      name: String(req.body.name || "").trim(),
+      phone: String(req.body.phone || "").trim(),
+      company: String(req.body.company || "").trim(),
+      taxId: String(req.body.taxId || "").trim(),
+      memberStatus: String(req.body.memberStatus || "").trim(),
+      driverStatus: String(req.body.driverStatus || "Tham gia").trim(),
+      cccd: String(req.body.cccd || "").trim(),
+      callStatus: String(req.body.callStatus || "").trim(),
+      notes: String(req.body.notes || "").trim(),
+      callDate: String(req.body.callDate || today).trim(),
+      caller: String(req.body.caller || "").trim(),
+      points: 0,
+      rank: "Chưa xếp hạng"
+    };
+
+    list.unshift(newDriver);
+    saveDriverCallsData(list);
+    return res.json({ status: "success", data: newDriver });
   } catch (err) {
     return res.status(500).json({ status: "error", message: err.message });
   }

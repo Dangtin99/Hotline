@@ -233,6 +233,8 @@ try {
     CREATE INDEX IF NOT EXISTS idx_cancel_book_cont ON cancellation_orders(so_booking, so_container);
   `);
   try { sqliteEngine.prepare("ALTER TABLE cancellation_orders ADD COLUMN giai_trinh_chi_tiet TEXT;").run(); } catch (e) {}
+  try { sqliteEngine.prepare("ALTER TABLE cancellation_orders ADD COLUMN nguoi_tao TEXT;").run(); } catch (e) {}
+  try { sqliteEngine.prepare("ALTER TABLE cancellation_orders ADD COLUMN so_xe TEXT;").run(); } catch (e) {}
   try { sqliteEngine.prepare("ALTER TABLE order_operational_state ADD COLUMN explanation_detail TEXT;").run(); } catch (e) {}
   try { sqliteEngine.prepare("ALTER TABLE eir_cancellation_orders ADD COLUMN nguoi_tao TEXT;").run(); } catch (e) {}
   try { sqliteEngine.prepare("ALTER TABLE eir_cancellation_orders ADD COLUMN so_xe TEXT;").run(); } catch (e) {}
@@ -1012,6 +1014,8 @@ function getRecordsByUploadId(uploadId) {
           trangThaiXuLy: r.trang_thai_xu_ly,
           giaiTrinh: r.giai_trinh,
           giaiTrinhChiTiet: r.giai_trinh_chi_tiet || null,
+          soXe: r.so_xe || null,
+          nguoiTao: r.nguoi_tao || null,
           createdAt: r.created_at
         }));
       }
@@ -1366,11 +1370,19 @@ function updateOrdersFromCheckData() {
   }
 
   const clean = (s) => (s === null || s === undefined ? "" : String(s).trim().toUpperCase());
-  
+  const cleanTruck = (t) => (!t || t === "-" || t === "null" || t === "undefined" ? "" : String(t).toUpperCase().replace(/[^A-Z0-9]/g, ""));
+  const cleanGate = (v) => {
+    if (!v) return "";
+    const s = String(v).toUpperCase().trim();
+    if (s.includes("OUT")) return "OUT";
+    if (s.includes("IN")) return "IN";
+    return s;
+  };
+
   const parseOrderEirAndCont = (order) => {
     let eir = "";
     let cont = "";
-    const raw = (order.soContainer || "").trim();
+    const raw = (order.soContainer || order.so_container || "").trim();
     if (raw.includes("-")) {
       const parts = raw.split("-");
       eir = parts[0].trim().toUpperCase();
@@ -1392,8 +1404,8 @@ function updateOrdersFromCheckData() {
   };
 
   const parseCheckEirAndCont = (check) => {
-    let eir = (check.sttFile || "").trim().toUpperCase();
-    let cont = (check.soContainer || "").trim().toUpperCase();
+    let eir = (check.sttFile || check.stt_file || "").trim().toUpperCase();
+    let cont = (check.soContainer || check.so_container || "").trim().toUpperCase();
     if (cont.includes("-")) {
       const parts = cont.split("-");
       if (!eir) eir = parts[0].trim().toUpperCase();
@@ -1403,25 +1415,22 @@ function updateOrdersFromCheckData() {
       const match = String(check.rowKey).match(/EIR\d+/i);
       if (match) eir = match[0].toUpperCase();
     }
-    // Nếu soContainer chính là mã EIR (fallback lúc upload) -> xem như chưa có cont thực
     if (cont === eir) {
       cont = "";
     }
-    return { eir, cont, rawCont: (check.soContainer || "").trim().toUpperCase() };
+    return { eir, cont, rawCont: (check.soContainer || check.so_container || "").trim().toUpperCase() };
   };
 
   const isSameCont = (orderInfo, checkInfo) => {
     if (orderInfo.cont && checkInfo.cont) {
       return orderInfo.cont === checkInfo.cont;
     }
-    // Cả 2 đều chưa có số container cụ thể
     if (!orderInfo.cont && !checkInfo.cont) {
       return true;
     }
     if (orderInfo.rawCont && orderInfo.rawCont === checkInfo.rawCont) {
       return true;
     }
-    // Đơn gốc ban đầu cont rỗng và check có cont trên cùng mã EIR
     if (!orderInfo.cont && checkInfo.cont && isSameEir(orderInfo, checkInfo)) {
       return true;
     }
@@ -1445,6 +1454,17 @@ function updateOrdersFromCheckData() {
   const extractDateParts = (dateStr) => {
     if (!dateStr) return null;
     const str = String(dateStr).trim().replace("T", " ");
+    const timeFirstMatch = str.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s+(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+    if (timeFirstMatch) {
+      return {
+        y: parseInt(timeFirstMatch[6], 10),
+        m: parseInt(timeFirstMatch[5], 10),
+        d: parseInt(timeFirstMatch[4], 10),
+        h: parseInt(timeFirstMatch[1], 10),
+        min: parseInt(timeFirstMatch[2], 10),
+        s: parseInt(timeFirstMatch[3] || "0", 10)
+      };
+    }
     const isoMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
     if (isoMatch) {
       return {
@@ -1516,7 +1536,6 @@ function updateOrdersFromCheckData() {
     let y1 = pCheck.y, m1 = pCheck.m, d1 = pCheck.d;
     let y2 = pOrder.y, m2 = pOrder.m, d2 = pOrder.d;
 
-    // Tự động nhận diện và xử lý đảo ngược tháng / ngày (DD-MM vs MM-DD)
     if (y1 === y2 && m1 === d2 && d1 === m2) {
       m1 = m2;
       d1 = d2;
@@ -1536,21 +1555,13 @@ function updateOrdersFromCheckData() {
   const isCancelled = (val) => {
     if (!val) return false;
     const s = String(val).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").trim();
-    return s.includes("da huy") || s === "huy" || s.includes("tu choi duyet");
+    return s.includes("da huy") || s === "huy" || s.includes("tu choi duyet") || s.includes("dang hoan tien") || s.includes("da hoan tien");
   };
 
   const isSuccessPayment = (val) => {
     if (!val) return false;
     const s = String(val).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").trim();
-    return s.includes("thanh toan thanh cong") || s.includes("thanh cong") || s.includes("da thanh toan") || s.includes("hoan thanh");
-  };
-
-  const cleanGate = (val) => {
-    if (!val) return "";
-    const s = String(val).toUpperCase().trim();
-    if (s.includes("OUT")) return "OUT";
-    if (s.includes("IN")) return "IN";
-    return s;
+    return s.includes("thanh toan thanh cong") || s.includes("thanh cong") || s.includes("da thanh toan") || s.includes("hoan thanh") || s.includes("da hoan thanh");
   };
 
   const usedCheckKeys = new Set();
@@ -1559,7 +1570,41 @@ function updateOrdersFromCheckData() {
   let updatedCancelled = 0;
   const nowStr = new Date().toISOString().replace("T", " ").substring(0, 19);
 
-  // 1. Nhóm dữ liệu đơn hàng (memoryOrders) theo từng mã Booking
+  // -------------------------------------------------------------------------
+  // BƯỚC 0: LÀM GIÀU DỮ LIỆU (DATA ENRICHMENT QUA MÃ EIR)
+  // Bổ sung soXe và nguoiTao từ eir_cancellation_orders sang cancellation_orders
+  // -------------------------------------------------------------------------
+  const checkEirMap = new Map();
+  memoryVerificationOrders.forEach(check => {
+    const eir = clean(check.sttFile);
+    if (eir) checkEirMap.set(eir, check);
+    const info = parseCheckEirAndCont(check);
+    if (info.eir && !checkEirMap.has(info.eir)) checkEirMap.set(info.eir, check);
+  });
+
+  memoryOrders.forEach(order => {
+    const orderInfo = parseOrderEirAndCont(order);
+    order._eir = orderInfo.eir;
+    order._cont = orderInfo.cont;
+    order._bk = clean(order.soBooking);
+    order._dir = cleanGate(order.loaiDonHang);
+
+    if (!order.soXe || !order.nguoiTao) {
+      if (orderInfo.eir && checkEirMap.has(orderInfo.eir)) {
+        const c = checkEirMap.get(orderInfo.eir);
+        if (!order.soXe && c.soXe) order.soXe = c.soXe;
+        if (!order.nguoiTao && c.nguoiTao) order.nguoiTao = c.nguoiTao;
+      }
+    }
+    order._truck = cleanTruck(order.soXe);
+    order._creator = clean(order.nguoiTao);
+    order._depot = clean(order.depot);
+    order._line = clean(order.hangTau);
+  });
+
+  // -------------------------------------------------------------------------
+  // PHASE 1 (ƯU TIÊN 1): XỬ LÝ CÁC ĐƠN CHƯA THANH TOÁN (GIỮ NGUYÊN 100%)
+  // -------------------------------------------------------------------------
   const bookingOrdersMap = new Map();
   memoryOrders.forEach(order => {
     const booking = clean(order.soBooking);
@@ -1570,9 +1615,7 @@ function updateOrdersFromCheckData() {
     bookingOrdersMap.get(booking).push(order);
   });
 
-  // 2. Duyệt qua từng mã Booking và thực hiện đối soát 2 Phase (Ưu tiên Chưa thanh toán trước, sau đó đến Đã hủy)
   for (const [orderBooking, ordersInBooking] of bookingOrdersMap.entries()) {
-    // --- PHASE 1 (ƯU TIÊN 1): XỬ LÝ CÁC ĐƠN CHƯA THANH TOÁN ---
     ordersInBooking.forEach(order => {
       const isUnpaidOrder = isUnpaid(order.trangThaiDonHang);
       if (!isUnpaidOrder) return;
@@ -1585,15 +1628,12 @@ function updateOrdersFromCheckData() {
         if (usedCheckKeys.has(check.rowKey)) return false;
         if (clean(check.soBooking) !== orderBooking) return false;
 
-        // Điều kiện 1: Trạng thái đơn trong đơn hàng PHẢI KHÁC trạng thái trong đơn check
         const checkStatusNorm = clean(check.trangThaiDonHang);
         if (orderStatusNorm === checkStatusNorm) return false;
 
-        // Điều kiện 2: BẮT BUỘC TRÙNG LOẠI GATE (IN/OUT)
         const checkGate = cleanGate(check.loaiDonHang);
         if (orderGate && checkGate && orderGate !== checkGate) return false;
 
-        // Điều kiện 3: Xét trùng số Container hoặc cùng mã EIR
         const checkInfo = parseCheckEirAndCont(check);
         if (isSameCont(orderInfo, checkInfo) || isSameEir(orderInfo, checkInfo)) {
           return true;
@@ -1633,6 +1673,8 @@ function updateOrdersFromCheckData() {
         if (check.sdtTaiXe) order.sdtTaiXe = check.sdtTaiXe;
         if (check.tenNhaXe) order.tenNhaXe = check.tenNhaXe;
         if (check.sdtNhaXe) order.sdtNhaXe = check.sdtNhaXe;
+        if (check.soXe) order.soXe = check.soXe;
+        if (check.nguoiTao) order.nguoiTao = check.nguoiTao;
         order.updatedAt = nowStr;
 
         if (isSuccessPayment(order.trangThaiDonHang)) {
@@ -1649,119 +1691,223 @@ function updateOrdersFromCheckData() {
         });
       }
     });
+  }
 
-    // --- PHASE 2 (ƯU TIÊN 2): XỬ LÝ CÁC ĐƠN ĐÃ HỦY ---
-    ordersInBooking.forEach(order => {
-      const isCancelledOrder = isCancelled(order.trangThaiDonHang) || order.isAutoCancelledBy3h;
-      if (!isCancelledOrder) return;
+  // -------------------------------------------------------------------------
+  // PHASE 2 (ƯU TIÊN 2): PIPELINE 3 VÒNG CHO ĐƠN ĐÃ HỦY & MULTI-ATTEMPT PROPAGATION
+  // -------------------------------------------------------------------------
+  const availableChecks = memoryVerificationOrders.filter(c => {
+    if (usedCheckKeys.has(c.rowKey)) return false;
+    return !isCancelled(c.trangThaiDonHang);
+  });
 
-      const orderGate = cleanGate(order.loaiDonHang);
-      const isOrderIn = orderGate === "IN";
-      const orderInfo = parseOrderEirAndCont(order);
-      const orderStatusNorm = clean(order.trangThaiDonHang);
+  availableChecks.forEach(c => {
+    c._info = parseCheckEirAndCont(c);
+    c._bk = clean(c.soBooking);
+    c._dir = cleanGate(c.loaiDonHang);
+    c._truck = cleanTruck(c.soXe);
+    c._creator = clean(c.nguoiTao);
+    c._depot = clean(c.depot);
+    c._line = clean(c.hangTau);
+    c._ts = parseDateMs(c.ngayDuocDuyet || c.ngayHuyDon) || 0;
+  });
 
-      const matchedIndex = memoryVerificationOrders.findIndex(check => {
-        if (usedCheckKeys.has(check.rowKey)) return false;
-        if (clean(check.soBooking) !== orderBooking) return false;
+  // Bước 1.5: Chuẩn hóa Booking cho các đơn check rỗng booking dựa trên cùng cont và chiều
+  const contWithBkMap = new Map();
+  availableChecks.forEach(c => {
+    if (c._bk && c._info.cont) {
+      const key = `${c._info.cont}__${c._dir}`;
+      if (!contWithBkMap.has(key)) contWithBkMap.set(key, c._bk);
+    }
+  });
+  availableChecks.forEach(c => {
+    if (!c._bk && c._info.cont) {
+      const key = `${c._info.cont}__${c._dir}`;
+      if (contWithBkMap.has(key)) c._bk = contWithBkMap.get(key);
+    }
+  });
 
-        // Điều kiện 1: Trạng thái đơn trong đơn hàng PHẢI KHÁC trạng thái trong đơn check
-        const checkStatusNorm = clean(check.trangThaiDonHang);
-        if (orderStatusNorm === checkStatusNorm) return false;
+  // Tập hợp các đơn hủy trong cancellation_orders
+  const cancelledOrders = memoryOrders.filter(o => isCancelled(o.trangThaiDonHang) || o.isAutoCancelledBy3h);
+  cancelledOrders.forEach(o => {
+    o._ts = parseDateMs(o.ngayHuyDon || o.ngayDuocDuyet) || 0;
+    if (!o._bk && o._cont) {
+      const key = `${o._cont}__${o._dir}`;
+      if (contWithBkMap.has(key)) o._bk = contWithBkMap.get(key);
+    }
+  });
 
-        // Không lấy các dòng check cũng là đơn hủy cũ
-        if (isCancelled(check.trangThaiDonHang)) return false;
+  // Xây dựng Indexed Maps cho các đơn hủy để tra cứu tức thì
+  const v1Map = new Map(); // key: bk__cont__dir -> [orders]
+  const v2Map = new Map(); // key: cont__dir__creator__truck -> [orders]
+  const v3Map = new Map(); // key: creator__depot__line__truck -> [orders]
 
-        // Điều kiện 2: BẮT BUỘC TRÙNG LOẠI GATE (IN/OUT)
-        const checkGate = cleanGate(check.loaiDonHang);
-        if (orderGate && checkGate && orderGate !== checkGate) return false;
+  cancelledOrders.forEach(o => {
+    if (o._bk && o._cont) {
+      const k1 = `${o._bk}__${o._cont}__${o._dir}`;
+      if (!v1Map.has(k1)) v1Map.set(k1, []);
+      v1Map.get(k1).push(o);
+    }
+    if (o._cont && o._creator && o._truck) {
+      const k2 = `${o._cont}__${o._dir}__${o._creator}__${o._truck}`;
+      if (!v2Map.has(k2)) v2Map.set(k2, []);
+      v2Map.get(k2).push(o);
+    }
+    if (o._dir === "OUT" && o._creator && o._depot && o._line && o._truck) {
+      const k3 = `${o._creator}__${o._depot}__${o._line}__${o._truck}`;
+      if (!v3Map.has(k3)) v3Map.set(k3, []);
+      v3Map.get(k3).push(o);
+    }
+  });
 
-        const checkInfo = parseCheckEirAndCont(check);
-        const isCheckIn = checkGate === "IN";
+  const updatedOrderKeys = new Set();
 
-        // Khác mã EIR (lệnh đặt lại mới)
-        const hasDiffEir = Boolean(checkInfo.eir && orderInfo.eir !== checkInfo.eir);
-        if (!hasDiffEir) return false;
+  // Sắp xếp availableChecks theo timestamp tăng dần (đơn hoàn thành sau cùng xét trước)
+  availableChecks.sort((a, b) => b._ts - a._ts);
 
-        // Đối với đơn IN (Hạ bãi): Bắt buộc phải trùng đúng mã số Container
-        if (isOrderIn || isCheckIn || (orderInfo.cont && checkInfo.cont)) {
-          if (!orderInfo.cont || !checkInfo.cont || orderInfo.cont !== checkInfo.cont) {
-            return false;
+  availableChecks.forEach(check => {
+    if (usedCheckKeys.has(check.rowKey)) return;
+    const cInfo = check._info;
+
+    let matchedCancelledList = null;
+
+    // --- VÒNG 1: Cùng Booking + Cùng Cont + Cùng Chiều ---
+    if (check._bk && cInfo.cont) {
+      const k1 = `${check._bk}__${cInfo.cont}__${check._dir}`;
+      const candidates = v1Map.get(k1);
+      if (candidates && candidates.length > 0) {
+        const fresh = candidates.filter(o => !updatedOrderKeys.has(o.rowKey) && o._eir !== cInfo.eir);
+        if (fresh.length > 0) {
+          matchedCancelledList = fresh;
+        }
+      }
+    }
+
+    // --- VÒNG 2: Cùng Cont + Cùng Chiều + Cùng Người tạo + Cùng Số xe ---
+    if (!matchedCancelledList && cInfo.cont && check._truck && check._creator) {
+      const k2 = `${cInfo.cont}__${check._dir}__${check._creator}__${check._truck}`;
+      const candidates = v2Map.get(k2);
+      if (candidates && candidates.length > 0) {
+        const fresh = candidates.filter(o => !updatedOrderKeys.has(o.rowKey) && o._eir !== cInfo.eir);
+        if (fresh.length > 0) {
+          matchedCancelledList = fresh;
+        }
+      }
+    }
+
+    // --- VÒNG 3: Đơn OUT + Cùng Người tạo + Cùng Depot + Cùng Hãng tàu + Cùng Số xe trong 24h ---
+    if (!matchedCancelledList && check._dir === "OUT" && check._truck && check._creator && check._depot && check._line) {
+      const k3 = `${check._creator}__${check._depot}__${check._line}__${check._truck}`;
+      const candidates = v3Map.get(k3);
+      if (candidates && candidates.length > 0) {
+        const fresh = candidates.filter(o => {
+          if (updatedOrderKeys.has(o.rowKey)) return false;
+          if (o._eir === cInfo.eir) return false;
+          if (check._ts > 0 && o._ts > 0) {
+            const diffMs = Math.abs(check._ts - o._ts);
+            if (diffMs > 24 * 3600 * 1000) return false;
           }
           return true;
+        });
+        if (fresh.length > 0) {
+          matchedCancelledList = fresh;
         }
+      }
+    }
 
-        // Đối với đơn OUT (Cấp rỗng): Nếu cả 2 đều đã gán cont thì phải trùng cont
-        if (orderInfo.cont && checkInfo.cont && orderInfo.cont !== checkInfo.cont) {
-          return false;
-        }
+    // NẾU KHỚP THÀNH CÔNG: Xử lý Multi-attempt và cập nhật
+    if (matchedCancelledList && matchedCancelledList.length > 0) {
+      usedCheckKeys.add(check.rowKey);
 
-        return true;
+      // Sắp xếp các đơn hủy theo timestamp tăng dần (đơn hủy gần nhất với check nằm ở cuối)
+      matchedCancelledList.sort((a, b) => (a._ts || 0) - (b._ts || 0));
+
+      const latestCancelled = matchedCancelledList[matchedCancelledList.length - 1];
+      const priorCancelled = matchedCancelledList.slice(0, matchedCancelledList.length - 1);
+
+      // 1. Cập nhật đơn hủy gần nhất bằng dữ liệu mới từ check
+      updatedOrderKeys.add(latestCancelled.rowKey);
+      if (cInfo.eir) {
+        latestCancelled.soContainer = cInfo.cont ? `${cInfo.eir}-${cInfo.cont}` : `${cInfo.eir}-`;
+      } else if (check.soContainer) {
+        latestCancelled.soContainer = check.soContainer;
+      }
+
+      if (latestCancelled.isAutoCancelledBy3h) {
+        latestCancelled.isAutoCancelledBy3h = false;
+      }
+
+      if (check.depot) latestCancelled.depot = check.depot;
+      if (check.hangTau) latestCancelled.hangTau = check.hangTau;
+      if (check.soBooking) latestCancelled.soBooking = check.soBooking;
+      if (check.ngayHuyDon) latestCancelled.ngayHuyDon = check.ngayHuyDon;
+      if (check.ngayDuocDuyet) latestCancelled.ngayDuocDuyet = check.ngayDuocDuyet;
+      if (check.loaiContainer) latestCancelled.loaiContainer = check.loaiContainer;
+      if (check.loaiDonHang) latestCancelled.loaiDonHang = check.loaiDonHang;
+      if (check.sizeTeus !== undefined && check.sizeTeus !== null) latestCancelled.sizeTeus = Number(check.sizeTeus) || 0;
+      if (check.trangThaiDonHang) latestCancelled.trangThaiDonHang = check.trangThaiDonHang;
+      if (check.trangThaiKichHoat) latestCancelled.trangThaiKichHoat = check.trangThaiKichHoat;
+      if (check.thoiGianKichHoat) latestCancelled.thoiGianKichHoat = check.thoiGianKichHoat;
+      if (check.lyDoHuy) latestCancelled.lyDoHuy = check.lyDoHuy;
+      if (check.lyDoTuChoi) latestCancelled.lyDoTuChoi = check.lyDoTuChoi;
+      if (check.lyDoHuyCheck) latestCancelled.lyDoHuyCheck = check.lyDoHuyCheck;
+      if (check.tenTaiXe) latestCancelled.tenTaiXe = check.tenTaiXe;
+      if (check.sdtTaiXe) latestCancelled.sdtTaiXe = check.sdtTaiXe;
+      if (check.tenNhaXe) latestCancelled.tenNhaXe = check.tenNhaXe;
+      if (check.sdtNhaXe) latestCancelled.sdtNhaXe = check.sdtNhaXe;
+      if (check.soXe) latestCancelled.soXe = check.soXe;
+      if (check.nguoiTao) latestCancelled.nguoiTao = check.nguoiTao;
+      latestCancelled.updatedAt = nowStr;
+
+      const isSucc = isSuccessPayment(latestCancelled.trangThaiDonHang);
+      const currXuLy = latestCancelled.trangThaiXuLy ? String(latestCancelled.trangThaiXuLy).trim() : "";
+
+      if (isSucc) {
+        latestCancelled.trangThaiXuLy = "Thanh toán thành công";
+      } else if (!currXuLy || currXuLy === "null" || currXuLy === "undefined") {
+        latestCancelled.trangThaiXuLy = "Đặt lại thành công";
+      } else if (
+        currXuLy === "Đã liên hệ - Đang chờ" || 
+        currXuLy === "Đã liên hệ - Chờ" || 
+        currXuLy === "Đã liên hệ - Chờ đặt lại"
+      ) {
+        latestCancelled.trangThaiXuLy = "Đã liên hệ - Đã đặt lại";
+      }
+
+      latestCancelled.giaiTrinh = `Lệnh mới hoàn tất theo ${cInfo.eir || check.sttFile || ""}`;
+
+      updatedCancelled++;
+      updatedRecords.push({
+        rowKey: latestCancelled.rowKey,
+        stt: latestCancelled.stt,
+        soBooking: latestCancelled.soBooking,
+        soContainer: latestCancelled.soContainer,
+        trangThaiXuLy: latestCancelled.trangThaiXuLy
       });
 
-      if (matchedIndex !== -1) {
-        const check = memoryVerificationOrders[matchedIndex];
-        const checkInfo = parseCheckEirAndCont(check);
-        usedCheckKeys.add(check.rowKey);
-
-        if (checkInfo.eir) {
-          order.soContainer = checkInfo.cont ? `${checkInfo.eir}-${checkInfo.cont}` : `${checkInfo.eir}-`;
-        } else if (check.soContainer) {
-          order.soContainer = check.soContainer;
-        }
-
-        if (order.isAutoCancelledBy3h) {
-          order.isAutoCancelledBy3h = false;
-        }
-
-        if (check.depot) order.depot = check.depot;
-        if (check.hangTau) order.hangTau = check.hangTau;
-        if (check.ngayHuyDon) order.ngayHuyDon = check.ngayHuyDon;
-        if (check.ngayDuocDuyet) order.ngayDuocDuyet = check.ngayDuocDuyet;
-        if (check.loaiContainer) order.loaiContainer = check.loaiContainer;
-        if (check.loaiDonHang) order.loaiDonHang = check.loaiDonHang;
-        if (check.sizeTeus !== undefined && check.sizeTeus !== null) order.sizeTeus = Number(check.sizeTeus) || 0;
-        if (check.trangThaiDonHang) order.trangThaiDonHang = check.trangThaiDonHang;
-        if (check.trangThaiKichHoat) order.trangThaiKichHoat = check.trangThaiKichHoat;
-        if (check.thoiGianKichHoat) order.thoiGianKichHoat = check.thoiGianKichHoat;
-        if (check.lyDoHuy) order.lyDoHuy = check.lyDoHuy;
-        if (check.lyDoTuChoi) order.lyDoTuChoi = check.lyDoTuChoi;
-        if (check.lyDoHuyCheck) order.lyDoHuyCheck = check.lyDoHuyCheck;
-        if (check.tenTaiXe) order.tenTaiXe = check.tenTaiXe;
-        if (check.sdtTaiXe) order.sdtTaiXe = check.sdtTaiXe;
-        if (check.tenNhaXe) order.tenNhaXe = check.tenNhaXe;
-        if (check.sdtNhaXe) order.sdtNhaXe = check.sdtNhaXe;
-        order.updatedAt = nowStr;
-
-        const isSucc = isSuccessPayment(order.trangThaiDonHang);
-        const currXuLy = order.trangThaiXuLy ? String(order.trangThaiXuLy).trim() : "";
-
-        if (isSucc) {
-          order.trangThaiXuLy = "Thanh toán thành công";
-        } else if (!currXuLy || currXuLy === "null" || currXuLy === "undefined") {
-          order.trangThaiXuLy = "Đặt lại thành công";
-        } else if (
-          currXuLy === "Đã liên hệ - Đang chờ" || 
-          currXuLy === "Đã liên hệ - Chờ" || 
-          currXuLy === "Đã liên hệ - Chờ đặt lại"
-        ) {
-          order.trangThaiXuLy = "Đã liên hệ - Đã đặt lại";
-        }
-
+      // 2. Lan truyền trạng thái CSKH cho các đơn hủy trước đó của cùng chuỗi
+      priorCancelled.forEach(prior => {
+        updatedOrderKeys.add(prior.rowKey);
+        prior.trangThaiXuLy = "Đặt lại thành công";
+        prior.giaiTrinh = `Cont đã hoàn thành ở lệnh mới ${cInfo.eir || check.sttFile || ""}`;
+        prior.updatedAt = nowStr;
         updatedCancelled++;
         updatedRecords.push({
-          rowKey: order.rowKey,
-          stt: order.stt,
-          soBooking: order.soBooking,
-          soContainer: order.soContainer,
-          trangThaiXuLy: order.trangThaiXuLy
+          rowKey: prior.rowKey,
+          stt: prior.stt,
+          soBooking: prior.soBooking,
+          soContainer: prior.soContainer,
+          trangThaiXuLy: prior.trangThaiXuLy
         });
-      }
-    });
-  }
+      });
+    }
+  });
 
   const deletedCount = usedCheckKeys.size;
 
-  // 2. Xóa các dòng check đơn đã được thay thế khỏi bảng eir_cancellation_orders
+  // -------------------------------------------------------------------------
+  // BƯỚC 3: XÓA CÁC DÒNG CHECK ĐÃ SỬ DỤNG KHỎI BẢNG eir_cancellation_orders
+  // -------------------------------------------------------------------------
   if (deletedCount > 0) {
     memoryVerificationOrders = memoryVerificationOrders.filter(o => !usedCheckKeys.has(o.rowKey));
     persistVerificationStore();
@@ -1778,7 +1924,18 @@ function updateOrdersFromCheckData() {
     }
   }
 
-  // 3. Lưu trữ cập nhật cho bảng cancellation_orders
+  // -------------------------------------------------------------------------
+  // BƯỚC 3.5: TỰ ĐỘNG GHI ĐÈ & XÓA BẢN GHI CŨ TRÙNG LẶP (DEDUPLICATE & PURGE)
+  // Quét toàn bộ để tự động giữ lại bản ghi mới nhất/đã hoàn thành,
+  // xóa vĩnh viễn các dòng cũ trùng lặp (ví dụ dòng Đã hủy cũ cùng số EIR).
+  // -------------------------------------------------------------------------
+  const dedupRes = deduplicateOrdersByEir();
+  const deletedDuplicates = dedupRes.deletedCount || 0;
+  const deletedOrderKeys = dedupRes.deletedKeys || [];
+
+  // -------------------------------------------------------------------------
+  // BƯỚC 4: LƯU TRỮ VÀ ĐỒNG BỘ CHO BẢNG cancellation_orders
+  // -------------------------------------------------------------------------
   if (updatedUnpaid > 0 || updatedCancelled > 0) {
     persistStore();
 
@@ -1791,7 +1948,7 @@ function updateOrdersFromCheckData() {
               size_teus = ?, trang_thai_don_hang = ?, trang_thai_kich_hoat = ?,
               thoi_gian_kich_hoat = ?, ly_do_huy = ?, ly_do_tu_choi = ?, ten_tai_xe = ?,
               sdt_tai_xe = ?, ten_nha_xe = ?, sdt_nha_xe = ?, trang_thai_xu_ly = ?,
-              updated_at = ?
+              giai_trinh = ?, nguoi_tao = ?, so_xe = ?, updated_at = ?
           WHERE row_key = ?
         `);
         memoryOrders.forEach(o => {
@@ -1801,6 +1958,7 @@ function updateOrdersFromCheckData() {
             Number(o.sizeTeus) || 0, o.trangThaiDonHang, o.trangThaiKichHoat,
             o.thoiGianKichHoat, o.lyDoHuy, o.lyDoTuChoi, o.tenTaiXe,
             o.sdtTaiXe, o.tenNhaXe, o.sdtNhaXe, o.trangThaiXuLy,
+            o.giaiTrinh || "", o.nguoiTao || "", o.soXe || "",
             o.updatedAt, o.rowKey
           );
         });
@@ -1819,10 +1977,12 @@ function updateOrdersFromCheckData() {
     updatedUnpaid,
     updatedCancelled,
     deletedCheckRows: deletedCount,
+    deletedDuplicateRows: deletedDuplicates,
+    deletedOrderKeys,
     remainingCheckRows: memoryVerificationOrders.length,
     updatedRecords,
     usedCheckKeys: Array.from(usedCheckKeys),
-    message: `Đã cập nhật thành công ${updatedUnpaid} đơn Chưa thanh toán và ${updatedCancelled} đơn Đã hủy. Đã xóa ${deletedCount} dòng khỏi bảng check đơn.`
+    message: `Đã cập nhật thành công ${updatedUnpaid} đơn Chưa thanh toán và ${updatedCancelled} đơn Đã hủy.${deletedDuplicates > 0 ? ` Đã ghi đè và xóa ${deletedDuplicates} dòng dữ liệu cũ trùng lặp.` : ''} Đã xóa ${deletedCount} dòng khỏi bảng check đơn.`
   };
 }
 
@@ -1846,6 +2006,17 @@ function deduplicateOrdersByEir() {
   const extractDatePartsLocal = (dateStr) => {
     if (!dateStr) return null;
     const str = String(dateStr).trim().replace("T", " ");
+    const timeFirstMatch = str.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s+(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+    if (timeFirstMatch) {
+      return {
+        y: parseInt(timeFirstMatch[6], 10),
+        m: parseInt(timeFirstMatch[5], 10),
+        d: parseInt(timeFirstMatch[4], 10),
+        h: parseInt(timeFirstMatch[1], 10),
+        min: parseInt(timeFirstMatch[2], 10),
+        s: parseInt(timeFirstMatch[3] || "0", 10)
+      };
+    }
     const isoMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
     if (isoMatch) {
       return {
@@ -1881,6 +2052,12 @@ function deduplicateOrdersByEir() {
       };
     }
     return null;
+  };
+
+  const isSuccessPaymentLocal = (val) => {
+    if (!val) return false;
+    const s = String(val).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").trim();
+    return s.includes("thanh toan thanh cong") || s.includes("thanh cong") || s.includes("da thanh toan") || s.includes("hoan thanh") || s.includes("da hoan thanh");
   };
 
   const getTimestampMs = (order) => {
@@ -1925,33 +2102,85 @@ function deduplicateOrdersByEir() {
   const deletedRecords = [];
   let duplicatesFound = 0;
 
-  // 2. Lặp qua các nhóm trùng để tìm dòng có Ngày được duyệt lớn nhất
+  // 2. Lặp qua các nhóm trùng để tìm dòng mới nhất / trạng thái đã hoàn thành
   eirGroupMap.forEach((orders, eir) => {
     if (orders.length <= 1) return;
 
     duplicatesFound++;
 
-    // Sắp xếp giảm dần theo mốc thời gian: lớn nhất (mới nhất) lên đầu
+    // Sắp xếp giảm dần theo mức độ ưu tiên:
+    // 1. Đơn hoàn thành/thanh toán thành công LUÔN được ưu tiên giữ lại hàng đầu
+    // 2. Mốc thời gian duyệt/hủy lớn nhất (mới nhất) lên đầu
+    // 3. Thời điểm cập nhật hoặc STT
     orders.sort((a, b) => {
+      const succA = isSuccessPaymentLocal(a.trangThaiDonHang) ? 1 : 0;
+      const succB = isSuccessPaymentLocal(b.trangThaiDonHang) ? 1 : 0;
+      if (succA !== succB) return succB - succA;
+
       const timeA = getTimestampMs(a);
       const timeB = getTimestampMs(b);
       if (timeA !== timeB) {
         return timeB - timeA;
       }
-      // Nếu thời gian duyệt bằng nhau, so sánh thời điểm cập nhật hoặc STT
       const updA = a.updatedAt ? Date.parse(a.updatedAt) : 0;
       const updB = b.updatedAt ? Date.parse(b.updatedAt) : 0;
       if (updA !== updB) return updB - updA;
       return (Number(b.stt) || 0) - (Number(a.stt) || 0);
     });
 
-    // Phần tử đầu tiên (index 0) là dòng có Ngày được duyệt lớn nhất -> GIỮ LẠI
-    // Các phần tử từ index 1 trở đi có Ngày được duyệt bé hơn -> XÓA
+    // Phần tử đầu tiên (index 0) là dòng có trạng thái mới nhất / hoàn thành -> GIỮ LẠI
+    // Các phần tử từ index 1 trở đi là dòng cũ / trạng thái hủy cũ -> XÓA
     for (let i = 1; i < orders.length; i++) {
       const delOrder = orders[i];
       toDeleteKeys.add(delOrder.rowKey);
       deletedRecords.push({
         eir,
+        rowKey: delOrder.rowKey,
+        soBooking: delOrder.soBooking,
+        soContainer: delOrder.soContainer,
+        ngayDuocDuyet: delOrder.ngayDuocDuyet || delOrder.ngayHuyDon,
+        stt: delOrder.stt
+      });
+    }
+  });
+
+  // 2b. Lọc trùng tiếp cho các đơn không có EIR nhưng cùng Depot + Container + Booking
+  const contBookGroupMap = new Map();
+  memoryOrders.forEach(order => {
+    if (toDeleteKeys.has(order.rowKey)) return;
+    const rawCont = (order.soContainer || "").trim().toUpperCase();
+    const rawBook = (order.soBooking || "").trim().toUpperCase();
+    const depot = (order.depot || "").trim().toUpperCase();
+    if (rawCont && rawBook && !rawCont.startsWith("EIR")) {
+      const key = `${depot}#${rawCont}#${rawBook}`;
+      if (!contBookGroupMap.has(key)) contBookGroupMap.set(key, []);
+      contBookGroupMap.get(key).push(order);
+    }
+  });
+
+  contBookGroupMap.forEach((orders, key) => {
+    if (orders.length <= 1) return;
+    duplicatesFound++;
+    orders.sort((a, b) => {
+      const succA = isSuccessPaymentLocal(a.trangThaiDonHang) ? 1 : 0;
+      const succB = isSuccessPaymentLocal(b.trangThaiDonHang) ? 1 : 0;
+      if (succA !== succB) return succB - succA;
+
+      const timeA = getTimestampMs(a);
+      const timeB = getTimestampMs(b);
+      if (timeA !== timeB) return timeB - timeA;
+
+      const updA = a.updatedAt ? Date.parse(a.updatedAt) : 0;
+      const updB = b.updatedAt ? Date.parse(b.updatedAt) : 0;
+      if (updA !== updB) return updB - updA;
+      return (Number(b.stt) || 0) - (Number(a.stt) || 0);
+    });
+
+    for (let i = 1; i < orders.length; i++) {
+      const delOrder = orders[i];
+      toDeleteKeys.add(delOrder.rowKey);
+      deletedRecords.push({
+        eir: key,
         rowKey: delOrder.rowKey,
         soBooking: delOrder.soBooking,
         soContainer: delOrder.soContainer,
@@ -1991,8 +2220,9 @@ function deduplicateOrdersByEir() {
     deletedCount,
     remainingCount: memoryOrders.length,
     deletedRecords,
+    deletedKeys: Array.from(toDeleteKeys),
     message: deletedCount > 0 
-      ? `Đã lọc thành công: Phát hiện ${duplicatesFound} cụm trùng số EIR, đã xóa ${deletedCount} dòng có ngày duyệt bé hơn. Còn lại ${memoryOrders.length} đơn.`
+      ? `Đã lọc thành công: Phát hiện ${duplicatesFound} cụm trùng số EIR/Container, đã ghi đè và xóa ${deletedCount} dòng cũ. Còn lại ${memoryOrders.length} đơn.`
       : "Hệ thống không phát hiện đơn nào trùng số EIR."
   };
 }
@@ -2331,6 +2561,9 @@ async function updateOrdersFromCheckDataAsync() {
       if (res.usedCheckKeys && res.usedCheckKeys.length > 0) {
         syncPromises.push(tursoClient.deleteVerificationOrderRowsInTurso(res.usedCheckKeys));
       }
+      if (res.deletedOrderKeys && res.deletedOrderKeys.length > 0) {
+        syncPromises.push(tursoClient.deleteOrderRowsInTurso(res.deletedOrderKeys));
+      }
       if (syncPromises.length > 0) {
         await Promise.all(syncPromises);
       }
@@ -2355,8 +2588,15 @@ async function deduplicateOrdersByEirAsync() {
 
   if (tursoClient) {
     try {
-      await tursoClient.syncOrdersToTurso(memoryOrders);
-    } catch (e) {}
+      const syncPromises = [];
+      if (res.deletedKeys && res.deletedKeys.length > 0) {
+        syncPromises.push(tursoClient.deleteOrderRowsInTurso(res.deletedKeys));
+      }
+      syncPromises.push(tursoClient.syncOrdersToTurso(memoryOrders));
+      await Promise.all(syncPromises);
+    } catch (e) {
+      console.warn("[Turso] Lỗi đồng bộ deduplicate:", e.message);
+    }
   }
 
   bumpOperationalVersion();
@@ -2591,6 +2831,8 @@ async function getDashboardDataAsync(params = {}) {
           trangThaiXuLy: r.trang_thai_xu_ly,
           giaiTrinh: r.giai_trinh,
           giaiTrinhChiTiet: r.giai_trinh_chi_tiet || null,
+          soXe: r.so_xe || null,
+          nguoiTao: r.nguoi_tao || null,
           createdAt: r.created_at
         }));
       } catch (e) {}

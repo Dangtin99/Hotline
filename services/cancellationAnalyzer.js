@@ -680,6 +680,27 @@ function parseVerificationFile(input) {
 
   const headers = rawRows[headerIdx].map(h => cleanString(h));
 
+  // Xác định vị trí cột BK Check và cột Số BL số vận đơn
+  const bkCheckColIdx = headers.findIndex(h => {
+    const l = h.toLowerCase();
+    const n = l.replace(/[\s_\-\/]+/g, "");
+    return n.includes("bkcheck") || n.includes("bookingcheck") || l.includes("bk check") || l.includes("booking check");
+  });
+
+  const soBlColIdx = headers.findIndex(h => {
+    const l = h.toLowerCase();
+    const n = l.replace(/[\s_\-\/]+/g, "");
+    return l.includes("số b/l") || 
+           l.includes("so b/l") || 
+           l.includes("số bl") || 
+           l.includes("so bl") || 
+           l.includes("số vận đơn") || 
+           l.includes("so van don") || 
+           n.includes("sobl") || 
+           n.includes("sovandon") ||
+           n.includes("blsovandon");
+  });
+
   const getVal = (row, keyKeywords, excludeKeywords = []) => {
     for (let k of keyKeywords) {
       const kNorm = k.toLowerCase().replace(/[\s_\-\/]+/g, "");
@@ -705,8 +726,26 @@ function parseVerificationFile(input) {
     const soEir = getVal(row, ["Số EIR", "STT"]);
     const depot = getVal(row, ["Depot"]);
     const hangTau = getVal(row, ["Hãng tàu check", "Hãng tàu"]);
-    // Nghiêm cấm lấy từ cột "Số B/L //Số vận đơn", chỉ lấy từ cột "BK check" hoặc "Số booking"
-    const booking = getVal(row, ["BK check", "BK_check", "BKCheck", "Booking check", "Số booking", "Booking"]);
+    // Thứ tự ưu tiên lấy cột Booking cho Dữ liệu check đơn (eir_cancellation_orders):
+    // 1. Ưu tiên lấy từ cột "BK Check"
+    // 2. Nếu "BK Check" rỗng -> lấy dữ liệu theo cột "Số BL số vận đơn"
+    // Chỉ thực hiện lấy dữ liệu của 2 cột này theo thứ tự ưu tiên, không lấy thêm dữ liệu của cột nào khác
+    let booking = "";
+    if (bkCheckColIdx !== -1 && row[bkCheckColIdx] !== undefined && cleanString(row[bkCheckColIdx]) !== "") {
+      booking = cleanString(row[bkCheckColIdx]);
+    } else if (soBlColIdx !== -1 && row[soBlColIdx] !== undefined && cleanString(row[soBlColIdx]) !== "") {
+      booking = cleanString(row[soBlColIdx]);
+    } else {
+      const valBk = getVal(row, ["BK check", "BK_check", "BKCheck", "Booking check"]);
+      if (valBk) {
+        booking = valBk;
+      } else {
+        const valBl = getVal(row, ["Số B/L //Số vận đơn", "Số B/L", "Số vận đơn", "Số BL số vận đơn", "Số BL"]);
+        if (valBl) {
+          booking = valBl;
+        }
+      }
+    }
     const soCont = getVal(row, ["Số cont"]) || soEir;
     const size = getVal(row, ["Size Check", "Size"]);
     const loaiDon = getVal(row, ["Loại đơn hàng"]);

@@ -1,0 +1,1629 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quản Lý Gọi Điện Tài Xế - Logistics Cancellation Analytics</title>
+  <link rel="stylesheet" href="style.css?v=20261017_1154">
+  <script src="auth.js"></script>
+  <style>
+    /* Bảng điều khiển KPI Quản lý cuộc gọi */
+    .kpi-grid-call {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .call-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      box-shadow: var(--shadow-sm);
+    }
+    .call-card-title {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 5px;
+    }
+    .call-card-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--blue-primary);
+      line-height: 1.2;
+    }
+    .call-card-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* Thanh thông báo nguồn dữ liệu */
+    .source-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 10px 16px;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: var(--radius);
+      margin-bottom: 18px;
+      font-size: 13px;
+    }
+
+    
+
+    /* Bảng dữ liệu */
+    .table-container {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-sm);
+      overflow-x: auto;
+    }
+    .driver-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      text-align: left;
+    }
+    .driver-table th {
+      background: #f8fafc;
+      padding: 11px 12px;
+      border-bottom: 2px solid var(--border-light);
+      font-weight: 600;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    .driver-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border-light);
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    .driver-table tr:hover {
+      background: #f8fafc;
+    }
+
+    /* Badges trạng thái thuần văn bản */
+    .badge-tag {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      line-height: 1.3;
+    }
+    .badge-member { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+    .badge-cancel { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .badge-reject { background: #ffedd5; color: #9a3412; border: 1px solid #fed7aa; }
+    .badge-nomember { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+
+    .badge-call-connected { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    .badge-call-missed { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .badge-call-busy { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+    .badge-call-refused { background: #f3e8ff; color: #6b21a8; border: 1px solid #e9d5ff; }
+    .badge-call-called { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+    .badge-call-pending { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
+
+    /* Phân trang */
+    .pagination-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding: 12px 16px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius);
+      margin-top: 14px;
+    }
+    .pagination-info {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .pagination-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .page-btn {
+      padding: 5px 11px;
+      font-size: 13px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--text-main);
+      transition: var(--transition);
+    }
+    .page-btn:hover:not(:disabled) {
+      background: var(--blue-light);
+      border-color: var(--blue-primary);
+      color: var(--blue-primary);
+    }
+    .page-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    
+    
+    
+    /* Dropdown chọn trạng thái cuộc gọi: Đã gọi / Không nghe máy */
+    .inline-call-status-select {
+      padding: 4px 8px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 4px;
+      border: 1px solid #cbd5e1;
+      background-color: #fff;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      outline: none;
+      min-width: 130px;
+    }
+    .inline-call-status-select.call-status-called {
+      background-color: #dcfce7;
+      color: #166534;
+      border-color: #86efac;
+    }
+    .inline-call-status-select.call-status-missed {
+      background-color: #fee2e2;
+      color: #991b1b;
+      border-color: #fca5a5;
+    }
+    .inline-call-status-select.call-status-empty {
+      background-color: #f8fafc;
+      color: #64748b;
+      border-color: #cbd5e1;
+    }
+
+    /* Ô nhập tay nội dung cuộc gọi */
+    .inline-notes-input {
+      width: 250px;
+      padding: 4px 8px;
+      font-size: 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      background: #fff;
+      color: var(--text-main);
+      transition: all 0.2s ease;
+    }
+    .inline-notes-input:hover {
+      border-color: var(--blue-primary);
+      background: #f8fafc;
+    }
+    .inline-notes-input:focus {
+      border-color: var(--blue-primary);
+      background: #fff;
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.18);
+    }
+    .inline-notes-input::placeholder {
+      color: #94a3b8;
+      font-weight: normal;
+      font-style: italic;
+    }
+
+    /* Dropdown chọn trạng thái tài xế: Tham gia / Từ chối */
+    .inline-status-select {
+      padding: 4px 8px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 4px;
+      border: 1px solid #cbd5e1;
+      background-color: #fff;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      outline: none;
+    }
+    .inline-status-select.status-join {
+      background-color: #dcfce7;
+      color: #166534;
+      border-color: #86efac;
+    }
+    .inline-status-select.status-refuse {
+      background-color: #fee2e2;
+      color: #991b1b;
+      border-color: #fca5a5;
+    }
+    .inline-status-select.status-empty {
+      background-color: #f8fafc;
+      color: #64748b;
+      border-color: #cbd5e1;
+    }
+
+    /* Ô nhập tay nhân sự phụ trách */
+    .inline-caller-input {
+      width: 105px;
+      padding: 4px 8px;
+      font-size: 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      background: #fff;
+      color: var(--text-main);
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+    .inline-caller-input:hover {
+      border-color: var(--blue-primary);
+      background: #f8fafc;
+    }
+    .inline-caller-input:focus {
+      border-color: var(--blue-primary);
+      background: #fff;
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.18);
+    }
+    .inline-caller-input::placeholder {
+      color: #94a3b8;
+      font-weight: normal;
+      font-style: italic;
+    }
+
+    /* Modal Sửa Cuộc Gọi */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(15, 23, 42, 0.55);
+      backdrop-filter: blur(2px);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal-dialog {
+      background: var(--bg-surface);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-lg);
+      width: 100%;
+      max-width: 520px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .modal-header {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border-light);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #f8fafc;
+    }
+    .modal-header h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--blue-primary);
+      margin: 0;
+    }
+    .modal-body {
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .modal-footer {
+      padding: 12px 18px;
+      border-top: 1px solid var(--border-light);
+      background: #f8fafc;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .cell-truncate-notes {
+      max-width: 240px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      display: block;
+    }
+    .cell-truncate-name {
+      max-width: 180px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      display: block;
+    }
+    .cell-truncate-company {
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-wrapper">
+    <!-- Thanh Tab Bên Trái (Left Sidebar) -->
+    <aside class="app-sidebar">
+      <div class="sidebar-brand">
+        <div class="sidebar-brand-text">
+          <div class="brand-title">GPG LOGISTICS</div>
+          <div class="brand-subtitle">Quản Trị Đơn Hủy & EIR 24/7</div>
+        </div>
+        <button type="button" class="sidebar-collapse-btn" id="btnCollapseSidebar" title="Ẩn thanh tab" aria-label="Ẩn thanh tab">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="sidebar-heading">
+          <span>TỔNG QUAN</span>
+          <span style="font-size: 9px; opacity: 0.85;">▼</span>
+        </div>
+        <a href="index.html" class="sidebar-link" id="navDashboard">
+          <span>Bảng Điều Khiển</span>
+        </a>
+
+        <div class="sidebar-heading" style="margin-top: 10px;">
+          <span>PHÂN HỆ DỮ LIỆU</span>
+          <span style="font-size: 9px; opacity: 0.85;">▼</span>
+        </div>
+        <a href="data-table.html" class="sidebar-link" id="navDataTable">
+          <span>Dữ Liệu Chi Tiết</span>
+        </a>
+        <a href="data-table.html?tab=unpaid" class="sidebar-link" id="navUnpaid" style="display: none !important;">
+          <span>Đơn Chưa Thanh Toán</span>
+        </a>
+        <a href="data-table.html?tab=cancelled" class="sidebar-link" id="navCancelled" style="display: none !important;">
+          <span>Đơn Hủy</span>
+        </a>
+        <a href="verification-table.html" class="sidebar-link" id="navVerificationTable" data-admin-only="true">
+          <span>Dữ Liệu Check Đơn</span>
+        </a>
+        <a href="new-feature.html" class="sidebar-link" id="navNewFeature" data-admin-only="true">
+          <span>Báo Cáo Mới</span>
+        </a>
+        <a href="call-management.html" class="sidebar-link active" id="navCallManagement" data-admin-only="true">
+          <span>Quản Lý Gọi Điện</span>
+        </a>
+
+        <div class="sidebar-heading" id="sidebarHeadingUpload" data-admin-only="true" style="margin-top: 10px;">
+          <span>QUẢN TRỊ TẢI LÊN</span>
+          <span style="font-size: 9px; opacity: 0.85;">▼</span>
+        </div>
+        <a href="upload.html" class="sidebar-link" id="navUpload" data-admin-only="true">
+          <span>Đăng Tải Dữ Liệu</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-user-card" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; background: rgba(255,255,255,0.08); border-radius: 8px; margin-bottom: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px; overflow: hidden;">
+            <span id="sidebarUserName" style="font-size: 12px; font-weight: 500; color: #f8fafc; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Admin</span>
+          </div>
+          <button type="button" id="sidebarBtnLogout" style="background: none; border: none; color: #94a3b8; font-size: 14px; cursor: pointer; padding: 2px;" title="Đăng xuất">Đăng xuất</button>
+        </div>
+        <div class="sidebar-status">
+          <span class="status-dot"></span>
+          <span>Hệ thống trực tuyến</span>
+        </div>
+        <div class="sidebar-copyright">
+          <span>© 2026 GPG Logistics</span>
+          <span>v3.7</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Nội Dung Chính (Main Content) -->
+    <div class="main-content">
+      <!-- Header -->
+      <header class="app-header">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <button type="button" class="sidebar-header-toggle-btn" id="headerSidebarToggleBtn" title="Hiện thanh tab" aria-label="Hiện thanh tab">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+          <div>
+            <h1>QUẢN LÝ GỌI ĐIỆN TÀI XẾ & ĐỐI TÁC</h1>
+            <p style="font-size: 12px; color: var(--text-muted); margin-top: 3px;">Bảng theo dõi nhật ký liên hệ, phân loại nhu cầu và kết nối tài xế chạy kết hợp Cái Mép - HCM/Bình Dương</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button type="button" class="btn btn-primary btn-sm" id="btnOpenAddModal">+ Thêm Dòng Mới</button>
+          <button type="button" class="btn btn-outline btn-sm" id="btnExportCsv">Xuất CSV</button>
+          <button type="button" class="btn btn-primary btn-sm" id="btnExportExcel">Xuất File Excel (XLSX)</button>
+          <div class="header-user-dropdown-container" id="headerUserMenu">
+            <button type="button" class="user-chip-btn" id="userChipBtn" aria-haspopup="true" aria-expanded="false" title="Menu người dùng">
+              Tài Khoản
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <!-- Source Banner -->
+      <div class="source-bar">
+        <div>
+          <span style="color: var(--text-muted);">Nguồn dữ liệu:</span>
+          <strong style="color: var(--blue-primary);">Sheet "Tài xế" (OneStop@LTA & Nhà Xe Cái Mép)</strong>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <span class="badge-tag badge-member" id="badgeTotalSource">2.110 Tài Xế</span>
+          <button type="button" id="btnRefreshData" class="page-btn" style="padding: 3px 8px; font-size: 11px;">Làm Mới</button>
+        </div>
+      </div>
+
+      <!-- KPI Summary Cards -->
+      <div class="kpi-grid-call" style="display: none;">
+        <div class="call-card">
+          <div class="call-card-title">Tổng Số Tài Xế</div>
+          <div class="call-card-value" id="kpiTotal">2,110</div>
+          <div class="call-card-sub">Tổng bản ghi trong danh sách</div>
+        </div>
+        <div class="call-card">
+          <div class="call-card-title">Đã Gọi</div>
+          <div class="call-card-value" id="kpiCalled" style="color: #16a34a;">0</div>
+          <div class="call-card-sub">Tài xế đã được liên hệ</div>
+        </div>
+        <div class="call-card">
+          <div class="call-card-title">Không Nghe Máy</div>
+          <div class="call-card-value" id="kpiMissed" style="color: #dc2626;">0</div>
+          <div class="call-card-sub">KNM / Máy bận / Thuê bao</div>
+        </div>
+        <div class="call-card">
+          <div class="call-card-title">Chưa Gọi</div>
+          <div class="call-card-value" id="kpiPending" style="color: #64748b;">0</div>
+          <div class="call-card-sub">Đang chờ liên hệ</div>
+        </div>
+        <div class="call-card">
+          <div class="call-card-title">Tỷ Lệ Xử Lý</div>
+          <div class="call-card-value" id="kpiRate" style="color: #2563eb;">0%</div>
+          <div class="call-card-sub">Tiến độ gọi điện toàn danh sách</div>
+        </div>
+      </div>
+
+      <!-- Bộ lọc và Tìm kiếm nhanh theo giao diện Control Center -->
+      <section class="filter-panel" aria-labelledby="driverFilterTitle" style="margin-bottom: 20px;">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">CONTROL CENTER</p>
+            <h2 id="driverFilterTitle">Bộ lọc phân tích cuộc gọi tài xế</h2>
+          </div>
+          <span class="live-status">Phân hệ dữ liệu cuộc gọi</span>
+        </div>
+
+        <!-- Lưới bộ lọc: 2 hàng x 4 cột -->
+        <div class="filters-grid">
+          <!-- Hàng 1 - Cột 1: Từ Ngày & Giờ -->
+          <div class="filter-field date-field">
+            <label for="filterDateFrom">TỪ NGÀY & GIỜ</label>
+            <div class="date-time-container">
+              <input type="date" id="filterDateFrom" class="filter-select filter-date-input" title="Lọc từ ngày" placeholder="Từ ngày">
+              <div class="timepicker-wrapper">
+                <input type="text" id="filterHourFrom" class="filter-select filter-time-input timepicker-24h" placeholder="00:00" title="Chọn giờ & phút bắt đầu (Hệ 24h)" readonly autocomplete="off">
+                <span class="timepicker-icon" title="Nhấn để chọn giờ & phút">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Hàng 1 - Cột 2: Đến Ngày & Giờ -->
+          <div class="filter-field date-field">
+            <label for="filterDateTo">ĐẾN NGÀY & GIỜ</label>
+            <div class="date-time-container">
+              <input type="date" id="filterDateTo" class="filter-select filter-date-input" title="Lọc đến ngày" placeholder="Đến ngày">
+              <div class="timepicker-wrapper">
+                <input type="text" id="filterHourTo" class="filter-select filter-time-input timepicker-24h" placeholder="23:59" title="Chọn giờ & phút kết thúc (Hệ 24h)" readonly autocomplete="off">
+                <span class="timepicker-icon" title="Nhấn để chọn giờ & phút">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Hàng 1 - Cột 3: Trạng Thái Gọi -->
+          <div class="filter-field dropdown-field">
+            <label for="filterCallStatus">TRẠNG THÁI GỌI</label>
+            <select id="filterCallStatus" class="filter-select">
+              <option value="">Tất cả trạng thái</option>
+              <option value="Đã gọi">Đã gọi</option>
+              <option value="Không nghe máy">Không nghe máy</option>
+              <option value="pending">Chưa gọi</option>
+            </select>
+          </div>
+
+          <!-- Hàng 1 - Cột 4: Nhân Sự Phụ Trách -->
+          <div class="filter-field dropdown-field">
+            <label for="filterCaller">NHÂN SỰ PHỤ TRÁCH</label>
+            <select id="filterCaller" class="filter-select">
+              <option value="">Tất cả nhân sự</option>
+              <option value="Hồng">Hồng</option>
+              <option value="Huy">Huy</option>
+              <option value="none">Chưa phân bổ</option>
+            </select>
+          </div>
+
+          <!-- Hàng 2 - Cột 1: Trạng Thái Tài Xế -->
+          <div class="filter-field dropdown-field">
+            <label for="filterDriverStatus">TRẠNG THÁI TÀI XẾ</label>
+            <select id="filterDriverStatus" class="filter-select">
+              <option value="">Tất cả trạng thái</option>
+              <option value="Tham gia">Tham gia</option>
+              <option value="Từ chối">Từ chối</option>
+            </select>
+          </div>
+
+          <!-- Hàng 2 - Cột 2: Tên Nhà Xe -->
+          <div class="filter-field dropdown-field">
+            <label for="filterCompany">TÊN NHÀ XE</label>
+            <select id="filterCompany" class="filter-select">
+              <option value="">Tất cả nhà xe</option>
+            </select>
+          </div>
+
+          <!-- Hàng 2 - Cột 3: Bậc Tài Xế -->
+          <div class="filter-field dropdown-field">
+            <label for="filterRank">BẬC TÀI XẾ</label>
+            <select id="filterRank" class="filter-select">
+              <option value="">Tất cả bậc</option>
+              <option value="Đồng">Đồng</option>
+              <option value="Bạc">Bạc</option>
+              <option value="Chưa xếp hạng">Chưa xếp hạng</option>
+              <option value="Không là Thành viên">Không là Thành viên</option>
+            </select>
+          </div>
+
+          <!-- Hàng 2 - Cột 4: Tìm Nhanh -->
+          <div class="filter-field search-field">
+            <label for="filterKeyword">TÌM NHANH</label>
+            <div class="search-box">
+              <input type="text" id="filterKeyword" placeholder="Tên tài xế, SĐT, CCCD, Nhà xe, MST...">
+            </div>
+          </div>
+        </div>
+
+        <!-- Hàng nút thao tác -->
+        <div class="filter-actions-row">
+          <div style="font-size: 12px; color: #64748b; font-weight: 500;">
+            Mỗi dòng đại diện duy nhất 1 tài xế kèm lịch sử cuộc gọi và phân loại trạng thái liên hệ
+          </div>
+          <div class="filter-action-buttons" style="display: flex; gap: 8px; align-items: center;">
+            <button id="btnQuickAddRow" class="btn btn-primary btn-sm" type="button" title="Thêm dòng tài xế mới">+ Thêm Dòng</button>
+            <button id="btnResetFilter" class="btn btn-outline btn-sm" type="button" title="Đặt lại bộ lọc về mặc định">Đặt Lại</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Driver Table Container -->
+      <div class="table-container">
+        <table class="driver-table">
+          <thead>
+            <tr>
+              <th style="width: 50px; text-align: center;">STT</th>
+              <th>Tài Xế</th>
+              <th>Số Điện Thoại</th>
+              <th>Tên Nhà Xe</th>
+              <th>MST Nhà Xe</th>
+              <th>Trạng Thái Tài Xế</th>
+              <th>CCCD</th>
+              <th>Trạng Thái Gọi</th>
+              <th style="min-width: 200px;">Nội Dung Cuộc Gọi</th>
+              <th>Thời Gian Gọi</th>
+              <th>Phụ Trách</th>
+            </tr>
+          </thead>
+          <tbody id="driverTableBody">
+            <tr>
+              <td colspan="11" style="text-align: center; padding: 36px; color: var(--text-muted);">
+                Đang nạp danh sách tài xế...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination Bar -->
+      <div class="pagination-bar">
+        <div class="pagination-info" id="paginationInfo">
+          Đang hiển thị...
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <label style="font-size: 12px; color: var(--text-muted);">Hiển thị:
+            <select id="selectPageSize" style="padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px;">
+              <option value="25">25 dòng</option>
+              <option value="50" selected>50 dòng</option>
+              <option value="100">100 dòng</option>
+              <option value="200">200 dòng</option>
+            </select>
+          </label>
+          <div class="pagination-controls">
+            <button type="button" class="page-btn" id="btnPageFirst" title="Trang đầu">Đầu</button>
+            <button type="button" class="page-btn" id="btnPagePrev" title="Trang trước">Trước</button>
+            <span id="pageIndicator" style="font-size: 13px; font-weight: 600; padding: 0 4px;">1 / 1</span>
+            <button type="button" class="page-btn" id="btnPageNext" title="Trang sau">Sau</button>
+            <button type="button" class="page-btn" id="btnPageLast" title="Trang cuối">Cuối</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  
+  <!-- Modal Thêm Dòng Tài Xế Phát Sinh -->
+  <div id="modalAddDriverRow" class="modal-overlay" style="display: none;">
+    <div class="modal-dialog" style="max-width: 580px;">
+      <div class="modal-header">
+        <h3>Thêm Dòng Mới - Tài Xế Phát Sinh</h3>
+        <button type="button" id="btnAddModalClose" style="background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-muted);">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="filter-group">
+            <label for="addDriverName">Họ & Tên Tài Xế (*)</label>
+            <input type="text" id="addDriverName" placeholder="Ví dụ: Nguyễn Văn A" required>
+          </div>
+          <div class="filter-group">
+            <label for="addDriverPhone">Số Điện Thoại (*)</label>
+            <input type="tel" id="addDriverPhone" placeholder="Ví dụ: 0901234567" required>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="filter-group">
+            <label for="addDriverCompany">Tên Nhà Xe</label>
+            <input type="text" id="addDriverCompany" placeholder="Ví dụ: Cty Vận Tải ABC">
+          </div>
+          <div class="filter-group">
+            <label for="addDriverTaxId">Mã Số Thuế Nhà Xe</label>
+            <input type="text" id="addDriverTaxId" placeholder="Ví dụ: 0312345678">
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="filter-group">
+            <label for="addDriverCccd">Số CCCD / CMND</label>
+            <input type="text" id="addDriverCccd" placeholder="Số CCCD">
+          </div>
+          <div class="filter-group">
+            <label for="addDriverStatus">Trạng Thái Tài Xế</label>
+            <select id="addDriverStatus">
+              <option value="Tham gia" selected>Tham gia</option>
+              <option value="Từ chối">Từ chối</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="filter-group">
+            <label for="addCallStatus">Trạng Thái Cuộc Gọi</label>
+            <select id="addCallStatus">
+              <option value="">-- Chưa gọi --</option>
+              <option value="Đã gọi">Đã gọi</option>
+              <option value="Không nghe máy">Không nghe máy</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="addDriverCaller">Nhân Sự Phụ Trách</label>
+            <input type="text" id="addDriverCaller" placeholder="Ví dụ: Hồng, Huy, Admin...">
+          </div>
+        </div>
+
+        <div class="filter-group">
+          <label for="addDriverNotes">Nội Dung Cuộc Gọi / Ghi Chú Trao Đổi</label>
+          <textarea id="addDriverNotes" rows="3" style="width: 100%; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 13px;" placeholder="Ghi nhận nội dung trao đổi ban đầu nếu có..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline btn-sm" id="btnAddModalCancel">Hủy Bỏ</button>
+        <button type="button" class="btn btn-primary btn-sm" id="btnAddModalSave">Lưu Dòng Mới</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Cập Nhật Nhật Ký Cuộc Gọi -->
+  <div id="modalEditCall" class="modal-overlay" style="display: none;">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Cập Nhật Cuộc Gọi Tài Xế</h3>
+        <button type="button" id="btnModalClose" style="background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-muted);">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="background: #f1f5f9; padding: 10px 14px; border-radius: 6px; font-size: 13px;">
+          <div>Tài xế: <strong id="modalDriverName">-</strong></div>
+          <div style="margin-top: 3px;">SĐT: <strong id="modalDriverPhone" style="color: var(--blue-primary);">-</strong> | Nhà xe: <span id="modalDriverCompany">-</span></div>
+        </div>
+
+        <input type="hidden" id="modalDriverStt">
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="filter-group">
+            <label for="modalCallStatus">Trạng Thái Phản Hồi (*)</label>
+            <select id="modalCallStatus">
+              <option value="connected">Có Nhu Cầu / Kết Bạn Zalo</option>
+              <option value="missed">Không Nghe Máy (KNM)</option>
+              <option value="busy">Thuê Bao / Nhầm Số</option>
+              <option value="refused">Từ Chối / K Nhu Cầu / Chê Giá</option>
+              <option value="called">Đã Gọi (Khác)</option>
+              <option value="pending">Chưa Gọi (Chờ xử lý)</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="modalCallDate">Ngày Gọi</label>
+            <input type="date" id="modalCallDate">
+          </div>
+        </div>
+
+        <div class="filter-group">
+          <label for="modalCaller">Nhân Sự Phụ Trách</label>
+          <input type="text" id="modalCaller" placeholder="Ví dụ: Hồng, Huy, Admin...">
+        </div>
+
+        <div class="filter-group">
+          <label for="modalNotes">Nội Dung Trao Đổi / Ghi Chú (*)</label>
+          <textarea id="modalNotes" rows="4" style="width: 100%; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 13px;" placeholder="Nhập tóm tắt kết quả trao đổi với tài xế..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline btn-sm" id="btnModalCancel">Hủy Bỏ</button>
+        <button type="button" class="btn btn-primary btn-sm" id="btnModalSave">Lưu Thay Đổi</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nạp dữ liệu ban đầu từ driver-data.js & Thư viện XLSX -->
+  <script src="/vendor/xlsx/xlsx.full.min.js"></script>
+  <script src="driver-data.js"></script>
+  <script>
+    // Trạng thái ứng dụng
+    let allDrivers = [];
+    let filteredDrivers = [];
+    let currentPage = 1;
+    let pageSize = 50;
+
+    const LOCAL_UPDATES_KEY = "gpg_driver_call_updates_v1";
+
+    function getAuthHeaders() {
+      const token = localStorage.getItem("gpg_auth_token");
+      const headers = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = "Bearer " + token;
+      return headers;
+    }
+
+
+    function getLocalUpdates() {
+      try {
+        const raw = localStorage.getItem(LOCAL_UPDATES_KEY);
+        return raw ? JSON.parse(raw) : {};
+      } catch (e) {
+        return {};
+      }
+    }
+
+    function saveLocalUpdate(stt, updateObj) {
+      try {
+        const updates = getLocalUpdates();
+        updates[String(stt)] = Object.assign({}, updates[String(stt)] || {}, updateObj);
+        localStorage.setItem(LOCAL_UPDATES_KEY, JSON.stringify(updates));
+      } catch (e) {}
+    }
+
+    async function loadData() {
+      // Ưu tiên nạp từ API backend
+      let loaded = false;
+      try {
+        const res = await fetch("/api/driver-calls", { headers: getAuthHeaders() });
+        if (res.ok) {
+          const json = await res.json();
+          if (json && json.status === "success" && Array.isArray(json.data) && json.data.length > 0) {
+            allDrivers = json.data;
+            loaded = true;
+          }
+        }
+      } catch (e) {}
+
+      // Fallback nạp từ file driver-data.js tĩnh
+      if (!loaded && window.INITIAL_DRIVER_CALL_DATA && Array.isArray(window.INITIAL_DRIVER_CALL_DATA)) {
+        allDrivers = JSON.parse(JSON.stringify(window.INITIAL_DRIVER_CALL_DATA));
+      }
+
+      // Hòa trộn các bản cập nhật cục bộ từ localStorage (nếu có)
+      const localUpdates = getLocalUpdates();
+      if (Object.keys(localUpdates).length > 0) {
+        allDrivers.forEach(d => {
+          const u = localUpdates[String(d.stt)];
+          if (u) {
+            if (u.notes !== undefined) d.notes = u.notes;
+            if (u.callDate !== undefined) d.callDate = u.callDate;
+            if (u.caller !== undefined) d.caller = u.caller;
+            if (u.callStatus !== undefined) d.callStatus = u.callStatus;
+            if (u.driverStatus !== undefined) d.driverStatus = u.driverStatus;
+          }
+        });
+      }
+
+      updateKPIs();
+      populateCallerFilter();
+      populateCompanyFilter();
+      applyFilters();
+    }
+
+    function updateKPIs() {
+      const total = allDrivers.length;
+      let called = 0;
+      let missed = 0;
+      let pending = 0;
+
+      allDrivers.forEach(d => {
+        const resolved = getResolvedCallStatus(d);
+        if (resolved === "Đã gọi") called++;
+        else if (resolved === "Không nghe máy") missed++;
+        else pending++;
+      });
+
+      const processed = called + missed;
+      const rate = total > 0 ? Math.round((processed / total) * 100) : 0;
+
+      document.getElementById("kpiTotal").textContent = total.toLocaleString("vi-VN");
+      document.getElementById("kpiCalled").textContent = called.toLocaleString("vi-VN");
+      document.getElementById("kpiMissed").textContent = missed.toLocaleString("vi-VN");
+      document.getElementById("kpiPending").textContent = pending.toLocaleString("vi-VN");
+      document.getElementById("kpiRate").textContent = rate + "%";
+      document.getElementById("badgeTotalSource").textContent = `${total.toLocaleString("vi-VN")} Tài Xế`;
+    }
+
+    
+    
+    
+    function getResolvedCallStatus(d) {
+      if (d.callStatus === "Đã gọi" || d.callStatus === "Không nghe máy") {
+        return d.callStatus;
+      }
+      if (d.callStatus === "missed") return "Không nghe máy";
+      if (d.callStatus === "connected" || d.callStatus === "called") return "Đã gọi";
+      if (d.notes && d.notes.trim()) {
+        const nLow = d.notes.toLowerCase();
+        if (nLow.includes("knm") || nLow.includes("không nghe máy") || nLow.includes("thuê bao")) return "Không nghe máy";
+        return "Đã gọi";
+      }
+      return "";
+    }
+
+    function getCallStatusClass(status) {
+      if (status === "Đã gọi") return "call-status-called";
+      if (status === "Không nghe máy") return "call-status-missed";
+      return "call-status-empty";
+    }
+
+    window.handleCallStatusChange = async function(stt, newStatus, selectEl) {
+      const val = (newStatus || "").trim();
+      const d = allDrivers.find(item => item.stt === stt);
+      if (!d) return;
+
+      d.callStatus = val;
+
+      if (val === "Không nghe máy" && (!d.notes || !d.notes.trim())) {
+        d.notes = "KNM";
+        saveLocalUpdate(stt, { notes: "KNM" });
+        const notesInput = document.getElementById(`inlineNotes_${stt}`);
+        if (notesInput) notesInput.value = "KNM";
+      }
+
+      // Tự động ghi log thời gian thực khi đổi trạng thái gọi
+      const now = new Date();
+      const pad = n => String(n).padStart(2, "0");
+      const timeLog = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+      
+      d.callDate = timeLog;
+      saveLocalUpdate(stt, { callDate: timeLog, callStatus: val });
+      const dateCell = document.getElementById(`inlineDate_${stt}`);
+      if (dateCell) {
+        dateCell.textContent = timeLog;
+        dateCell.style.color = "var(--blue-primary)";
+        dateCell.style.fontWeight = "600";
+        dateCell.title = `Tự động log lúc: ${timeLog}`;
+        setTimeout(() => {
+          dateCell.style.fontWeight = "normal";
+          dateCell.style.color = "";
+        }, 1500);
+      }
+
+      saveLocalUpdate(stt, { callStatus: val });
+
+      if (selectEl) {
+        selectEl.className = "inline-call-status-select " + getCallStatusClass(val);
+      }
+
+      try {
+        await fetch("/api/driver-calls/update", {
+          method: "POST",
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ stt, callStatus: val, notes: d.notes, callDate: d.callDate })
+        });
+      } catch (e) {}
+
+      updateKPIs();
+    };
+
+    window.handleInlineNotesChange = async function(stt, newNotes, inputEl) {
+      const val = (newNotes || "").trim();
+      const d = allDrivers.find(item => item.stt === stt);
+      if (!d) return;
+
+      d.notes = val;
+
+      if (val && !d.callDate) {
+        const today = new Date().toISOString().split("T")[0];
+        d.callDate = today;
+        saveLocalUpdate(stt, { callDate: today });
+        const dateCell = document.getElementById(`inlineDate_${stt}`);
+        if (dateCell) dateCell.textContent = today;
+      }
+
+      const currentResolved = getResolvedCallStatus(d);
+      if (val && !currentResolved) {
+        const nLow = val.toLowerCase();
+        if (nLow.includes("knm") || nLow.includes("không nghe máy") || nLow.includes("thuê bao")) {
+          d.callStatus = "Không nghe máy";
+        } else {
+          d.callStatus = "Đã gọi";
+        }
+        const statusSelect = document.getElementById(`inlineCallStatus_${stt}`);
+        if (statusSelect) {
+          statusSelect.value = d.callStatus;
+          statusSelect.className = "inline-call-status-select " + getCallStatusClass(d.callStatus);
+        }
+      }
+
+      saveLocalUpdate(stt, { notes: val, callStatus: d.callStatus, callDate: d.callDate });
+
+      if (inputEl) {
+        inputEl.style.borderColor = "#16a34a";
+        inputEl.style.background = "#dcfce7";
+        setTimeout(() => {
+          inputEl.style.borderColor = "";
+          inputEl.style.background = "";
+        }, 1200);
+      }
+
+      try {
+        await fetch("/api/driver-calls/update", {
+          method: "POST",
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ stt, notes: val, callStatus: d.callStatus, callDate: d.callDate })
+        });
+      } catch (e) {}
+
+      updateKPIs();
+    };
+
+    function getResolvedDriverStatus(d) {
+      if (d.driverStatus) return d.driverStatus;
+      if (!d.memberStatus) return "";
+      const s = String(d.memberStatus).trim().toLowerCase();
+      if (s === "member") return "Tham gia";
+      if (s === "cancel" || s === "reject" || s === "no-member") return "Từ chối";
+      return d.memberStatus;
+    }
+
+    function getStatusClass(status) {
+      if (status === "Tham gia") return "status-join";
+      if (status === "Từ chối") return "status-refuse";
+      return "status-empty";
+    }
+
+    window.handleDriverStatusChange = async function(stt, newStatus, selectEl) {
+      const val = (newStatus || "").trim();
+      const d = allDrivers.find(item => item.stt === stt);
+      if (!d) return;
+
+      d.driverStatus = val;
+      saveLocalUpdate(stt, { driverStatus: val });
+
+      if (selectEl) {
+        selectEl.className = "inline-status-select " + getStatusClass(val);
+      }
+
+      try {
+        await fetch("/api/driver-calls/update", {
+          method: "POST",
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ stt, driverStatus: val })
+        });
+      } catch (e) {}
+    };
+
+    
+    function populateCompanyFilter() {
+      const select = document.getElementById("filterCompany");
+      if (!select) return;
+      const currentVal = select.value;
+      const companySet = new Set();
+      allDrivers.forEach(d => {
+        if (d.company && d.company.trim()) {
+          companySet.add(d.company.trim());
+        }
+      });
+
+      const companies = Array.from(companySet).sort();
+      select.innerHTML = '<option value="">Tất cả nhà xe</option>' +
+        companies.map(c => `<option value="${c.replace(/"/g, '&quot;')}">${c}</option>`).join('');
+
+      if (currentVal) select.value = currentVal;
+    }
+
+    function populateCallerFilter() {
+      const select = document.getElementById("filterCaller");
+      if (!select) return;
+      const currentVal = select.value;
+      const callerSet = new Set();
+      allDrivers.forEach(d => {
+        if (d.caller && d.caller.trim()) {
+          callerSet.add(d.caller.trim());
+        }
+      });
+
+      const callers = Array.from(callerSet).sort();
+      select.innerHTML = '<option value="">Tất Cả Nhân Sự</option>' +
+        callers.map(c => `<option value="${c.replace(/"/g, '&quot;')}">${c}</option>`).join('') +
+        '<option value="none">Chưa Phân Bổ</option>';
+
+      if (currentVal) select.value = currentVal;
+    }
+
+    window.handleInlineCallerChange = async function(stt, newCaller, inputEl) {
+      const val = (newCaller || "").trim();
+      const d = allDrivers.find(item => item.stt === stt);
+      if (!d) return;
+
+      d.caller = val;
+      saveLocalUpdate(stt, { caller: val });
+
+      if (inputEl) {
+        inputEl.style.borderColor = "#16a34a";
+        inputEl.style.background = "#dcfce7";
+        setTimeout(() => {
+          inputEl.style.borderColor = "";
+          inputEl.style.background = "";
+        }, 1200);
+      }
+
+      try {
+        await fetch("/api/driver-calls/update", {
+          method: "POST",
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ stt, caller: val })
+        });
+      } catch (e) {}
+
+      updateKPIs();
+      populateCallerFilter();
+    };
+
+    function applyFilters() {
+      const kw = (document.getElementById("filterKeyword").value || "").trim().toLowerCase();
+      const statusFilter = document.getElementById("filterCallStatus").value;
+      const callerFilter = document.getElementById("filterCaller").value;
+      const driverStatusFilter = document.getElementById("filterDriverStatus").value;
+      const rankFilter = document.getElementById("filterRank").value;
+      const dateFrom = document.getElementById("filterDateFrom") ? document.getElementById("filterDateFrom").value : "";
+      const hourFrom = document.getElementById("filterHourFrom") && document.getElementById("filterHourFrom").value ? document.getElementById("filterHourFrom").value : "00:00";
+      const dateTo = document.getElementById("filterDateTo") ? document.getElementById("filterDateTo").value : "";
+      const hourTo = document.getElementById("filterHourTo") && document.getElementById("filterHourTo").value ? document.getElementById("filterHourTo").value : "23:59";
+      const companyFilter = document.getElementById("filterCompany") ? document.getElementById("filterCompany").value : "";
+
+      filteredDrivers = allDrivers.filter(d => {
+        if (kw) {
+          const matchKw = (d.name && d.name.toLowerCase().includes(kw)) ||
+                          (d.phone && d.phone.toLowerCase().includes(kw)) ||
+                          (d.cccd && d.cccd.toLowerCase().includes(kw)) ||
+                          (d.company && d.company.toLowerCase().includes(kw)) ||
+                          (d.taxId && d.taxId.toLowerCase().includes(kw)) ||
+                          (d.notes && d.notes.toLowerCase().includes(kw));
+          if (!matchKw) return false;
+        }
+
+        if (statusFilter) {
+          const resolvedCall = getResolvedCallStatus(d);
+          if (statusFilter === 'pending') {
+            if (resolvedCall) return false;
+          } else if (resolvedCall !== statusFilter) {
+            return false;
+          }
+        }
+
+        if (callerFilter) {
+          if (callerFilter === 'none') {
+            if (d.caller && d.caller.trim()) return false;
+          } else if (d.caller !== callerFilter) {
+            return false;
+          }
+        }
+
+        if (driverStatusFilter && getResolvedDriverStatus(d) !== driverStatusFilter) {
+          return false;
+        }
+
+        if (rankFilter && d.rank !== rankFilter) {
+          return false;
+        }
+
+        if (companyFilter && d.company !== companyFilter) {
+          return false;
+        }
+
+        if (dateFrom || dateTo) {
+          if (!d.callDate) return false;
+          let dtStr = d.callDate.trim();
+          if (dtStr.length === 10) {
+            dtStr += " 00:00:00";
+          }
+          if (dateFrom) {
+            const startLimit = `${dateFrom} ${hourFrom}:00`;
+            if (dtStr < startLimit) return false;
+          }
+          if (dateTo) {
+            const endLimit = `${dateTo} ${hourTo}:59`;
+            if (dtStr > endLimit) return false;
+          }
+        }
+
+        return true;
+      });
+
+      currentPage = 1;
+      renderTable();
+    }
+
+    function getMemberBadge(status) {
+      if (!status) return "-";
+      const s = status.toLowerCase();
+      if (s === "member") return '<span class="badge-tag badge-member">[MEMBER]</span>';
+      if (s === "cancel") return '<span class="badge-tag badge-cancel">[CANCEL]</span>';
+      if (s === "reject") return '<span class="badge-tag badge-reject">[REJECT]</span>';
+      if (s === "no-member") return '<span class="badge-tag badge-nomember">[NO-MEMBER]</span>';
+      return `<span class="badge-tag badge-nomember">[${status}]</span>`;
+    }
+
+    function getCallStatusBadge(status, notes) {
+      if (status === 'connected') return '<span class="badge-tag badge-call-connected">[KẾT BẠN ZALO / QUAN TÂM]</span>';
+      if (status === 'missed') return '<span class="badge-tag badge-call-missed">[KNM - KHÔNG NGHE]</span>';
+      if (status === 'busy') return '<span class="badge-tag badge-call-busy">[THUÊ BAO / SAI SỐ]</span>';
+      if (status === 'refused') return '<span class="badge-tag badge-call-refused">[TỪ CHỐI / K NHU CẦU]</span>';
+      if (status === 'called' || (notes && notes.trim())) return '<span class="badge-tag badge-call-called">[ĐÃ GỌI]</span>';
+      return '<span class="badge-tag badge-call-pending">[CHƯA GỌI]</span>';
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById("driverTableBody");
+      const totalRows = filteredDrivers.length;
+
+      if (totalRows === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="11" style="text-align: center; padding: 36px; color: var(--text-muted);">
+              Không tìm thấy tài xế nào phù hợp với bộ lọc tìm kiếm.
+            </td>
+          </tr>
+        `;
+        document.getElementById("paginationInfo").textContent = "Không có kết quả";
+        document.getElementById("pageIndicator").textContent = "0 / 0";
+        document.getElementById("btnPageFirst").disabled = true;
+        document.getElementById("btnPagePrev").disabled = true;
+        document.getElementById("btnPageNext").disabled = true;
+        document.getElementById("btnPageLast").disabled = true;
+        return;
+      }
+
+      const totalPages = Math.ceil(totalRows / pageSize);
+      if (currentPage > totalPages) currentPage = totalPages;
+      if (currentPage < 1) currentPage = 1;
+
+      const startIdx = (currentPage - 1) * pageSize;
+      const endIdx = Math.min(startIdx + pageSize, totalRows);
+      const pageRecords = filteredDrivers.slice(startIdx, endIdx);
+
+      tbody.innerHTML = pageRecords.map(d => `
+        <tr>
+          <td style="text-align: center; color: var(--text-muted);">${d.stt}</td>
+          <td><strong class="cell-truncate-name" title="${d.name}">${d.name || "-"}</strong></td>
+          <td><strong style="color: var(--blue-primary);">${d.phone || "-"}</strong></td>
+          <td><span class="cell-truncate-company" title="${d.company}">${d.company || "-"}</span></td>
+          <td style="font-family: monospace; font-size: 12px; color: var(--text-muted);">${d.taxId || "-"}</td>
+          <td style="padding: 4px 6px;">
+            <select class="inline-status-select ${getStatusClass(getResolvedDriverStatus(d))}"
+                    onchange="handleDriverStatusChange(${d.stt}, this.value, this)"
+                    title="Chọn trạng thái tài xế: Tham gia hoặc Từ chối">
+              <option value="">-- Chọn --</option>
+              <option value="Tham gia" ${getResolvedDriverStatus(d) === 'Tham gia' ? 'selected' : ''}>Tham gia</option>
+              <option value="Từ chối" ${getResolvedDriverStatus(d) === 'Từ chối' ? 'selected' : ''}>Từ chối</option>
+            </select>
+          </td>
+          <td style="font-family: monospace; font-size: 12px; color: var(--text-muted);">${d.cccd || "-"}</td>
+          <td style="padding: 4px 6px;">
+            <select id="inlineCallStatus_${d.stt}"
+                    class="inline-call-status-select ${getCallStatusClass(getResolvedCallStatus(d))}"
+                    onchange="handleCallStatusChange(${d.stt}, this.value, this)"
+                    title="Chọn trạng thái cuộc gọi: Đã gọi hoặc Không nghe máy">
+              <option value="">-- Chọn --</option>
+              <option value="Đã gọi" ${getResolvedCallStatus(d) === 'Đã gọi' ? 'selected' : ''}>Đã gọi</option>
+              <option value="Không nghe máy" ${getResolvedCallStatus(d) === 'Không nghe máy' ? 'selected' : ''}>Không nghe máy</option>
+            </select>
+          </td>
+          <td style="padding: 4px 6px;">
+            <input type="text"
+                   id="inlineNotes_${d.stt}"
+                   class="inline-notes-input"
+                   value="${(d.notes || '').replace(/"/g, '&quot;')}"
+                   placeholder="Nhập nội dung gọi..."
+                   onchange="handleInlineNotesChange(${d.stt}, this.value, this)"
+                   onkeydown="if(event.key==='Enter'){this.blur();}"
+                   title="Nhấp vào đây để nhập tay nội dung cuộc gọi">
+          </td>
+          <td id="inlineDate_${d.stt}" style="font-family: monospace; font-size: 12px; color: var(--text-secondary); white-space: nowrap;">${d.callDate || "-"}</td>
+          <td style="padding: 4px 6px;">
+            <input type="text"
+                   class="inline-caller-input"
+                   value="${(d.caller || '').replace(/"/g, '&quot;')}"
+                   placeholder="Nhập tên..."
+                   onchange="handleInlineCallerChange(${d.stt}, this.value, this)"
+                   onkeydown="if(event.key==='Enter'){this.blur();}"
+                   title="Nhấp vào đây để nhập tay tên nhân sự phụ trách">
+          </td>
+        </tr>
+      `).join("");
+
+      // Update Pagination Info
+      document.getElementById("paginationInfo").textContent = `Hiển thị ${startIdx + 1} - ${endIdx} trên tổng số ${totalRows.toLocaleString("vi-VN")} tài xế`;
+      document.getElementById("pageIndicator").textContent = `${currentPage} / ${totalPages}`;
+      document.getElementById("btnPageFirst").disabled = currentPage <= 1;
+      document.getElementById("btnPagePrev").disabled = currentPage <= 1;
+      document.getElementById("btnPageNext").disabled = currentPage >= totalPages;
+      document.getElementById("btnPageLast").disabled = currentPage >= totalPages;
+    }
+
+    // Modal Cập nhật
+    window.openEditModal = function(stt) {
+      const driver = allDrivers.find(d => d.stt === stt);
+      if (!driver) return;
+
+      document.getElementById("modalDriverStt").value = driver.stt;
+      document.getElementById("modalDriverName").textContent = driver.name || "-";
+      document.getElementById("modalDriverPhone").textContent = driver.phone || "-";
+      document.getElementById("modalDriverCompany").textContent = driver.company || "Cá nhân";
+
+      document.getElementById("modalCallStatus").value = driver.callStatus || (driver.notes ? "called" : "pending");
+      
+      const today = new Date().toISOString().split("T")[0];
+      document.getElementById("modalCallDate").value = driver.callDate || today;
+
+      const userStr = localStorage.getItem("gpg_auth_user");
+      let currentUser = "Admin";
+      if (userStr) {
+        try {
+          const u = JSON.parse(userStr);
+          if (u && u.username) currentUser = u.username;
+        } catch (e) {}
+      }
+      document.getElementById("modalCaller").value = driver.caller || currentUser;
+      document.getElementById("modalNotes").value = driver.notes || "";
+
+      document.getElementById("modalEditCall").style.display = "flex";
+    };
+
+    function closeModal() {
+      document.getElementById("modalEditCall").style.display = "none";
+    }
+
+    async function saveModalChanges() {
+      const stt = parseInt(document.getElementById("modalDriverStt").value, 10);
+      const callStatus = document.getElementById("modalCallStatus").value;
+      const callDate = (document.getElementById("modalCallDate").value || "").trim();
+      const caller = (document.getElementById("modalCaller").value || "").trim();
+      const notes = (document.getElementById("modalNotes").value || "").trim();
+
+      const updatePayload = { stt, callStatus, callDate, caller, notes };
+
+      // Update local array
+      const idx = allDrivers.findIndex(d => d.stt === stt);
+      if (idx !== -1) {
+        allDrivers[idx].callStatus = callStatus;
+        allDrivers[idx].callDate = callDate;
+        allDrivers[idx].caller = caller;
+        allDrivers[idx].notes = notes;
+      }
+
+      // Save to localStorage
+      saveLocalUpdate(stt, updatePayload);
+
+      // Try send to backend API
+      try {
+        await fetch("/api/driver-calls/update", {
+          headers: getAuthHeaders(),
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updatePayload)
+        });
+      } catch (e) {}
+
+      closeModal();
+      updateKPIs();
+      renderTable();
+    }
+
+    // Export Excel (XLSX)
+    function exportToExcel() {
+      if (!window.XLSX) {
+        alert("Thư viện xuất Excel đang được nạp, vui lòng thử lại sau giây lát.");
+        return;
+      }
+
+      const rowsToExport = filteredDrivers.map(d => ({
+        "STT": d.stt,
+        "Tài xế": d.name || "",
+        "Số điện thoại": d.phone || "",
+        "Tên nhà xe": d.company || "",
+        "MST Nhà xe": d.taxId || "",
+        "Điểm": d.points || 0,
+        "Bậc": d.rank || "",
+        "Trạng thái tài xế": getResolvedDriverStatus(d),
+        "CCCD": d.cccd || "",
+        "Trạng thái cuộc gọi": getResolvedCallStatus(d) || "",
+        "Nội dung cuộc gọi": d.notes || "",
+        "Ngày gọi": d.callDate || "",
+        "Phụ trách": d.caller || ""
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(rowsToExport);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Tài xế");
+
+      const now = new Date();
+      const pad = n => String(n).padStart(2, "0");
+      const timeStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
+      const fileName = `Danh_Sach_Goi_Dien_Tai_Xe_${timeStr}.xlsx`;
+
+      XLSX.writeFile(wb, fileName);
+    }
+
+    // Export CSV
+    function exportToCsv() {
+      const headers = ["STT", "Tài xế", "Số điện thoại", "Tên nhà xe", "MST Nhà xe", "Điểm", "Bậc", "Trạng thái tài xế", "CCCD", "Trạng thái", "Nội dung cuộc gọi", "Ngày gọi", "Phụ trách"];
+      const csvRows = [headers.join(",")];
+
+      filteredDrivers.forEach(d => {
+        const row = [
+          d.stt,
+          `"${(d.name || "").replace(/"/g, '""')}"`,
+          `"${(d.phone || "").replace(/"/g, '""')}"`,
+          `"${(d.company || "").replace(/"/g, '""')}"`,
+          `"${(d.taxId || "").replace(/"/g, '""')}"`,
+          d.points || 0,
+          `"${(d.rank || "").replace(/"/g, '""')}"`,
+          `"${(getResolvedDriverStatus(d) || "").replace(/"/g, '""')}"`,
+          `"${(d.cccd || "").replace(/"/g, '""')}"`,
+          `"${(d.callStatus || "").replace(/"/g, '""')}"`,
+          `"${(d.notes || "").replace(/"/g, '""')}"`,
+          `"${(d.callDate || "").replace(/"/g, '""')}"`,
+          `"${(d.caller || "").replace(/"/g, '""')}"`
+        ];
+        csvRows.push(row.join(","));
+      });
+
+      const csvContent = "\uFEFF" + csvRows.join("\r\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Danh_Sach_Goi_Dien_Tai_Xe_${Date.now()}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    // Gắn sự kiện khi DOM nạp xong
+    document.addEventListener("DOMContentLoaded", () => {
+      loadData();
+
+      // Filter events
+      document.getElementById("filterKeyword").addEventListener("input", applyFilters);
+      document.getElementById("filterCallStatus").addEventListener("change", applyFilters);
+      document.getElementById("filterCaller").addEventListener("change", applyFilters);
+      document.getElementById("filterDriverStatus").addEventListener("change", applyFilters);
+      document.getElementById("filterRank").addEventListener("change", applyFilters);
+
+      const btnReset = document.getElementById("btnResetFilter") || document.getElementById("btnFilterReset");
+      if (btnReset) {
+        btnReset.addEventListener("click", () => {
+          document.getElementById("filterKeyword").value = "";
+          document.getElementById("filterCallStatus").value = "";
+          document.getElementById("filterCaller").value = "";
+          document.getElementById("filterDriverStatus").value = "";
+          document.getElementById("filterRank").value = "";
+          if (document.getElementById("filterDateFrom")) document.getElementById("filterDateFrom").value = "";
+          if (document.getElementById("filterDateTo")) document.getElementById("filterDateTo").value = "";
+          if (document.getElementById("filterHourFrom")) document.getElementById("filterHourFrom").value = "";
+          if (document.getElementById("filterHourTo")) document.getElementById("filterHourTo").value = "";
+          if (document.getElementById("filterCompany")) document.getElementById("filterCompany").value = "";
+          applyFilters();
+        });
+      }
+
+      if (document.getElementById("filterDateFrom")) document.getElementById("filterDateFrom").addEventListener("change", applyFilters);
+      if (document.getElementById("filterDateTo")) document.getElementById("filterDateTo").addEventListener("change", applyFilters);
+      if (document.getElementById("filterHourFrom")) document.getElementById("filterHourFrom").addEventListener("change", applyFilters);
+      if (document.getElementById("filterHourTo")) document.getElementById("filterHourTo").addEventListener("change", applyFilters);
+      if (document.getElementById("filterCompany")) document.getElementById("filterCompany").addEventListener("change", applyFilters);
+
+      document.getElementById("btnRefreshData").addEventListener("click", loadData);
+
+      // Pagination events
+      document.getElementById("selectPageSize").addEventListener("change", (e) => {
+        pageSize = parseInt(e.target.value, 10);
+        currentPage = 1;
+        renderTable();
+      });
+
+      document.getElementById("btnPageFirst").addEventListener("click", () => {
+        currentPage = 1;
+        renderTable();
+      });
+
+      document.getElementById("btnPagePrev").addEventListener("click", () => {
+        if (currentPage > 1) {
+          currentPage--;
+          renderTable();
+        }
+      });
+
+      document.getElementById("btnPageNext").addEventListener("click", () => {
+        const totalPages = Math.ceil(filteredDrivers.length / pageSize);
+        if (currentPage < totalPages) {
+          currentPage++;
+          renderTable();
+        }
+      });
+
+      document.getElementById("btnPageLast").addEventListener("click", () => {
+        currentPage = Math.ceil(filteredDrivers.length / pageSize);
+        renderTable();
+      });
+
+      
+      // Modal Thêm Dòng Mới
+      const modalAdd = document.getElementById("modalAddDriverRow");
+      const btnOpenAdd = document.getElementById("btnOpenAddModal");
+      const btnQuickAdd = document.getElementById("btnQuickAddRow");
+      const btnCloseAdd = document.getElementById("btnAddModalClose");
+      const btnCancelAdd = document.getElementById("btnAddModalCancel");
+      const btnSaveAdd = document.getElementById("btnAddModalSave");
+
+      function openAddModal() {
+        if (!modalAdd) return;
+        document.getElementById("addDriverName").value = "";
+        document.getElementById("addDriverPhone").value = "";
+        document.getElementById("addDriverCompany").value = "";
+        document.getElementById("addDriverTaxId").value = "";
+        document.getElementById("addDriverCccd").value = "";
+        document.getElementById("addDriverStatus").value = "Tham gia";
+        document.getElementById("addCallStatus").value = "";
+        document.getElementById("addDriverNotes").value = "";
+
+        const userStr = localStorage.getItem("gpg_auth_user");
+        let currentUser = "Admin";
+        if (userStr) {
+          try {
+            const u = JSON.parse(userStr);
+            if (u && u.username) currentUser = u.username;
+          } catch (e) {}
+        }
+        document.getElementById("addDriverCaller").value = currentUser;
+        modalAdd.style.display = "flex";
+      }
+
+      function closeAddModal() {
+        if (modalAdd) modalAdd.style.display = "none";
+      }
+
+      if (btnOpenAdd) btnOpenAdd.addEventListener("click", openAddModal);
+      if (btnQuickAdd) btnQuickAdd.addEventListener("click", openAddModal);
+      if (btnCloseAdd) btnCloseAdd.addEventListener("click", closeAddModal);
+      if (btnCancelAdd) btnCancelAdd.addEventListener("click", closeAddModal);
+
+      if (btnSaveAdd) {
+        btnSaveAdd.addEventListener("click", async () => {
+          const name = (document.getElementById("addDriverName").value || "").trim();
+          const phone = (document.getElementById("addDriverPhone").value || "").trim();
+          if (!name) {
+            alert("Vui lòng nhập Họ & Tên tài xế.");
+            document.getElementById("addDriverName").focus();
+            return;
+          }
+          if (!phone) {
+            alert("Vui lòng nhập Số điện thoại tài xế.");
+            document.getElementById("addDriverPhone").focus();
+            return;
+          }
+
+          const company = (document.getElementById("addDriverCompany").value || "").trim();
+          const taxId = (document.getElementById("addDriverTaxId").value || "").trim();
+          const cccd = (document.getElementById("addDriverCccd").value || "").trim();
+          const driverStatus = document.getElementById("addDriverStatus").value;
+          const callStatus = document.getElementById("addCallStatus").value;
+          const caller = (document.getElementById("addDriverCaller").value || "").trim();
+          const notes = (document.getElementById("addDriverNotes").value || "").trim();
+
+          const now = new Date();
+          const pad = n => String(n).padStart(2, "0");
+          const callDate = callStatus ? `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}` : "";
+
+          let maxStt = 0;
+          allDrivers.forEach(d => {
+            const s = parseInt(d.stt, 10);
+            if (!isNaN(s) && s > maxStt) maxStt = s;
+          });
+
+          const newRecord = {
+            stt: maxStt + 1,
+            name,
+            phone,
+            company,
+            taxId,
+            cccd,
+            driverStatus,
+            memberStatus: driverStatus === "Tham gia" ? "Member" : "Reject",
+            callStatus,
+            notes,
+            callDate,
+            caller,
+            points: 0,
+            rank: "Chưa xếp hạng"
+          };
+
+          // Prepend new record to top of list
+          allDrivers.unshift(newRecord);
+          saveLocalUpdate(newRecord.stt, newRecord);
+
+          // Save to backend API
+          try {
+            await fetch("/api/driver-calls/add", {
+              method: "POST",
+              headers: getAuthHeaders(),
+              body: JSON.stringify(newRecord)
+            });
+          } catch (e) {}
+
+          closeAddModal();
+          updateKPIs();
+          populateCallerFilter();
+          populateCompanyFilter();
+          currentPage = 1;
+          renderTable();
+        });
+      }
+
+      // Export events
+      document.getElementById("btnExportExcel").addEventListener("click", exportToExcel);
+      document.getElementById("btnExportCsv").addEventListener("click", exportToCsv);
+
+      // Modal events
+      document.getElementById("btnModalClose").addEventListener("click", closeModal);
+      document.getElementById("btnModalCancel").addEventListener("click", closeModal);
+      document.getElementById("btnModalSave").addEventListener("click", saveModalChanges);
+    });
+  </script>
+  <script src="timepicker-24h.js"></script>
+</body>
+</html>

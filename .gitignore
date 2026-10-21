@@ -18,6 +18,7 @@ Thumbs.db
 data/*.db
 data/*.db-journal
 data/*.json
+!data/driver_calls.json
 data/*.sql
 data/*.dump
 sample-data/

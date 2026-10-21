@@ -28,7 +28,7 @@
       if (u && u.role !== "admin") {
         document.documentElement.classList.add("non-admin-user");
         const path = window.location.pathname.toLowerCase();
-        if (path.endsWith("upload.html") || path.endsWith("verification-table.html") || path.endsWith("new-feature.html")) {
+        if (path.endsWith("upload.html") || path.endsWith("verification-table.html") || path.endsWith("new-feature.html") || path.endsWith("call-management.html")) {
           window.location.replace("index.html");
           return;
         }
@@ -128,7 +128,7 @@ function applyRolePermissions(user) {
     targets.forEach(el => el.style.setProperty("display", "none", "important"));
 
     const path = window.location.pathname.toLowerCase();
-    if (path.endsWith("upload.html") || path.endsWith("verification-table.html")) {
+    if (path.endsWith("upload.html") || path.endsWith("verification-table.html") || path.endsWith("new-feature.html") || path.endsWith("call-management.html")) {
       alert("Chức năng này chỉ dành riêng cho tài khoản Quản trị viên (admin). Bạn sẽ được chuyển hướng về Bảng điều khiển.");
       window.location.replace("index.html");
     }
