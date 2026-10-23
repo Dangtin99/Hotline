@@ -293,7 +293,7 @@
     if (totalRows === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="12" style="text-align: center; padding: 36px; color: var(--text-muted);">
+          <td colspan="9" style="text-align: center; padding: 36px; color: var(--text-muted);">
             Không tìm thấy nhà xe đối tác nào phù hợp với bộ lọc tìm kiếm.
           </td>
         </tr>
@@ -409,15 +409,6 @@
           </td>
           <td id="inlineCompanyDate_${stt}" style="font-family: monospace; font-size: 11px; color: var(--text-secondary); white-space: nowrap;">
             ${c.callDate || "-"}
-          </td>
-          <td style="text-align: right; padding-right: 12px;">
-            ${crBadge}
-          </td>
-          <td style="text-align: center;">
-            ${driverBadge}
-          </td>
-          <td style="padding: 4px 8px;">
-            ${cmSnippet}
           </td>
           <td style="text-align: center; padding: 4px 6px;">
             <button type="button" class="btn btn-outline btn-sm" style="padding: 3px 8px; font-size: 11px;" onclick="openCompanyDetailModal(${stt})" title="Xem hồ sơ chi tiết đối tác nhà xe & danh sách tài xế">
@@ -645,22 +636,28 @@
               <th>SĐT</th>
               <th>Điểm / Bậc</th>
               <th>CCCD</th>
-              <th>Trạng Thái Gọi</th>
+              <th>Trạng Thái Tài Xế</th>
               <th>Nội Dung Trao Đổi</th>
             </tr>
           </thead>
           <tbody id="modalDriversTableBody">
-            ${drivers.map((d, idx) => `
+            ${drivers.map((d, idx) => {
+              const st = typeof window.getResolvedDriverStatus === 'function' ? window.getResolvedDriverStatus(d) : (d.driverStatus || (d.memberStatus === 'Member' ? 'Đã liên hệ - Tham gia' : 'Đã liên hệ - Từ chối'));
+              let badgeCls = 'badge-member';
+              if (st === 'Đã liên hệ - Tham gia') badgeCls = 'badge-call-connected';
+              else if (st === 'Đã liên hệ - Từ chối') badgeCls = 'badge-cancel';
+              else if (st === 'Không liên hệ được') badgeCls = 'badge-call-busy';
+              return `
               <tr class="modal-driver-row" data-search="${(d.name + ' ' + d.phone + ' ' + d.cccd).toLowerCase()}">
                 <td style="text-align: center; color: #94a3b8;">${idx + 1}</td>
                 <td><strong>${d.name || '-'}</strong></td>
                 <td><a href="tel:${d.phone}" style="color: var(--blue-primary); font-weight: 600;">${d.phone || '-'}</a></td>
                 <td>${d.points ? `${d.points.toLocaleString()} (${d.rank || '-'})` : '-'}</td>
                 <td style="font-family: monospace;">${d.cccd || '-'}</td>
-                <td><span class="badge-tag ${d.callStatus === 'KhÃ´ng nghe mÃ¡y' || d.callStatus === 'missed' ? 'badge-call-missed' : (d.callStatus ? 'badge-call-called' : 'badge-call-pending')}">${d.callStatus || (d.notes ? 'Đã gọi' : 'Chưa gọi')}</span></td>
+                <td><span class="badge-tag ${badgeCls}">${st || '-'}</span></td>
                 <td style="max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${d.notes || ''}">${d.notes || '-'}</td>
               </tr>
-            `).join("")}
+            `;}).join("")}
           </tbody>
         </table>
       </div>
@@ -839,6 +836,9 @@
   window.activeCallTab = "drivers";
   window.switchCallTab = function (tab) {
     window.activeCallTab = tab;
+
+    // Bỏ highlight dòng đang chọn khi chuyển tab
+    document.querySelectorAll(".row-selected").forEach(r => r.classList.remove("row-selected"));
 
     const btnDrivers = document.getElementById("tabBtnDrivers");
     const btnCompanies = document.getElementById("tabBtnCompanies");

@@ -109,8 +109,26 @@
       vertical-align: middle;
       white-space: nowrap;
     }
-    .driver-table tr:hover {
+    .driver-table tbody tr {
+      cursor: pointer;
+      transition: background-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .driver-table tbody tr:hover {
       background: #f8fafc;
+    }
+    /* Highlight dòng khi người dùng click vào dòng dữ liệu */
+    .driver-table tbody tr.row-selected {
+      background-color: #e0f2fe !important;
+      box-shadow: inset 4px 0 0 var(--blue-primary);
+    }
+    .driver-table tbody tr.row-selected td {
+      background-color: #e0f2fe !important;
+    }
+    .driver-table tbody tr.row-selected:hover {
+      background-color: #bae6fd !important;
+    }
+    .driver-table tbody tr.row-selected:hover td {
+      background-color: #bae6fd !important;
     }
 
     /* Badges trạng thái thuần văn bản */
@@ -237,7 +255,7 @@
       font-style: italic;
     }
 
-    /* Dropdown chọn trạng thái tài xế: Tham gia / Từ chối */
+    /* Dropdown chọn trạng thái tài xế: Đã liên hệ - Tham gia / Đã liên hệ - Từ chối / Không liên hệ được */
     .inline-status-select {
       padding: 4px 8px;
       font-size: 12px;
@@ -248,6 +266,7 @@
       cursor: pointer;
       transition: all 0.2s ease;
       outline: none;
+      min-width: 175px;
     }
     .inline-status-select.status-join {
       background-color: #dcfce7;
@@ -258,6 +277,11 @@
       background-color: #fee2e2;
       color: #991b1b;
       border-color: #fca5a5;
+    }
+    .inline-status-select.status-unreachable {
+      background-color: #fef3c7;
+      color: #92400e;
+      border-color: #fde68a;
     }
     .inline-status-select.status-empty {
       background-color: #f8fafc;
@@ -650,14 +674,14 @@
             </div>
           </div>
 
-          <!-- Hàng 1 - Cột 3: Trạng Thái Gọi -->
+          <!-- Hàng 1 - Cột 3: Trạng Thái Tài Xế -->
           <div class="filter-field dropdown-field">
-            <label for="filterCallStatus">TRẠNG THÁI GỌI</label>
-            <select id="filterCallStatus" class="filter-select">
+            <label for="filterDriverStatus">TRẠNG THÁI TÀI XẾ</label>
+            <select id="filterDriverStatus" class="filter-select">
               <option value="">Tất cả trạng thái</option>
-              <option value="Đã gọi">Đã gọi</option>
-              <option value="Không nghe máy">Không nghe máy</option>
-              <option value="pending">Chưa gọi</option>
+              <option value="Đã liên hệ - Tham gia">Đã liên hệ - Tham gia</option>
+              <option value="Đã liên hệ - Từ chối">Đã liên hệ - Từ chối</option>
+              <option value="Không liên hệ được">Không liên hệ được</option>
             </select>
           </div>
 
@@ -672,17 +696,7 @@
             </select>
           </div>
 
-          <!-- Hàng 2 - Cột 1: Trạng Thái Tài Xế -->
-          <div class="filter-field dropdown-field">
-            <label for="filterDriverStatus">TRẠNG THÁI TÀI XẾ</label>
-            <select id="filterDriverStatus" class="filter-select">
-              <option value="">Tất cả trạng thái</option>
-              <option value="Tham gia">Tham gia</option>
-              <option value="Từ chối">Từ chối</option>
-            </select>
-          </div>
-
-          <!-- Hàng 2 - Cột 2: Tên Nhà Xe -->
+          <!-- Hàng 2 - Cột 1: Tên Nhà Xe -->
           <div class="filter-field dropdown-field">
             <label for="filterCompany">TÊN NHÀ XE</label>
             <select id="filterCompany" class="filter-select">
@@ -690,7 +704,7 @@
             </select>
           </div>
 
-          <!-- Hàng 2 - Cột 3: Bậc Tài Xế -->
+          <!-- Hàng 2 - Cột 2: Bậc Tài Xế -->
           <div class="filter-field dropdown-field">
             <label for="filterRank">BẬC TÀI XẾ</label>
             <select id="filterRank" class="filter-select">
@@ -702,8 +716,8 @@
             </select>
           </div>
 
-          <!-- Hàng 2 - Cột 4: Tìm Nhanh -->
-          <div class="filter-field search-field">
+          <!-- Hàng 2 - Cột 3 & 4: Tìm Nhanh -->
+          <div class="filter-field search-field" style="grid-column: span 2;">
             <label for="filterKeyword">TÌM NHANH</label>
             <div class="search-box">
               <input type="text" id="filterKeyword" placeholder="Tên tài xế, SĐT, CCCD, Nhà xe, MST...">
@@ -733,9 +747,8 @@
               <th>Số Điện Thoại</th>
               <th>Tên Nhà Xe</th>
               <th>MST Nhà Xe</th>
-              <th>Trạng Thái Tài Xế</th>
+              <th style="min-width: 185px;">Trạng Thái Tài Xế</th>
               <th>CCCD</th>
-              <th>Trạng Thái Gọi</th>
               <th style="min-width: 200px;">Nội Dung Cuộc Gọi</th>
               <th>Thời Gian Gọi</th>
               <th>Phụ Trách</th>
@@ -743,7 +756,7 @@
           </thead>
           <tbody id="driverTableBody">
             <tr>
-              <td colspan="11" style="text-align: center; padding: 36px; color: var(--text-muted);">
+              <td colspan="10" style="text-align: center; padding: 36px; color: var(--text-muted);">
                 Đang nạp danh sách tài xế...
               </td>
             </tr>
@@ -791,45 +804,6 @@
             <span class="badge-tag badge-member" id="badgeCompanyTotalSource">416 Nhà Xe</span>
             <span class="badge-tag" style="background: #ffedd5; color: #c2410c; border: 1px solid #fed7aa; font-weight: 700;">41 Đối Tác Cái Mép</span>
             <button type="button" id="btnRefreshCompanyData" class="page-btn" style="padding: 3px 8px; font-size: 11px;">Làm Mới</button>
-          </div>
-        </div>
-
-        <!-- KPI Summary Cards Nhà Xe -->
-        <div class="kpi-grid-call" id="companyKpiGrid">
-          <div class="call-card">
-            <div class="call-card-title">Tổng Nhà Xe Đối Tác</div>
-            <div class="call-card-value" id="kpiCompanyTotal">416</div>
-            <div class="call-card-sub">Tổng số nhà vận tải trong hệ thống</div>
-          </div>
-          <div class="call-card">
-            <div class="call-card-title">Đã Tham Gia / Tạo Nhóm</div>
-            <div class="call-card-value" id="kpiCompanyJoined" style="color: #16a34a;">30</div>
-            <div class="call-card-sub">Đã vào nhóm kết nối điều độ</div>
-          </div>
-          <div class="call-card">
-            <div class="call-card-title">Đã Liên Hệ / Trao Đổi</div>
-            <div class="call-card-value" id="kpiCompanyContacted" style="color: #0284c7;">57</div>
-            <div class="call-card-sub">Đã gọi / tư vấn / kết bạn Zalo</div>
-          </div>
-          <div class="call-card">
-            <div class="call-card-title">Không Nghe / Thuê Bao</div>
-            <div class="call-card-value" id="kpiCompanyUnreachable" style="color: #dc2626;">20</div>
-            <div class="call-card-sub">KNM / Thuê bao / Điều độ nghỉ</div>
-          </div>
-          <div class="call-card">
-            <div class="call-card-title">Chưa Liên Hệ</div>
-            <div class="call-card-value" id="kpiCompanyPending" style="color: #64748b;">339</div>
-            <div class="call-card-sub">Chờ nhân sự phụ trách liên hệ</div>
-          </div>
-          <div class="call-card">
-            <div class="call-card-title">Tổng Sản Lượng CR</div>
-            <div class="call-card-value" id="kpiCompanyTotalCr" style="color: #ea580c;">4,670</div>
-            <div class="call-card-sub">Tổng teus CR nhà xe quản lý</div>
-          </div>
-          <div class="call-card">
-            <div class="call-card-title">Đội Xe Cái Mép</div>
-            <div class="call-card-value" id="kpiCompanyCaiMep" style="color: #8b5cf6;">41</div>
-            <div class="call-card-sub">Có thỏa thuận giá & tuyến đường</div>
           </div>
         </div>
 
@@ -962,15 +936,12 @@
                 <th style="width: 165px;">Trạng Thái Cuộc Gọi</th>
                 <th style="min-width: 250px;">Nội Dung Cuộc Gọi & Note</th>
                 <th style="width: 120px;">Thời Gian Gọi</th>
-                <th style="width: 110px; text-align: right;">Sản Lượng CR</th>
-                <th style="width: 110px; text-align: center;">Tài Xế LTA</th>
-                <th style="width: 150px;">Năng Lực Cái Mép</th>
                 <th style="width: 80px; text-align: center;">Chi Tiết</th>
               </tr>
             </thead>
             <tbody id="companyTableBody">
               <tr>
-                <td colspan="12" style="text-align: center; padding: 36px; color: var(--text-muted);">
+                <td colspan="9" style="text-align: center; padding: 36px; color: var(--text-muted);">
                   Đang nạp danh sách nhà xe đối tác...
                 </td>
               </tr>
@@ -1045,21 +1016,14 @@
           <div class="filter-group">
             <label for="addDriverStatus">Trạng Thái Tài Xế</label>
             <select id="addDriverStatus">
-              <option value="Tham gia" selected>Tham gia</option>
-              <option value="Từ chối">Từ chối</option>
+              <option value="Đã liên hệ - Tham gia" selected>Đã liên hệ - Tham gia</option>
+              <option value="Đã liên hệ - Từ chối">Đã liên hệ - Từ chối</option>
+              <option value="Không liên hệ được">Không liên hệ được</option>
             </select>
           </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-          <div class="filter-group">
-            <label for="addCallStatus">Trạng Thái Cuộc Gọi</label>
-            <select id="addCallStatus">
-              <option value="">-- Chưa gọi --</option>
-              <option value="Đã gọi">Đã gọi</option>
-              <option value="Không nghe máy">Không nghe máy</option>
-            </select>
-          </div>
+        <div style="display: grid; grid-template-columns: 1fr; gap: 12px;">
           <div class="filter-group">
             <label for="addDriverCaller">Nhân Sự Phụ Trách</label>
             <input type="text" id="addDriverCaller" placeholder="Ví dụ: Hồng, Huy, Admin...">
@@ -1500,17 +1464,31 @@
     };
 
     function getResolvedDriverStatus(d) {
-      if (d.driverStatus) return d.driverStatus;
+      if (d.driverStatus) {
+        if (d.driverStatus === "Tham gia") return "Đã liên hệ - Tham gia";
+        if (d.driverStatus === "Từ chối") return "Đã liên hệ - Từ chối";
+        return d.driverStatus;
+      }
+
+      const notes = (d.notes || "").toLowerCase();
+      const callStatus = (d.callStatus || "").toLowerCase();
+
+      if (callStatus === "missed" || callStatus.includes("không nghe") || callStatus.includes("knm") ||
+          notes.includes("knm") || notes.includes("không nghe máy") || notes.includes("thuê bao") || notes.includes("sai số") || notes.includes("nhầm số")) {
+        return "Không liên hệ được";
+      }
+
       if (!d.memberStatus) return "";
       const s = String(d.memberStatus).trim().toLowerCase();
-      if (s === "member") return "Tham gia";
-      if (s === "cancel" || s === "reject" || s === "no-member") return "Từ chối";
+      if (s === "member") return "Đã liên hệ - Tham gia";
+      if (s === "cancel" || s === "reject" || s === "no-member") return "Đã liên hệ - Từ chối";
       return d.memberStatus;
     }
 
     function getStatusClass(status) {
-      if (status === "Tham gia") return "status-join";
-      if (status === "Từ chối") return "status-refuse";
+      if (status === "Đã liên hệ - Tham gia" || status === "Tham gia") return "status-join";
+      if (status === "Đã liên hệ - Từ chối" || status === "Từ chối") return "status-refuse";
+      if (status === "Không liên hệ được") return "status-unreachable";
       return "status-empty";
     }
 
@@ -1520,7 +1498,32 @@
       if (!d) return;
 
       d.driverStatus = val;
-      saveLocalUpdate(stt, { driverStatus: val });
+
+      if (val === "Không liên hệ được" && (!d.notes || !d.notes.trim())) {
+        d.notes = "KNM";
+        const notesInput = document.getElementById(`inlineNotes_${stt}`);
+        if (notesInput) notesInput.value = "KNM";
+      }
+
+      // Tự động ghi nhận log thời gian thực khi thay đổi trạng thái cuộc gọi / tài xế
+      const now = new Date();
+      const pad = n => String(n).padStart(2, "0");
+      const timeLog = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+      d.callDate = timeLog;
+
+      const dateCell = document.getElementById(`inlineDate_${stt}`);
+      if (dateCell) {
+        dateCell.textContent = timeLog;
+        dateCell.style.color = "var(--blue-primary)";
+        dateCell.style.fontWeight = "600";
+        dateCell.title = `Tự động log lúc: ${timeLog}`;
+        setTimeout(() => {
+          dateCell.style.fontWeight = "normal";
+          dateCell.style.color = "";
+        }, 1500);
+      }
+
+      saveLocalUpdate(stt, { driverStatus: val, notes: d.notes, callDate: timeLog });
 
       if (selectEl) {
         selectEl.className = "inline-status-select " + getStatusClass(val);
@@ -1530,9 +1533,11 @@
         await fetch("/api/driver-calls/update", {
           method: "POST",
           headers: getAuthHeaders(),
-          body: JSON.stringify({ stt, driverStatus: val })
+          body: JSON.stringify({ stt, driverStatus: val, notes: d.notes, callDate: timeLog })
         });
       } catch (e) {}
+
+      updateKPIs();
     };
 
     
@@ -1604,7 +1609,8 @@
 
     function applyFilters() {
       const kw = (document.getElementById("filterKeyword").value || "").trim().toLowerCase();
-      const statusFilter = document.getElementById("filterCallStatus").value;
+      const statusFilterEl = document.getElementById("filterCallStatus");
+      const statusFilter = statusFilterEl ? statusFilterEl.value : "";
       const callerFilter = document.getElementById("filterCaller").value;
       const driverStatusFilter = document.getElementById("filterDriverStatus").value;
       const rankFilter = document.getElementById("filterRank").value;
@@ -1735,23 +1741,14 @@
           <td style="padding: 4px 6px;">
             <select class="inline-status-select ${getStatusClass(getResolvedDriverStatus(d))}"
                     onchange="handleDriverStatusChange(${d.stt}, this.value, this)"
-                    title="Chọn trạng thái tài xế: Tham gia hoặc Từ chối">
-              <option value="">-- Chọn --</option>
-              <option value="Tham gia" ${getResolvedDriverStatus(d) === 'Tham gia' ? 'selected' : ''}>Tham gia</option>
-              <option value="Từ chối" ${getResolvedDriverStatus(d) === 'Từ chối' ? 'selected' : ''}>Từ chối</option>
+                    title="Chọn trạng thái tài xế: Đã liên hệ - Tham gia / Đã liên hệ - Từ chối / Không liên hệ được">
+              <option value="">-- Chọn trạng thái --</option>
+              <option value="Đã liên hệ - Tham gia" ${getResolvedDriverStatus(d) === 'Đã liên hệ - Tham gia' ? 'selected' : ''}>Đã liên hệ - Tham gia</option>
+              <option value="Đã liên hệ - Từ chối" ${getResolvedDriverStatus(d) === 'Đã liên hệ - Từ chối' ? 'selected' : ''}>Đã liên hệ - Từ chối</option>
+              <option value="Không liên hệ được" ${getResolvedDriverStatus(d) === 'Không liên hệ được' ? 'selected' : ''}>Không liên hệ được</option>
             </select>
           </td>
           <td style="font-family: monospace; font-size: 12px; color: var(--text-muted);">${d.cccd || "-"}</td>
-          <td style="padding: 4px 6px;">
-            <select id="inlineCallStatus_${d.stt}"
-                    class="inline-call-status-select ${getCallStatusClass(getResolvedCallStatus(d))}"
-                    onchange="handleCallStatusChange(${d.stt}, this.value, this)"
-                    title="Chọn trạng thái cuộc gọi: Đã gọi hoặc Không nghe máy">
-              <option value="">-- Chọn --</option>
-              <option value="Đã gọi" ${getResolvedCallStatus(d) === 'Đã gọi' ? 'selected' : ''}>Đã gọi</option>
-              <option value="Không nghe máy" ${getResolvedCallStatus(d) === 'Không nghe máy' ? 'selected' : ''}>Không nghe máy</option>
-            </select>
-          </td>
           <td style="padding: 4px 6px;">
             <input type="text"
                    id="inlineNotes_${d.stt}"
@@ -1870,7 +1867,6 @@
         "Bậc": d.rank || "",
         "Trạng thái tài xế": getResolvedDriverStatus(d),
         "CCCD": d.cccd || "",
-        "Trạng thái cuộc gọi": getResolvedCallStatus(d) || "",
         "Nội dung cuộc gọi": d.notes || "",
         "Ngày gọi": d.callDate || "",
         "Phụ trách": d.caller || ""
@@ -1890,7 +1886,7 @@
 
     // Export CSV
     function exportToCsv() {
-      const headers = ["STT", "Tài xế", "Số điện thoại", "Tên nhà xe", "MST Nhà xe", "Điểm", "Bậc", "Trạng thái tài xế", "CCCD", "Trạng thái", "Nội dung cuộc gọi", "Ngày gọi", "Phụ trách"];
+      const headers = ["STT", "Tài xế", "Số điện thoại", "Tên nhà xe", "MST Nhà xe", "Điểm", "Bậc", "Trạng thái tài xế", "CCCD", "Nội dung cuộc gọi", "Ngày gọi", "Phụ trách"];
       const csvRows = [headers.join(",")];
 
       filteredDrivers.forEach(d => {
@@ -1904,7 +1900,6 @@
           `"${(d.rank || "").replace(/"/g, '""')}"`,
           `"${(getResolvedDriverStatus(d) || "").replace(/"/g, '""')}"`,
           `"${(d.cccd || "").replace(/"/g, '""')}"`,
-          `"${(d.callStatus || "").replace(/"/g, '""')}"`,
           `"${(d.notes || "").replace(/"/g, '""')}"`,
           `"${(d.callDate || "").replace(/"/g, '""')}"`,
           `"${(d.caller || "").replace(/"/g, '""')}"`
@@ -2007,8 +2002,8 @@
         document.getElementById("addDriverCompany").value = "";
         document.getElementById("addDriverTaxId").value = "";
         document.getElementById("addDriverCccd").value = "";
-        document.getElementById("addDriverStatus").value = "Tham gia";
-        document.getElementById("addCallStatus").value = "";
+        document.getElementById("addDriverStatus").value = "Đã liên hệ - Tham gia";
+        if (document.getElementById("addCallStatus")) document.getElementById("addCallStatus").value = "";
         document.getElementById("addDriverNotes").value = "";
 
         const userStr = localStorage.getItem("gpg_auth_user");
@@ -2056,14 +2051,14 @@
           const company = (document.getElementById("addDriverCompany").value || "").trim();
           const taxId = (document.getElementById("addDriverTaxId").value || "").trim();
           const cccd = (document.getElementById("addDriverCccd").value || "").trim();
-          const driverStatus = document.getElementById("addDriverStatus").value;
-          const callStatus = document.getElementById("addCallStatus").value;
+          const driverStatus = document.getElementById("addDriverStatus") ? document.getElementById("addDriverStatus").value : "Đã liên hệ - Tham gia";
+          const callStatus = document.getElementById("addCallStatus") ? document.getElementById("addCallStatus").value : "";
           const caller = (document.getElementById("addDriverCaller").value || "").trim();
           const notes = (document.getElementById("addDriverNotes").value || "").trim();
 
           const now = new Date();
           const pad = n => String(n).padStart(2, "0");
-          const callDate = callStatus ? `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}` : "";
+          const callDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
 
           let maxStt = 0;
           allDrivers.forEach(d => {
@@ -2130,6 +2125,24 @@
       document.getElementById("btnModalClose").addEventListener("click", closeModal);
       document.getElementById("btnModalCancel").addEventListener("click", closeModal);
       document.getElementById("btnModalSave").addEventListener("click", saveModalChanges);
+
+      // Chức năng tự động highlight dòng dữ liệu khi click vào, và tự động bỏ highlight khi click ra ngoài
+      document.addEventListener("click", (e) => {
+        const row = e.target.closest("#driverTableBody tr, #companyTableBody tr");
+        if (row && !row.querySelector("td[colspan]")) {
+          // Bỏ highlight các dòng khác
+          document.querySelectorAll("#driverTableBody tr.row-selected, #companyTableBody tr.row-selected").forEach(r => {
+            if (r !== row) r.classList.remove("row-selected");
+          });
+          // Kích hoạt highlight cho dòng vừa click
+          row.classList.add("row-selected");
+        } else {
+          // Click ra ngoài vùng bảng dữ liệu: xóa bỏ highlight
+          document.querySelectorAll("#driverTableBody tr.row-selected, #companyTableBody tr.row-selected").forEach(r => {
+            r.classList.remove("row-selected");
+          });
+        }
+      });
     });
   </script>
   <script src="timepicker-24h.js"></script>
