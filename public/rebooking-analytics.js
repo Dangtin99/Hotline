@@ -281,7 +281,7 @@
   }
 
   // Key lưu cache phía Client (SessionStorage) để trang hiển thị tức thì (0ms)
-  const CLIENT_CACHE_KEY = "CACHED_REBOOKING_ORDERS_V2";
+  const CLIENT_CACHE_KEY = "CACHED_REBOOKING_ORDERS_V3";
 
   // Hàm chuẩn hóa biển số xe để so khớp (bỏ khoảng trắng, dấu gạch ngang, chấm)
   function cleanTruckPlate(t) {
@@ -456,12 +456,14 @@
   function groupOrders(records) {
     if (!Array.isArray(records) || records.length === 0) return [];
 
-    // 0. Tiền xử lý dữ liệu 1 lần duy nhất (Cache Timestamp & Clean Fields)
+    // 0. Tiền xử lý dữ liệu 1 lần duy nhất (luôn bảo đảm khởi tạo đầy đủ các trường clean)
     // Tăng tốc độ tính toán gấp 10-20 lần cho các vòng gom và sắp xếp
     for (let i = 0; i < records.length; i++) {
       const r = records[i];
-      if (r._ts === undefined) {
-        r._ts = parseRecordTimestamp(r);
+      if (r._cleanBooking === undefined || r._cleanCont === undefined) {
+        if (!r._ts || typeof r._ts !== "number") {
+          r._ts = parseRecordTimestamp(r);
+        }
         r._cleanBooking = (r.soBooking || "").toString().trim().toUpperCase();
         r._cleanCont = (r.soContainer || "").toString().trim().toUpperCase();
         r._cleanDir = (r.loaiDonHang || "").toString().trim().toUpperCase();
@@ -478,18 +480,25 @@
     const pass1Map = new Map();
 
     records.forEach((r, idx) => {
-      const bookingKey = r._cleanBooking || "CHUA_CO_BOOKING";
-      const contKey = r._cleanCont || "CHUA_CO_CONT";
+      const b = (r._cleanBooking && r._cleanBooking !== "-") ? r._cleanBooking : "";
+      const c = (r._cleanCont && r._cleanCont !== "-") ? r._cleanCont : "";
       const dirKey = (r._cleanDir === "IN" || r._cleanDir === "OUT") ? r._cleanDir : "NA";
 
-      // Khóa Vòng 1
-      const groupKey = `${bookingKey}__${contKey}__${dirKey}`;
+      // Nếu đơn thiếu cả số Booking lẫn số Container, đây là đơn độc lập hoàn toàn, không gom chung
+      let groupKey;
+      if (!b && !c) {
+        groupKey = `NO_ID__${r.rowKey || r.id || ('ROW_' + idx)}`;
+      } else {
+        const bookingKey = b || "CHUA_CO_BOOKING";
+        const contKey = c || "CHUA_CO_CONT";
+        groupKey = `${bookingKey}__${contKey}__${dirKey}`;
+      }
 
       if (!pass1Map.has(groupKey)) {
         pass1Map.set(groupKey, {
           groupKey,
-          soBooking: r._cleanBooking || "-",
-          soContainer: r._cleanCont || "-",
+          soBooking: b || "-",
+          soContainer: c || "-",
           loaiDonHang: dirKey,
           records: []
         });

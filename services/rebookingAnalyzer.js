@@ -70,11 +70,13 @@ function parseRecordTimestamp(r) {
 function analyzeAndGroupOrders(records) {
   if (!Array.isArray(records) || records.length === 0) return [];
 
-  // 0. Tiền xử lý dữ liệu 1 lần duy nhất trong RAM
+  // 0. Tiền xử lý dữ liệu 1 lần duy nhất trong RAM (luôn bảo đảm khởi tạo đầy đủ các trường clean)
   for (let i = 0; i < records.length; i++) {
     const r = records[i];
-    if (r._ts === undefined) {
-      r._ts = parseRecordTimestamp(r);
+    if (r._cleanBooking === undefined || r._cleanCont === undefined) {
+      if (!r._ts || typeof r._ts !== "number") {
+        r._ts = parseRecordTimestamp(r);
+      }
       r._cleanBooking = (r.soBooking || "").toString().trim().toUpperCase();
       r._cleanCont = (r.soContainer || "").toString().trim().toUpperCase();
       r._cleanDir = (r.loaiDonHang || "").toString().trim().toUpperCase();
@@ -91,16 +93,25 @@ function analyzeAndGroupOrders(records) {
   const pass1Map = new Map();
 
   records.forEach((r, idx) => {
-    const bookingKey = r._cleanBooking || "CHUA_CO_BOOKING";
-    const contKey = r._cleanCont || "CHUA_CO_CONT";
+    const b = (r._cleanBooking && r._cleanBooking !== "-") ? r._cleanBooking : "";
+    const c = (r._cleanCont && r._cleanCont !== "-") ? r._cleanCont : "";
     const dirKey = (r._cleanDir === "IN" || r._cleanDir === "OUT") ? r._cleanDir : "NA";
-    const groupKey = `${bookingKey}__${contKey}__${dirKey}`;
+
+    // Nếu đơn thiếu cả số Booking lẫn số Container, đây là đơn độc lập hoàn toàn, không gom chung
+    let groupKey;
+    if (!b && !c) {
+      groupKey = `NO_ID__${r.rowKey || r.id || ('ROW_' + idx)}`;
+    } else {
+      const bookingKey = b || "CHUA_CO_BOOKING";
+      const contKey = c || "CHUA_CO_CONT";
+      groupKey = `${bookingKey}__${contKey}__${dirKey}`;
+    }
 
     if (!pass1Map.has(groupKey)) {
       pass1Map.set(groupKey, {
         groupKey,
-        soBooking: r._cleanBooking || "-",
-        soContainer: r._cleanCont || "-",
+        soBooking: b || "-",
+        soContainer: c || "-",
         loaiDonHang: dirKey,
         records: []
       });

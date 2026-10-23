@@ -1743,6 +1743,108 @@ app.post("/api/driver-calls/add", authRequired, (req, res) => {
   }
 });
 
+// ==========================================
+// PHÂN HỆ QUẢN LÝ GỌI ĐIỆN ĐỐI TÁC NHÀ XE (SHEET NVT)
+// ==========================================
+const COMPANY_CALLS_FILE = path.join(__dirname, "data", "company_calls.json");
+
+function loadCompanyCallsData() {
+  try {
+    if (fs.existsSync(COMPANY_CALLS_FILE)) {
+      const raw = fs.readFileSync(COMPANY_CALLS_FILE, "utf8");
+      return JSON.parse(raw);
+    }
+  } catch (e) {
+    console.error("Lỗi đọc company_calls.json:", e.message);
+  }
+  return [];
+}
+
+function saveCompanyCallsData(data) {
+  try {
+    fs.writeFileSync(COMPANY_CALLS_FILE, JSON.stringify(data, null, 2), "utf8");
+    return true;
+  } catch (e) {
+    console.error("Lỗi ghi company_calls.json:", e.message);
+    return false;
+  }
+}
+
+app.get("/api/company-calls", authRequired, (req, res) => {
+  try {
+    const list = loadCompanyCallsData();
+    return res.json({ status: "success", total: list.length, data: list });
+  } catch (err) {
+    return res.status(500).json({ status: "error", message: err.message });
+  }
+});
+
+app.post("/api/company-calls/update", authRequired, (req, res) => {
+  try {
+    const { stt, callNotes, note, callDate, caller, callStatus, phone, address, totalCr } = req.body;
+    if (stt === undefined) {
+      return res.status(400).json({ status: "error", message: "Thiếu STT nhà xe." });
+    }
+    const list = loadCompanyCallsData();
+    const idx = list.findIndex(c => String(c.stt) === String(stt));
+    if (idx === -1) {
+      return res.status(404).json({ status: "error", message: "Không tìm thấy nhà xe." });
+    }
+
+    if (callNotes !== undefined) list[idx].callNotes = String(callNotes).trim();
+    if (note !== undefined) list[idx].note = String(note).trim();
+    if (callDate !== undefined) list[idx].callDate = String(callDate).trim();
+    if (caller !== undefined) list[idx].caller = String(caller).trim();
+    if (callStatus !== undefined) list[idx].callStatus = String(callStatus).trim();
+    if (phone !== undefined) list[idx].phone = String(phone).trim();
+    if (address !== undefined) list[idx].address = String(address).trim();
+    if (totalCr !== undefined) list[idx].totalCr = Number(totalCr) || 0;
+
+    saveCompanyCallsData(list);
+    return res.json({ status: "success", data: list[idx] });
+  } catch (err) {
+    return res.status(500).json({ status: "error", message: err.message });
+  }
+});
+
+app.post("/api/company-calls/add", authRequired, (req, res) => {
+  try {
+    const list = loadCompanyCallsData();
+    let maxStt = 0;
+    list.forEach(c => {
+      const s = parseInt(c.stt, 10);
+      if (!isNaN(s) && s > maxStt) maxStt = s;
+    });
+
+    const now = new Date();
+    const pad = n => String(n).padStart(2, "0");
+    const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+
+    const newCompany = {
+      stt: maxStt + 1,
+      taxId: String(req.body.taxId || "").trim(),
+      name: String(req.body.name || "").trim(),
+      address: String(req.body.address || "").trim(),
+      phone: String(req.body.phone || "").trim(),
+      callNotes: String(req.body.callNotes || "").trim(),
+      note: String(req.body.note || "").trim(),
+      callDate: String(req.body.callDate || today).trim(),
+      totalCr: Number(req.body.totalCr) || 0,
+      caller: String(req.body.caller || "").trim(),
+      driverCount: Number(req.body.driverCount) || 0,
+      callStatus: String(req.body.callStatus || "Chưa liên hệ").trim(),
+      isCaiMep: Boolean(req.body.isCaiMep),
+      caiMepDetails: req.body.caiMepDetails || null
+    };
+
+    list.unshift(newCompany);
+    saveCompanyCallsData(list);
+    return res.json({ status: "success", data: newCompany });
+  } catch (err) {
+    return res.status(500).json({ status: "error", message: err.message });
+  }
+});
+
 /**
  * Health check
  */

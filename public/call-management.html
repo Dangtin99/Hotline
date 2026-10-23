@@ -65,6 +65,25 @@
       border-radius: var(--radius);
       box-shadow: var(--shadow-sm);
       overflow-x: auto;
+      overflow-y: auto;
+      max-height: 540px; /* Chiều cao hiển thị chuẩn 10 dòng và có thanh trượt kéo lên xuống */
+      position: relative;
+    }
+    .table-container::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    .table-container::-webkit-scrollbar-track {
+      background: #f1f5f9;
+      border-radius: 4px;
+    }
+    .table-container::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+      transition: background 0.2s ease;
+    }
+    .table-container::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
     }
     .driver-table {
       width: 100%;
@@ -81,7 +100,8 @@
       white-space: nowrap;
       position: sticky;
       top: 0;
-      z-index: 2;
+      z-index: 10;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
     }
     .driver-table td {
       padding: 10px 12px;
@@ -347,6 +367,72 @@
       white-space: nowrap;
       display: block;
     }
+
+    /* Huy hiệu Đối tác Cái Mép & Sản lượng CR */
+    .badge-caimep {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      background: #ffedd5;
+      color: #c2410c;
+      border: 1px solid #fdba74;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+    }
+    .badge-cr {
+      display: inline-block;
+      background: #ecfdf5;
+      color: #047857;
+      border: 1px solid #a7f3d0;
+      font-weight: 700;
+      font-size: 12px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+    .badge-driver-count {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: #eff6ff;
+      color: #1d4ed8;
+      border: 1px solid #bfdbfe;
+      font-weight: 600;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .badge-driver-count:hover {
+      background: #dbeafe;
+      border-color: #93c5fd;
+      color: #1e40af;
+      transform: translateY(-1px);
+    }
+    .company-status-joined {
+      background-color: #dcfce7 !important;
+      color: #166534 !important;
+      border-color: #86efac !important;
+    }
+    .company-status-contacted {
+      background-color: #e0f2fe !important;
+      color: #0369a1 !important;
+      border-color: #7dd3fc !important;
+    }
+    .company-status-missed {
+      background-color: #fee2e2 !important;
+      color: #991b1b !important;
+      border-color: #fca5a5 !important;
+    }
+    .company-status-pending {
+      background-color: #f8fafc !important;
+      color: #64748b !important;
+      border-color: #cbd5e1 !important;
+    }
   </style>
 </head>
 <body>
@@ -437,8 +523,8 @@
             </svg>
           </button>
           <div>
-            <h1>QUẢN LÝ GỌI ĐIỆN TÀI XẾ & ĐỐI TÁC</h1>
-            <p style="font-size: 12px; color: var(--text-muted); margin-top: 3px;">Bảng theo dõi nhật ký liên hệ, phân loại nhu cầu và kết nối tài xế chạy kết hợp Cái Mép - HCM/Bình Dương</p>
+            <h1 id="callPageHeaderTitle">QUẢN LÝ GỌI ĐIỆN TÀI XẾ & ĐỐI TÁC</h1>
+            <p id="callPageHeaderSubtitle" style="font-size: 12px; color: var(--text-muted); margin-top: 3px;">Bảng theo dõi nhật ký liên hệ, phân loại nhu cầu và kết nối tài xế chạy kết hợp Cái Mép - HCM/Bình Dương</p>
           </div>
         </div>
         <div class="header-actions">
@@ -452,6 +538,36 @@
           </div>
         </div>
       </header>
+
+      <!-- Thanh Chuyển Tab: Theo Dõi Tài Xế vs Theo Dõi Nhà Xe -->
+      <div class="nav-tabs" style="margin: 0 0 16px 0; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px;">
+        <button type="button" class="tab-btn active" id="tabBtnDrivers" onclick="switchCallTab('drivers')">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="9" cy="7" r="4"></circle>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+          </svg>
+          <span>Theo Dõi Tài Xế</span>
+          <span class="badge-tag badge-member" id="badgeTabDriverCount" style="padding: 2px 8px; border-radius: 10px; font-size: 11px; margin-left: 4px;">2.110</span>
+        </button>
+
+        <button type="button" class="tab-btn" id="tabBtnCompanies" onclick="switchCallTab('companies')">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="1" y="3" width="15" height="13"></rect>
+            <polygon points="16 8 20 8 23 11 23 16 16 16 8"></polygon>
+            <circle cx="5.5" cy="18.5" r="2.5"></circle>
+            <circle cx="18.5" cy="18.5" r="2.5"></circle>
+          </svg>
+          <span>Theo Dõi Nhà Xe & Đối Tác</span>
+          <span class="badge-tag badge-member" id="badgeTabCompanyCount" style="padding: 2px 8px; border-radius: 10px; font-size: 11px; margin-left: 4px;">416</span>
+        </button>
+      </div>
+
+      <!-- ============================================== -->
+      <!-- PANE 1: THEO DÕI TÀI XẾ (SHEET TÀI XẾ)         -->
+      <!-- ============================================== -->
+      <div id="paneDrivers" class="call-tab-pane">
 
       <!-- Source Banner -->
       <div class="source-bar">
@@ -643,8 +759,9 @@
         <div style="display: flex; align-items: center; gap: 10px;">
           <label style="font-size: 12px; color: var(--text-muted);">Hiển thị:
             <select id="selectPageSize" style="padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px;">
+              <option value="10" selected>10 dòng</option>
               <option value="25">25 dòng</option>
-              <option value="50" selected>50 dòng</option>
+              <option value="50">50 dòng</option>
               <option value="100">100 dòng</option>
               <option value="200">200 dòng</option>
             </select>
@@ -658,6 +775,234 @@
           </div>
         </div>
       </div>
+      </div><!-- end paneDrivers -->
+
+      <!-- ============================================== -->
+      <!-- PANE 2: THEO DÕI NHÀ XE & ĐỐI TÁC (SHEET NVT)  -->
+      <!-- ============================================== -->
+      <div id="paneCompanies" class="call-tab-pane" style="display: none;">
+        <!-- Source Banner Nhà Xe -->
+        <div class="source-bar">
+          <div>
+            <span style="color: var(--text-muted);">Nguồn dữ liệu:</span>
+            <strong style="color: var(--blue-primary);">Sheet "NVT" (416 Nhà Xe) & Sheet "Danh sách đang chạy" (41 Nhà Xe Cái Mép)</strong>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            <span class="badge-tag badge-member" id="badgeCompanyTotalSource">416 Nhà Xe</span>
+            <span class="badge-tag" style="background: #ffedd5; color: #c2410c; border: 1px solid #fed7aa; font-weight: 700;">41 Đối Tác Cái Mép</span>
+            <button type="button" id="btnRefreshCompanyData" class="page-btn" style="padding: 3px 8px; font-size: 11px;">Làm Mới</button>
+          </div>
+        </div>
+
+        <!-- KPI Summary Cards Nhà Xe -->
+        <div class="kpi-grid-call" id="companyKpiGrid">
+          <div class="call-card">
+            <div class="call-card-title">Tổng Nhà Xe Đối Tác</div>
+            <div class="call-card-value" id="kpiCompanyTotal">416</div>
+            <div class="call-card-sub">Tổng số nhà vận tải trong hệ thống</div>
+          </div>
+          <div class="call-card">
+            <div class="call-card-title">Đã Tham Gia / Tạo Nhóm</div>
+            <div class="call-card-value" id="kpiCompanyJoined" style="color: #16a34a;">30</div>
+            <div class="call-card-sub">Đã vào nhóm kết nối điều độ</div>
+          </div>
+          <div class="call-card">
+            <div class="call-card-title">Đã Liên Hệ / Trao Đổi</div>
+            <div class="call-card-value" id="kpiCompanyContacted" style="color: #0284c7;">57</div>
+            <div class="call-card-sub">Đã gọi / tư vấn / kết bạn Zalo</div>
+          </div>
+          <div class="call-card">
+            <div class="call-card-title">Không Nghe / Thuê Bao</div>
+            <div class="call-card-value" id="kpiCompanyUnreachable" style="color: #dc2626;">20</div>
+            <div class="call-card-sub">KNM / Thuê bao / Điều độ nghỉ</div>
+          </div>
+          <div class="call-card">
+            <div class="call-card-title">Chưa Liên Hệ</div>
+            <div class="call-card-value" id="kpiCompanyPending" style="color: #64748b;">339</div>
+            <div class="call-card-sub">Chờ nhân sự phụ trách liên hệ</div>
+          </div>
+          <div class="call-card">
+            <div class="call-card-title">Tổng Sản Lượng CR</div>
+            <div class="call-card-value" id="kpiCompanyTotalCr" style="color: #ea580c;">4,670</div>
+            <div class="call-card-sub">Tổng teus CR nhà xe quản lý</div>
+          </div>
+          <div class="call-card">
+            <div class="call-card-title">Đội Xe Cái Mép</div>
+            <div class="call-card-value" id="kpiCompanyCaiMep" style="color: #8b5cf6;">41</div>
+            <div class="call-card-sub">Có thỏa thuận giá & tuyến đường</div>
+          </div>
+        </div>
+
+        <!-- Bộ Lọc Control Center Cho Nhà Xe -->
+        <section class="filter-panel" aria-labelledby="companyFilterTitle" style="margin-bottom: 20px;">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">CONTROL CENTER</p>
+              <h2 id="companyFilterTitle">Bộ lọc theo dõi cuộc gọi Nhà Xe & Đối Tác</h2>
+            </div>
+            <span class="live-status">Phân hệ đối tác Nhà Xe</span>
+          </div>
+
+          <div class="filters-grid">
+            <!-- Hàng 1 - Cột 1: Từ Ngày Gọi -->
+            <div class="filter-field date-field">
+              <label for="filterCompanyDateFrom">TỪ NGÀY GỌI</label>
+              <div class="date-time-container">
+                <input type="date" id="filterCompanyDateFrom" class="filter-select filter-date-input" title="Lọc từ ngày">
+              </div>
+            </div>
+
+            <!-- Hàng 1 - Cột 2: Đến Ngày Gọi -->
+            <div class="filter-field date-field">
+              <label for="filterCompanyDateTo">ĐẾN NGÀY GỌI</label>
+              <div class="date-time-container">
+                <input type="date" id="filterCompanyDateTo" class="filter-select filter-date-input" title="Lọc đến ngày">
+              </div>
+            </div>
+
+            <!-- Hàng 1 - Cột 3: Trạng Thái Cuộc Gọi -->
+            <div class="filter-field dropdown-field">
+              <label for="filterCompanyCallStatus">TRẠNG THÁI CUỘC GỌI</label>
+              <select id="filterCompanyCallStatus" class="filter-select">
+                <option value="">Tất cả trạng thái</option>
+                <option value="Đã tham gia nhóm">Đã tham gia nhóm</option>
+                <option value="Đã tạo nhóm riêng">Đã tạo nhóm riêng</option>
+                <option value="Mời tham gia nhóm">Mời tham gia nhóm</option>
+                <option value="Đã liên hệ">Đã liên hệ / Trao đổi</option>
+                <option value="Không nghe máy">Không nghe máy (KNM)</option>
+                <option value="Thuê bao">Thuê bao</option>
+                <option value="Chưa liên hệ được">Chưa liên hệ được</option>
+                <option value="Điều độ nghỉ việc">Điều độ nghỉ việc</option>
+                <option value="Chưa liên hệ">Chưa liên hệ</option>
+              </select>
+            </div>
+
+            <!-- Hàng 1 - Cột 4: Nhân Sự Phụ Trách -->
+            <div class="filter-field dropdown-field">
+              <label for="filterCompanyCaller">NHÂN SỰ PHỤ TRÁCH</label>
+              <select id="filterCompanyCaller" class="filter-select">
+                <option value="">Tất cả nhân sự</option>
+                <option value="Thạnh">Thạnh</option>
+                <option value="Danh">Danh</option>
+                <option value="Nhật">Nhật</option>
+                <option value="Triều">Triều</option>
+                <option value="Hồng">Hồng</option>
+                <option value="Tân">Tân</option>
+                <option value="Trang">Trang</option>
+                <option value="none">Chưa phân công</option>
+              </select>
+            </div>
+
+            <!-- Hàng 2 - Cột 1: Phân Loại Đối Tác -->
+            <div class="filter-field dropdown-field">
+              <label for="filterCompanyType">PHÂN LOẠI ĐỐI TÁC</label>
+              <select id="filterCompanyType" class="filter-select">
+                <option value="">Tất cả nhà xe (416)</option>
+                <option value="caimep">Chuyên tuyến Cái Mép (41)</option>
+                <option value="has_cr">Có sản lượng CR (> 0)</option>
+                <option value="has_drivers">Có tài xế OneStop@LTA</option>
+              </select>
+            </div>
+
+            <!-- Hàng 2 - Cột 2: Mức Sản Lượng CR -->
+            <div class="filter-field dropdown-field">
+              <label for="filterCompanyCrVolume">SẢN LƯỢNG CR</label>
+              <select id="filterCompanyCrVolume" class="filter-select">
+                <option value="">Tất cả mức sản lượng</option>
+                <option value="tier1">Rất cao (> 500 CR)</option>
+                <option value="tier2">Cao (100 - 500 CR)</option>
+                <option value="tier3">Trung bình (10 - 100 CR)</option>
+                <option value="tier4">Nhỏ (1 - 10 CR)</option>
+                <option value="zero">Chưa phát sinh (0 CR)</option>
+              </select>
+            </div>
+
+            <!-- Hàng 2 - Cột 3: Sắp Xếp Theo -->
+            <div class="filter-field dropdown-field">
+              <label for="sortCompanyBy">SẮP XẾP THEO</label>
+              <select id="sortCompanyBy" class="filter-select">
+                <option value="cr_desc">Sản lượng CR giảm dần</option>
+                <option value="driver_desc">Số lượng tài xế giảm dần</option>
+                <option value="stt_asc" selected>Số thứ tự (STT)</option>
+                <option value="name_asc">Tên Nhà Xe (A-Z)</option>
+                <option value="date_desc">Ngày gọi mới nhất</option>
+              </select>
+            </div>
+
+            <!-- Hàng 2 - Cột 4: Tìm Nhanh -->
+            <div class="filter-field search-field">
+              <label for="filterCompanyKeyword">TÌM NHANH</label>
+              <div class="search-box">
+                <input type="text" id="filterCompanyKeyword" placeholder="Tên nhà xe, MST, SĐT đại diện, địa chỉ, ghi chú...">
+              </div>
+            </div>
+          </div>
+
+          <div class="filter-actions-row">
+            <div style="font-size: 12px; color: #64748b; font-weight: 500;">
+              Theo dõi 416 nhà xe đối tác, nhật ký gọi điện, người đại diện, sản lượng CR và năng lực đội xe Cái Mép
+            </div>
+            <div class="filter-action-buttons" style="display: flex; gap: 8px; align-items: center;">
+              <button id="btnCompanyQuickAdd" class="btn btn-primary btn-sm" type="button" title="Thêm nhà xe mới">+ Thêm Nhà Xe</button>
+              <button id="btnCompanyResetFilter" class="btn btn-outline btn-sm" type="button" title="Đặt lại bộ lọc về mặc định">Đặt Lại</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Bảng Dữ Liệu Nhà Xe Container -->
+        <div class="table-container">
+          <table class="driver-table">
+            <thead>
+              <tr>
+                <th style="width: 50px; text-align: center;">STT</th>
+                <th style="min-width: 250px;">Tên Nhà Xe</th>
+                <th style="width: 120px;">Mã Số Thuế</th>
+                <th style="width: 130px;">SĐT Đại Diện</th>
+                <th style="width: 110px;">Phụ Trách</th>
+                <th style="width: 165px;">Trạng Thái Cuộc Gọi</th>
+                <th style="min-width: 250px;">Nội Dung Cuộc Gọi & Note</th>
+                <th style="width: 120px;">Thời Gian Gọi</th>
+                <th style="width: 110px; text-align: right;">Sản Lượng CR</th>
+                <th style="width: 110px; text-align: center;">Tài Xế LTA</th>
+                <th style="width: 150px;">Năng Lực Cái Mép</th>
+                <th style="width: 80px; text-align: center;">Chi Tiết</th>
+              </tr>
+            </thead>
+            <tbody id="companyTableBody">
+              <tr>
+                <td colspan="12" style="text-align: center; padding: 36px; color: var(--text-muted);">
+                  Đang nạp danh sách nhà xe đối tác...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination Bar Cho Nhà Xe -->
+        <div class="pagination-bar">
+          <div class="pagination-info" id="companyPaginationInfo">
+            Đang hiển thị...
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <label style="font-size: 12px; color: var(--text-muted);">Hiển thị:
+              <select id="selectCompanyPageSize" style="padding: 4px 6px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px;">
+                <option value="10" selected>10 dòng</option>
+                <option value="25">25 dòng</option>
+                <option value="50">50 dòng</option>
+                <option value="100">100 dòng</option>
+                <option value="200">200 dòng</option>
+              </select>
+            </label>
+            <div class="pagination-controls">
+              <button type="button" class="page-btn" id="btnCompanyPageFirst" title="Trang đầu">Đầu</button>
+              <button type="button" class="page-btn" id="btnCompanyPagePrev" title="Trang trước">Trước</button>
+              <span id="companyPageIndicator" style="font-size: 13px; font-weight: 600; padding: 0 4px;">1 / 1</span>
+              <button type="button" class="page-btn" id="btnCompanyPageNext" title="Trang sau">Sau</button>
+              <button type="button" class="page-btn" id="btnCompanyPageLast" title="Trang cuối">Cuối</button>
+            </div>
+          </div>
+        </div>
+      </div><!-- end paneCompanies -->
     </div>
   </div>
 
@@ -783,15 +1128,160 @@
     </div>
   </div>
 
-  <!-- Nạp dữ liệu ban đầu từ driver-data.js & Thư viện XLSX -->
+  <!-- Modal Xem Chi Tiết Đối Tác Nhà Xe & Danh Sách Tài Xế -->
+  <div id="modalCompanyDetail" class="modal-overlay" style="display: none;">
+    <div class="modal-dialog" style="max-width: 820px; max-height: 90vh; overflow-y: auto;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <h3 id="modalDetailCompName" style="color: var(--blue-primary); font-size: 16px;">Chi Tiết Đối Tác Nhà Xe</h3>
+        </div>
+        <button type="button" onclick="closeCompanyDetailModal()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-muted); padding: 0 4px;">&times;</button>
+      </div>
+      <div class="modal-body" style="gap: 16px;">
+        <!-- Card Thông Tin Tổng Quan -->
+        <div style="background: #f8fafc; border: 1px solid var(--border-light); border-radius: 8px; padding: 14px 16px;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; font-size: 13px;">
+            <div><span style="color: var(--text-muted);">Mã Số Thuế:</span> <strong id="modalDetailCompTaxId" style="font-family: monospace;">-</strong></div>
+            <div><span style="color: var(--text-muted);">SĐT Đại Diện:</span> <a id="modalDetailCompPhone" href="#" style="color: var(--blue-primary); font-weight: 700; text-decoration: none;">-</a></div>
+            <div><span style="color: var(--text-muted);">Nhân Sự Phụ Trách:</span> <strong id="modalDetailCompCaller" style="color: #0369a1;">-</strong></div>
+            <div><span style="color: var(--text-muted);">Trạng Thái Gọi:</span> <span id="modalDetailCompStatus" class="badge-tag">-</span></div>
+            <div><span style="color: var(--text-muted);">Ngày Gọi Gần Nhất:</span> <strong id="modalDetailCompDate">-</strong></div>
+            <div><span style="color: var(--text-muted);">Tổng Sản Lượng CR:</span> <strong id="modalDetailCompCr" style="color: #ea580c; font-size: 14px;">-</strong></div>
+          </div>
+          <div style="margin-top: 10px; font-size: 13px; border-top: 1px dashed var(--border-light); padding-top: 8px;">
+            <span style="color: var(--text-muted);">Địa Chỉ Trụ Sở:</span> <span id="modalDetailCompAddress" style="font-weight: 500;">-</span>
+          </div>
+          <div style="margin-top: 6px; font-size: 13px;">
+            <span style="color: var(--text-muted);">Nội Dung Cuộc Gọi:</span> <strong id="modalDetailCompNotes" style="color: #1e293b;">-</strong>
+          </div>
+          <div style="margin-top: 4px; font-size: 12px; color: #64748b;">
+            <span>Ghi Chú Phụ (Note):</span> <span id="modalDetailCompSubNote">-</span>
+          </div>
+        </div>
+
+        <!-- Box Chuyên Sâu Cái Mép (nếu có) -->
+        <div id="modalDetailCaiMepBox" style="display: none; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px; padding: 14px 16px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+            <div style="font-weight: 700; color: #c2410c; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">
+              ⭐ THÔNG TIN NĂNG LỰC ĐỘI XE CÁI MÉP
+            </div>
+            <span class="badge-tag badge-caimep">CHUYÊN TUYẾN CM</span>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; font-size: 12px;">
+            <div><span style="color: #9a3412;">Số Lượng Đầu Xe:</span> <strong id="modalDetailCmTrucks" style="color: #ea580c;">-</strong></div>
+            <div><span style="color: #9a3412;">Tuyến Đường:</span> <strong id="modalDetailCmRoute">-</strong></div>
+            <div><span style="color: #9a3412;">Bảng Giá (VNĐ):</span> <strong id="modalDetailCmPrice" style="color: #0284c7;">-</strong></div>
+            <div><span style="color: #9a3412;">Năng Suất VC:</span> <strong id="modalDetailCmProd">-</strong></div>
+            <div><span style="color: #9a3412;">Hóa Đơn Hợp Lệ:</span> <strong id="modalDetailCmInvoice">-</strong></div>
+            <div><span style="color: #9a3412;">Hạn Mức Công Nợ:</span> <strong id="modalDetailCmDebt">-</strong></div>
+            <div><span style="color: #9a3412;">Dự Kiến Bắt Đầu:</span> <strong id="modalDetailCmExpected">-</strong></div>
+          </div>
+          <div style="margin-top: 8px; font-size: 12px; color: #7c2d12; border-top: 1px dashed #fed7aa; padding-top: 6px;">
+            <span>Ghi chú thỏa thuận Cái Mép:</span> <span id="modalDetailCmCallContent" style="font-style: italic;">-</span>
+          </div>
+        </div>
+
+        <!-- Danh Sách Tài Xế Trực Thuộc -->
+        <div>
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+            <div style="font-weight: 700; color: var(--blue-primary); font-size: 14px;">
+              Danh Sách Tài Xế OneStop@LTA Trực Thuộc Nhà Xe
+            </div>
+            <span class="badge-tag badge-member" id="modalDetailDriverCountBadge">0 tài xế</span>
+          </div>
+          <div id="modalDetailDriversList">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary btn-sm" onclick="closeCompanyDetailModal()">Đóng Cửa Sổ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Thêm Nhà Xe Mới -->
+  <div id="modalAddCompany" class="modal-overlay" style="display: none;">
+    <div class="modal-dialog" style="max-width: 600px;">
+      <div class="modal-header">
+        <h3>Thêm Nhà Xe Đối Tác Mới</h3>
+        <button type="button" onclick="closeAddCompanyModal()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-muted);">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px;">
+          <div class="filter-group">
+            <label for="addCompanyName">Tên Công Ty / Nhà Xe (*)</label>
+            <input type="text" id="addCompanyName" placeholder="Ví dụ: CÔNG TY TNHH VẬN TẢI ABC" required>
+          </div>
+          <div class="filter-group">
+            <label for="addCompanyTaxId">Mã Số Thuế</label>
+            <input type="text" id="addCompanyTaxId" placeholder="Ví dụ: 0312345678">
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="filter-group">
+            <label for="addCompanyPhone">SĐT Người Đại Diện</label>
+            <input type="tel" id="addCompanyPhone" placeholder="Ví dụ: 0901234567">
+          </div>
+          <div class="filter-group">
+            <label for="addCompanyCaller">Nhân Sự Phụ Trách</label>
+            <input type="text" id="addCompanyCaller" placeholder="Ví dụ: Thạnh, Danh, Hồng...">
+          </div>
+        </div>
+
+        <div class="filter-group">
+          <label for="addCompanyAddress">Địa Chỉ Đăng Ký / Trụ Sở</label>
+          <input type="text" id="addCompanyAddress" placeholder="Địa chỉ trụ sở công ty...">
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="filter-group">
+            <label for="addCompanyCallStatus">Trạng Thái Cuộc Gọi</label>
+            <select id="addCompanyCallStatus">
+              <option value="Chưa liên hệ" selected>Chưa liên hệ</option>
+              <option value="Đã liên hệ">Đã liên hệ / Trao đổi</option>
+              <option value="Đã tham gia nhóm">Đã tham gia nhóm</option>
+              <option value="Đã tạo nhóm riêng">Đã tạo nhóm riêng</option>
+              <option value="Mời tham gia nhóm">Mời tham gia nhóm</option>
+              <option value="Không nghe máy">Không nghe máy</option>
+              <option value="Thuê bao">Thuê bao</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="addCompanyTotalCr">Tổng Sản Lượng CR (Teus)</label>
+            <input type="number" id="addCompanyTotalCr" placeholder="Ví dụ: 50" min="0">
+          </div>
+        </div>
+
+        <div class="filter-group">
+          <label for="addCompanyNotes">Nội Dung Cuộc Gọi / Ghi Chú Trao Đổi</label>
+          <textarea id="addCompanyNotes" rows="3" style="width: 100%; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 13px;" placeholder="Ghi nhận nội dung trao đổi ban đầu..."></textarea>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+          <input type="checkbox" id="addCompanyIsCaiMep" style="width: 16px; height: 16px; cursor: pointer;">
+          <label for="addCompanyIsCaiMep" style="cursor: pointer; font-size: 13px; font-weight: 600; color: #ea580c; margin: 0;">Thuộc đội xe chuyên tuyến Cái Mép</label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline btn-sm" onclick="closeAddCompanyModal()">Hủy Bỏ</button>
+        <button type="button" class="btn btn-primary btn-sm" onclick="saveNewCompany()">Lưu Nhà Xe</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nạp dữ liệu ban đầu từ driver-data.js, company-data.js & Thư viện XLSX -->
   <script src="/vendor/xlsx/xlsx.full.min.js"></script>
   <script src="driver-data.js"></script>
+  <script src="company-data.js"></script>
+  <script src="company-call-management.js"></script>
   <script>
     // Trạng thái ứng dụng
     let allDrivers = [];
     let filteredDrivers = [];
     let currentPage = 1;
-    let pageSize = 50;
+    let pageSize = 10;
 
     const LOCAL_UPDATES_KEY = "gpg_driver_call_updates_v1";
 
@@ -1537,7 +2027,13 @@
         if (modalAdd) modalAdd.style.display = "none";
       }
 
-      if (btnOpenAdd) btnOpenAdd.addEventListener("click", openAddModal);
+      if (btnOpenAdd) btnOpenAdd.addEventListener("click", () => {
+        if (window.activeCallTab === "companies") {
+          if (window.openAddCompanyModal) window.openAddCompanyModal();
+        } else {
+          openAddModal();
+        }
+      });
       if (btnQuickAdd) btnQuickAdd.addEventListener("click", openAddModal);
       if (btnCloseAdd) btnCloseAdd.addEventListener("click", closeAddModal);
       if (btnCancelAdd) btnCancelAdd.addEventListener("click", closeAddModal);
@@ -1615,8 +2111,20 @@
       }
 
       // Export events
-      document.getElementById("btnExportExcel").addEventListener("click", exportToExcel);
-      document.getElementById("btnExportCsv").addEventListener("click", exportToCsv);
+      document.getElementById("btnExportExcel").addEventListener("click", () => {
+        if (window.activeCallTab === "companies") {
+          if (window.exportCompanyToExcel) window.exportCompanyToExcel();
+        } else {
+          exportToExcel();
+        }
+      });
+      document.getElementById("btnExportCsv").addEventListener("click", () => {
+        if (window.activeCallTab === "companies") {
+          if (window.exportCompanyToCsv) window.exportCompanyToCsv();
+        } else {
+          exportToCsv();
+        }
+      });
 
       // Modal events
       document.getElementById("btnModalClose").addEventListener("click", closeModal);
