@@ -1737,26 +1737,32 @@ function updateOrdersFromCheckData() {
     }
   });
 
-  // Xây dựng Indexed Maps cho các đơn hủy để tra cứu tức thì
-  const v1Map = new Map(); // key: bk__cont__dir -> [orders]
-  const v2Map = new Map(); // key: cont__dir__creator__truck -> [orders]
-  const v3Map = new Map(); // key: creator__depot__line__truck -> [orders]
+  // Xây dựng Indexed Maps cho các đơn hủy để tra cứu tức thì theo 4 VÒNG TUẦN TỰ
+  const v1Map = new Map(); // key: bk__cont__dir__depot__line -> [orders]
+  const v2Map = new Map(); // key: bk__dir__depot__line -> [orders] (đổi vỏ cont)
+  const v3Map = new Map(); // key: cont__dir__creator__truck__depot__line -> [orders] (đổi booking)
+  const v4Map = new Map(); // key: creator__depot__line__truck -> [orders] (đơn OUT trong 24h)
 
   cancelledOrders.forEach(o => {
-    if (o._bk && o._cont) {
-      const k1 = `${o._bk}__${o._cont}__${o._dir}`;
+    if (o._bk && o._cont && o._depot && o._line) {
+      const k1 = `${o._bk}__${o._cont}__${o._dir}__${o._depot}__${o._line}`;
       if (!v1Map.has(k1)) v1Map.set(k1, []);
       v1Map.get(k1).push(o);
     }
-    if (o._cont && o._creator && o._truck) {
-      const k2 = `${o._cont}__${o._dir}__${o._creator}__${o._truck}`;
+    if (o._bk && o._depot && o._line) {
+      const k2 = `${o._bk}__${o._dir}__${o._depot}__${o._line}`;
       if (!v2Map.has(k2)) v2Map.set(k2, []);
       v2Map.get(k2).push(o);
     }
-    if (o._dir === "OUT" && o._creator && o._depot && o._line && o._truck) {
-      const k3 = `${o._creator}__${o._depot}__${o._line}__${o._truck}`;
+    if (o._cont && o._creator && o._truck && o._depot && o._line) {
+      const k3 = `${o._cont}__${o._dir}__${o._creator}__${o._truck}__${o._depot}__${o._line}`;
       if (!v3Map.has(k3)) v3Map.set(k3, []);
       v3Map.get(k3).push(o);
+    }
+    if (o._dir === "OUT" && o._creator && o._depot && o._line && o._truck) {
+      const k4 = `${o._creator}__${o._depot}__${o._line}__${o._truck}`;
+      if (!v4Map.has(k4)) v4Map.set(k4, []);
+      v4Map.get(k4).push(o);
     }
   });
 
@@ -1771,9 +1777,9 @@ function updateOrdersFromCheckData() {
 
     let matchedCancelledList = null;
 
-    // --- VÒNG 1: Cùng Booking + Cùng Cont + Cùng Chiều ---
-    if (check._bk && cInfo.cont) {
-      const k1 = `${check._bk}__${cInfo.cont}__${check._dir}`;
+    // --- VÒNG 1: Cùng Booking + Cùng Cont + Cùng Chiều + Cùng Depot + Cùng Hãng tàu ---
+    if (check._bk && cInfo.cont && check._depot && check._line) {
+      const k1 = `${check._bk}__${cInfo.cont}__${check._dir}__${check._depot}__${check._line}`;
       const candidates = v1Map.get(k1);
       if (candidates && candidates.length > 0) {
         const fresh = candidates.filter(o => !updatedOrderKeys.has(o.rowKey) && o._eir !== cInfo.eir);
@@ -1783,26 +1789,45 @@ function updateOrdersFromCheckData() {
       }
     }
 
-    // --- VÒNG 2: Cùng Cont + Cùng Chiều + Cùng Người tạo + Cùng Số xe ---
-    if (!matchedCancelledList && cInfo.cont && check._truck && check._creator) {
-      const k2 = `${cInfo.cont}__${check._dir}__${check._creator}__${check._truck}`;
+    // --- VÒNG 2 (MỚI): Cùng Booking + Cùng Chiều + Cùng Depot + Cùng Hãng tàu + KHÁC Cont ---
+    if (!matchedCancelledList && check._bk && check._depot && check._line) {
+      const k2 = `${check._bk}__${check._dir}__${check._depot}__${check._line}`;
       const candidates = v2Map.get(k2);
       if (candidates && candidates.length > 0) {
-        const fresh = candidates.filter(o => !updatedOrderKeys.has(o.rowKey) && o._eir !== cInfo.eir);
+        const fresh = candidates.filter(o => 
+          !updatedOrderKeys.has(o.rowKey) && 
+          o._eir !== cInfo.eir &&
+          o._cont !== cInfo.cont &&
+          (isCancelled(o.trangThaiDonHang) || o.isAutoCancelledBy3h)
+        );
         if (fresh.length > 0) {
           matchedCancelledList = fresh;
         }
       }
     }
 
-    // --- VÒNG 3: Đơn OUT + Cùng Người tạo + Cùng Depot + Cùng Hãng tàu + Cùng Số xe trong 24h ---
-    if (!matchedCancelledList && check._dir === "OUT" && check._truck && check._creator && check._depot && check._line) {
-      const k3 = `${check._creator}__${check._depot}__${check._line}__${check._truck}`;
+    // --- VÒNG 3: Cùng Cont + Cùng Chiều + Cùng Người tạo + Cùng Số xe + Cùng Depot + Cùng Hãng tàu ---
+    if (!matchedCancelledList && cInfo.cont && check._truck && check._creator && check._depot && check._line) {
+      const k3 = `${cInfo.cont}__${check._dir}__${check._creator}__${check._truck}__${check._depot}__${check._line}`;
       const candidates = v3Map.get(k3);
+      if (candidates && candidates.length > 0) {
+        const fresh = candidates.filter(o => !updatedOrderKeys.has(o.rowKey) && o._eir !== cInfo.eir && o._bk !== check._bk);
+        if (fresh.length > 0) {
+          matchedCancelledList = fresh;
+        }
+      }
+    }
+
+    // --- VÒNG 4: Đơn OUT + Cùng Người tạo + Cùng Depot + Cùng Hãng tàu + Cùng Số xe trong 24h ---
+    if (!matchedCancelledList && check._dir === "OUT" && check._truck && check._creator && check._depot && check._line) {
+      const k4 = `${check._creator}__${check._depot}__${check._line}__${check._truck}`;
+      const candidates = v4Map.get(k4);
       if (candidates && candidates.length > 0) {
         const fresh = candidates.filter(o => {
           if (updatedOrderKeys.has(o.rowKey)) return false;
           if (o._eir === cInfo.eir) return false;
+          if (o._cont === cInfo.cont) return false;
+          if (o._bk === check._bk) return false;
           if (check._ts > 0 && o._ts > 0) {
             const diffMs = Math.abs(check._ts - o._ts);
             if (diffMs > 24 * 3600 * 1000) return false;
