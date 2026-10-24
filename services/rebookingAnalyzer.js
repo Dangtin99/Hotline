@@ -65,12 +65,21 @@ function parseRecordTimestamp(r) {
 }
 
 /**
- * Thuật toán gom nhóm 3 Vòng (Sequential Pipeline)
+ * Thuật toán gom nhóm 4 Vòng Tuần Tự (Sequential 4-Pass Pipeline)
+ *
+ * VÒNG 1: Booking + Container + Chiều + Depot + Hãng tàu
+ *          → Gom các lần hủy/đặt lại trên cùng vỏ Container
+ * VÒNG 2: Booking + Chiều + Depot + Hãng tàu (KHÁC Container)
+ *          → Gom đơn đổi vỏ cont mới trong cùng Booking
+ * VÒNG 3: Container + Chiều + Người tạo + Số xe + Depot + Hãng tàu (KHÁC Booking)
+ *          → Gom đơn bị cấp số Booking mới cho cùng Container
+ * VÒNG 4: Chỉ chiều OUT + Người tạo + Depot + Hãng tàu + Số xe (24h) (KHÁC Booking & KHÁC Container)
+ *          → Gom đơn lấy rỗng OUT đổi hoàn toàn cả Booking lẫn vỏ cont
  */
 function analyzeAndGroupOrders(records) {
   if (!Array.isArray(records) || records.length === 0) return [];
 
-  // 0. Tiền xử lý dữ liệu 1 lần duy nhất trong RAM (luôn bảo đảm khởi tạo đầy đủ các trường clean)
+  // 0. Tiền xử lý dữ liệu 1 lần duy nhất trong RAM
   for (let i = 0; i < records.length; i++) {
     const r = records[i];
     if (r._cleanBooking === undefined || r._cleanCont === undefined) {
@@ -78,84 +87,104 @@ function analyzeAndGroupOrders(records) {
         r._ts = parseRecordTimestamp(r);
       }
       r._cleanBooking = (r.soBooking || "").toString().trim().toUpperCase();
-      r._cleanCont = (r.soContainer || "").toString().trim().toUpperCase();
-      r._cleanDir = (r.loaiDonHang || "").toString().trim().toUpperCase();
+      r._cleanCont    = (r.soContainer || "").toString().trim().toUpperCase();
+      r._cleanDir     = (r.loaiDonHang || "").toString().trim().toUpperCase();
       r._cleanCreator = (r.nguoiTao || "").toString().trim().toUpperCase();
-      r._cleanDepot = (r.depot || "").toString().trim().toUpperCase();
-      r._cleanLine = (r.hangTau || "").toString().trim().toUpperCase();
-      r._cleanTruck = cleanTruckPlate(r.soXe);
+      r._cleanDepot   = (r.depot || "").toString().trim().toUpperCase();
+      r._cleanLine    = (r.hangTau || "").toString().trim().toUpperCase();
+      r._cleanTruck   = cleanTruckPlate(r.soXe);
     }
   }
 
-  // ----------------------------------------------------
-  // VÒNG 1: Gom nhóm theo Booking + Container + Chiều
-  // ----------------------------------------------------
+  // Hàm hỗ trợ gom bản ghi của nhiều nhóm thành 1 nhóm đại diện
+  function mergeGroups(groups, keyPrefix, overrides = {}) {
+    const combinedRecords = [];
+    const seenBookings = new Set();
+    const seenConts = new Set();
+    groups.forEach(mg => {
+      mg.records.forEach(r => {
+        combinedRecords.push(r);
+        if (r._cleanBooking) seenBookings.add(r._cleanBooking);
+        if (r._cleanCont) seenConts.add(r._cleanCont);
+      });
+      if (mg.allBookings) mg.allBookings.forEach(b => seenBookings.add(b));
+      if (mg.allConts)    mg.allConts.forEach(c => seenConts.add(c));
+    });
+    combinedRecords.sort((a, b) => b._ts - a._ts);
+    const latest = combinedRecords[0];
+    return Object.assign({
+      groupKey:     `${keyPrefix}`,
+      soBooking:    latest._cleanBooking || "-",
+      soContainer:  latest._cleanCont || "-",
+      loaiDonHang:  latest._cleanDir || groups[0].loaiDonHang || "-",
+      depot:        latest._cleanDepot || groups[0].depot || "-",
+      hangTau:      latest._cleanLine || groups[0].hangTau || "-",
+      records:      combinedRecords,
+      allBookings:  Array.from(seenBookings),
+      allConts:     Array.from(seenConts)
+    }, overrides);
+  }
+
+  // ============================================================
+  // VÒNG 1: Gom theo Booking + Container + Chiều + Depot + Hãng tàu
+  // ============================================================
   const pass1Map = new Map();
 
   records.forEach((r, idx) => {
-    const b = (r._cleanBooking && r._cleanBooking !== "-") ? r._cleanBooking : "";
-    const c = (r._cleanCont && r._cleanCont !== "-") ? r._cleanCont : "";
-    const dirKey = (r._cleanDir === "IN" || r._cleanDir === "OUT") ? r._cleanDir : "NA";
+    const b    = (r._cleanBooking && r._cleanBooking !== "-") ? r._cleanBooking : "";
+    const c    = (r._cleanCont    && r._cleanCont    !== "-") ? r._cleanCont    : "";
+    const dir  = (r._cleanDir === "IN" || r._cleanDir === "OUT") ? r._cleanDir : "NA";
+    const dep  = r._cleanDepot || "";
+    const line = r._cleanLine  || "";
 
-    // Nếu đơn thiếu cả số Booking lẫn số Container, đây là đơn độc lập hoàn toàn, không gom chung
     let groupKey;
     if (!b && !c) {
-      groupKey = `NO_ID__${r.rowKey || r.id || ('ROW_' + idx)}`;
+      groupKey = `NO_ID__${r.rowKey || r.id || ("ROW_" + idx)}`;
     } else {
-      const bookingKey = b || "CHUA_CO_BOOKING";
-      const contKey = c || "CHUA_CO_CONT";
-      groupKey = `${bookingKey}__${contKey}__${dirKey}`;
+      const bKey    = b    || "CHUA_CO_BOOKING";
+      const cKey    = c    || "CHUA_CO_CONT";
+      const depKey  = dep  || "CHUA_CO_DEPOT";
+      const lineKey = line || "CHUA_CO_HANG_TAU";
+      groupKey = `${bKey}__${cKey}__${dir}__${depKey}__${lineKey}`;
     }
 
     if (!pass1Map.has(groupKey)) {
       pass1Map.set(groupKey, {
         groupKey,
-        soBooking: b || "-",
-        soContainer: c || "-",
-        loaiDonHang: dirKey,
+        soBooking:   b    || "-",
+        soContainer: c    || "-",
+        loaiDonHang: dir,
+        depot:       dep  || "-",
+        hangTau:     line || "-",
         records: []
       });
     }
-
-    pass1Map.get(groupKey).records.push({
-      ...r,
-      _originalIndex: idx
-    });
+    pass1Map.get(groupKey).records.push({ ...r, _originalIndex: idx });
   });
 
-  // Sắp xếp bản ghi giảm dần theo timestamp
-  pass1Map.forEach(g => {
-    g.records.sort((a, b) => b._ts - a._ts);
-  });
+  pass1Map.forEach(g => { g.records.sort((a, b) => b._ts - a._ts); });
 
-  // ----------------------------------------------------
-  // BƯỚC 1.5: CẬP NHẬT SỐ BOOKING CHO ĐƠN BAN ĐẦU CHƯA CÓ BOOKING
-  // ----------------------------------------------------
-  const contWithRealBookingMap = new Map();
+  // Bước 1.5: Ghép Booking thực cho đơn thiếu Booking (dựa trên cùng Cont + Chiều)
+  const contBkMap = new Map();
   pass1Map.forEach(g => {
-    const hasRealBk = g.soBooking && g.soBooking !== "-" && g.soBooking !== "CHUA_CO_BOOKING";
-    const hasCont = g.soContainer && g.soContainer !== "-" && g.soContainer !== "CHUA_CO_CONT";
-    if (hasRealBk && hasCont) {
+    const hasRealBk  = g.soBooking   && g.soBooking   !== "-" && g.soBooking   !== "CHUA_CO_BOOKING";
+    const hasRealCt  = g.soContainer && g.soContainer !== "-" && g.soContainer !== "CHUA_CO_CONT";
+    if (hasRealBk && hasRealCt) {
       const key = `${g.soContainer}__${g.loaiDonHang}`;
-      if (!contWithRealBookingMap.has(key)) contWithRealBookingMap.set(key, []);
-      contWithRealBookingMap.get(key).push(g);
+      if (!contBkMap.has(key)) contBkMap.set(key, []);
+      contBkMap.get(key).push(g);
     }
   });
-
-  contWithRealBookingMap.forEach(list => {
-    list.sort((a, b) => b.records[0]._ts - a.records[0]._ts);
-  });
+  contBkMap.forEach(list => { list.sort((a, b) => b.records[0]._ts - a.records[0]._ts); });
 
   const pass1Groups = [];
   pass1Map.forEach(g => {
     const isMissingBk = !g.soBooking || g.soBooking === "-" || g.soBooking === "CHUA_CO_BOOKING";
-    const hasCont = g.soContainer && g.soContainer !== "-" && g.soContainer !== "CHUA_CO_CONT";
-
-    if (isMissingBk && hasCont) {
-      const key = `${g.soContainer}__${g.loaiDonHang}`;
-      const realCandidates = contWithRealBookingMap.get(key);
-      if (realCandidates && realCandidates.length > 0) {
-        const target = realCandidates[0];
+    const hasCt       = g.soContainer && g.soContainer !== "-" && g.soContainer !== "CHUA_CO_CONT";
+    if (isMissingBk && hasCt) {
+      const candidates = contBkMap.get(`${g.soContainer}__${g.loaiDonHang}`);
+      if (candidates && candidates.length > 0) {
+        const target = candidates[0];
         target.records.push(...g.records);
         target.records.sort((a, b) => b._ts - a._ts);
         target.matchType = "UPDATED_BOOKING";
@@ -165,7 +194,7 @@ function analyzeAndGroupOrders(records) {
     pass1Groups.push(g);
   });
 
-  // Chuẩn hóa thuộc tính cơ sở cho các nhóm từ Vòng 1
+  // Chuẩn hóa thuộc tính nhóm V1
   pass1Groups.forEach(g => {
     if (!g.allBookings) {
       const bks = new Set();
@@ -182,154 +211,172 @@ function analyzeAndGroupOrders(records) {
     }
   });
 
-  // ----------------------------------------------------
-  // VÒNG 2: Pipeline xét và lọc dựa trên kết quả từ Vòng 1
-  // Toàn bộ các nhóm từ Vòng 1 được đưa vào Vòng 2
-  // Khóa xét: Số Container + Chiều + Người tạo + Số Xe
-  // ----------------------------------------------------
+  // ============================================================
+  // VÒNG 2 (MỚI): Gom theo Booking + Chiều + Depot + Hãng tàu (KHÁC Container)
+  // Tình huống: Cont cũ bị hủy → đổi vỏ Container mới trong cùng Booking
+  // Ràng buộc: Đơn Container cũ phải có trạng thái HỦY, 2 Container phải KHÁC NHAU
+  // ============================================================
   const pass2Map = new Map();
   const pass2Groups = [];
 
   pass1Groups.forEach(candidate => {
-    const latestRec = candidate.records[0];
-    const cont = candidate.soContainer;
-    const dir = candidate.loaiDonHang;
-    const creator = latestRec._cleanCreator;
-    const truck = latestRec._cleanTruck;
+    const latest = candidate.records[0];
+    const bk   = candidate.soBooking;
+    const dir  = candidate.loaiDonHang;
+    const dep  = latest._cleanDepot || (candidate.depot  || "").toString().trim().toUpperCase();
+    const line = latest._cleanLine  || (candidate.hangTau || "").toString().trim().toUpperCase();
 
-    if (!cont || cont === "-" || cont === "CHUA_CO_CONT" || !creator || creator === "-" || !truck) {
+    // Chỉ gom vào Vòng 2 khi có đủ Booking + Depot + Hãng tàu hợp lệ
+    if (!bk || bk === "-" || bk === "CHUA_CO_BOOKING" || !dep || dep === "-" || !line || line === "-") {
       pass2Groups.push(candidate);
       return;
     }
 
-    const pass2Key = `${cont}__${dir}__${creator}__${truck}`;
+    const p2Key = `${bk}__${dir}__${dep}__${line}`;
 
-    if (!pass2Map.has(pass2Key)) {
-      pass2Map.set(pass2Key, {
-        pass2Key,
-        soContainer: cont,
+    if (!pass2Map.has(p2Key)) {
+      pass2Map.set(p2Key, {
+        p2Key,
+        soBooking:   bk,
         loaiDonHang: dir,
-        nguoiTaoKey: creator,
-        truckKey: truck,
+        depot:       dep,
+        hangTau:     line,
         memberGroups: []
       });
     }
-
-    pass2Map.get(pass2Key).memberGroups.push(candidate);
+    pass2Map.get(p2Key).memberGroups.push(candidate);
   });
 
   pass2Map.forEach(p2 => {
-    if (p2.memberGroups.length >= 2) {
-      const combinedRecords = [];
-      const seenBookings = new Set();
-      const seenConts = new Set();
+    // Chỉ gom khi có >= 2 nhóm với Cont khác nhau và đơn trước bị hủy
+    const eligible = p2.memberGroups.filter((mg, idx) => {
+      if (idx === 0) return true; // Giữ nhóm đầu làm gốc
+      // Đơn này phải có Container khác với ít nhất 1 nhóm trước
+      return p2.memberGroups.slice(0, idx).some(prev =>
+        prev.soContainer !== mg.soContainer &&
+        prev.soContainer !== "-" && mg.soContainer !== "-" &&
+        isCancelledOrFailedRecord(prev.records[0])
+      );
+    });
 
-      p2.memberGroups.forEach(mg => {
-        mg.records.forEach(r => {
-          combinedRecords.push(r);
-          if (r._cleanBooking) seenBookings.add(r._cleanBooking);
-          if (r._cleanCont) seenConts.add(r._cleanCont);
-        });
-        if (mg.allBookings) mg.allBookings.forEach(b => seenBookings.add(b));
-        if (mg.allConts) mg.allConts.forEach(c => seenConts.add(c));
-      });
-
-      combinedRecords.sort((a, b) => b._ts - a._ts);
-
-      const latestRecord = combinedRecords[0];
-      const latestBooking = latestRecord._cleanBooking || "-";
-
-      pass2Groups.push({
-        groupKey: `PASS2__${p2.pass2Key}`,
-        soBooking: latestBooking,
-        soContainer: p2.soContainer,
-        loaiDonHang: p2.loaiDonHang,
-        depot: latestRecord.depot || p2.memberGroups[0].depot || "-",
-        hangTau: latestRecord.hangTau || p2.memberGroups[0].hangTau || "-",
-        records: combinedRecords,
-        matchType: "CHANGED_BOOKING",
-        allBookings: Array.from(seenBookings),
-        allConts: Array.from(seenConts)
-      });
+    if (eligible.length >= 2) {
+      const merged = mergeGroups(eligible, `PASS2__${p2.p2Key}`, { matchType: "CHANGED_CONT" });
+      pass2Groups.push(merged);
+      // Nhóm không đủ điều kiện gom thì trả về pass2Groups riêng lẻ
+      p2.memberGroups.filter(mg => !eligible.includes(mg)).forEach(mg => pass2Groups.push(mg));
     } else {
-      pass2Groups.push(p2.memberGroups[0]);
+      p2.memberGroups.forEach(mg => pass2Groups.push(mg));
     }
   });
 
-  // ----------------------------------------------------
-  // VÒNG 3: Pipeline xét và lọc dựa trên kết quả từ Vòng 2
-  // Khóa xét: OUT + Người tạo + Depot + Hãng tàu + Số xe
-  // Điều kiện: Bắt buộc khác Booking, khác Cont, đơn trước bị hủy
-  // ----------------------------------------------------
+  // ============================================================
+  // VÒNG 3 (V2 cũ): Gom theo Container + Chiều + Người tạo + Số xe + Depot + Hãng tàu (KHÁC Booking)
+  // Tình huống: Cùng container, cùng tài xế/xe nhưng được cấp số Booking mới
+  // ============================================================
   const pass3Map = new Map();
-  const finalizedGroups = [];
+  const pass3Groups = [];
 
   pass2Groups.forEach(candidate => {
-    const latestRec = candidate.records[0];
-    const dir = candidate.loaiDonHang;
-    const creator = latestRec._cleanCreator;
-    const depot = latestRec._cleanDepot || (candidate.depot || "").toString().trim().toUpperCase();
-    const line = latestRec._cleanLine || (candidate.hangTau || "").toString().trim().toUpperCase();
-    const truck = latestRec._cleanTruck;
+    const latest  = candidate.records[0];
+    const cont    = candidate.soContainer;
+    const dir     = candidate.loaiDonHang;
+    const creator = latest._cleanCreator;
+    const truck   = latest._cleanTruck;
+    const dep     = latest._cleanDepot || (candidate.depot  || "").toString().trim().toUpperCase();
+    const line    = latest._cleanLine  || (candidate.hangTau || "").toString().trim().toUpperCase();
+
+    if (
+      !cont || cont === "-" || cont === "CHUA_CO_CONT" ||
+      !creator || creator === "-" || !truck ||
+      !dep || dep === "-" || !line || line === "-"
+    ) {
+      pass3Groups.push(candidate);
+      return;
+    }
+
+    const p3Key = `${cont}__${dir}__${creator}__${truck}__${dep}__${line}`;
+
+    if (!pass3Map.has(p3Key)) {
+      pass3Map.set(p3Key, { p3Key, soContainer: cont, loaiDonHang: dir, nguoiTaoKey: creator, truckKey: truck, depot: dep, hangTau: line, memberGroups: [] });
+    }
+    pass3Map.get(p3Key).memberGroups.push(candidate);
+  });
+
+  pass3Map.forEach(p3 => {
+    if (p3.memberGroups.length >= 2) {
+      const merged = mergeGroups(p3.memberGroups, `PASS3__${p3.p3Key}`, { matchType: "CHANGED_BOOKING" });
+      pass3Groups.push(merged);
+    } else {
+      pass3Groups.push(p3.memberGroups[0]);
+    }
+  });
+
+  // ============================================================
+  // VÒNG 4 (V3 cũ): Đơn OUT + Người tạo + Depot + Hãng tàu + Số xe (trong 24h)
+  //                  KHÁC Booking & KHÁC Container
+  // Tình huống: Lấy rỗng OUT đổi hoàn toàn cả Booking lẫn vỏ cont
+  // ============================================================
+  const pass4Map = new Map();
+  const finalizedGroups = [];
+
+  pass3Groups.forEach(candidate => {
+    const latest  = candidate.records[0];
+    const dir     = candidate.loaiDonHang;
+    const creator = latest._cleanCreator;
+    const dep     = latest._cleanDepot || (candidate.depot  || "").toString().trim().toUpperCase();
+    const line    = latest._cleanLine  || (candidate.hangTau || "").toString().trim().toUpperCase();
+    const truck   = latest._cleanTruck;
 
     const isValidCreator = creator && creator !== "-" && creator !== "UNKNOWN" && creator !== "UNDEFINED";
-    const isOutDirection = dir === "OUT";
+    const isOut = dir === "OUT";
 
-    if (!isOutDirection || !isValidCreator || !depot || depot === "-" || !line || line === "-" || !truck) {
+    if (!isOut || !isValidCreator || !dep || dep === "-" || !line || line === "-" || !truck) {
       finalizedGroups.push(candidate);
       return;
     }
 
-    const pass3Key = `OUT__${creator}__${depot}__${line}__${truck}`;
+    const p4Key = `OUT__${creator}__${dep}__${line}__${truck}`;
 
-    if (!pass3Map.has(pass3Key)) {
-      pass3Map.set(pass3Key, {
-        pass3Key,
-        creator,
-        depot,
-        line,
-        truck,
-        memberGroups: []
-      });
+    if (!pass4Map.has(p4Key)) {
+      pass4Map.set(p4Key, { p4Key, creator, depot: dep, line, truck, memberGroups: [] });
     }
-
-    pass3Map.get(pass3Key).memberGroups.push(candidate);
+    pass4Map.get(p4Key).memberGroups.push(candidate);
   });
 
-  pass3Map.forEach(p3 => {
-    if (p3.memberGroups.length <= 1) {
-      finalizedGroups.push(p3.memberGroups[0]);
+  pass4Map.forEach(p4 => {
+    if (p4.memberGroups.length <= 1) {
+      finalizedGroups.push(p4.memberGroups[0]);
       return;
     }
 
-    const sortedMembers = [...p3.memberGroups].sort((a, b) => {
-      return a.records[a.records.length - 1]._ts - b.records[b.records.length - 1]._ts;
-    });
+    const sortedMembers = [...p4.memberGroups].sort((a, b) =>
+      a.records[a.records.length - 1]._ts - b.records[b.records.length - 1]._ts
+    );
 
     const clusters = [];
     sortedMembers.forEach(curr => {
-      const currBooking = curr.soBooking || "";
+      const currBk   = curr.soBooking   || "";
       const currCont = curr.soContainer || "";
 
       let matchedCluster = null;
       for (let i = clusters.length - 1; i >= 0; i--) {
-        const c = clusters[i];
-        const last = c[c.length - 1];
-        const lastBooking = last.soBooking || "";
+        const cl   = clusters[i];
+        const last = cl[cl.length - 1];
+        const lastBk   = last.soBooking   || "";
         const lastCont = last.soContainer || "";
 
-        const hasValidBk = currBooking && currBooking !== "-" && lastBooking && lastBooking !== "-";
-        const hasValidCt = currCont && currCont !== "-" && lastCont && lastCont !== "-";
-        const isDiffBk = currBooking !== lastBooking;
-        const isDiffCt = currCont !== lastCont;
+        const hasValidBk   = currBk   && currBk   !== "-" && lastBk   && lastBk   !== "-";
+        const hasValidCont = currCont && currCont !== "-" && lastCont && lastCont !== "-";
+        const isDiffBk     = currBk   !== lastBk;
+        const isDiffCont   = currCont !== lastCont;
 
-        const isBookingDuplicateInCluster = c.some(m => (m.soBooking || "") === currBooking);
-        const isLastFailed = isCancelledOrFailedRecord(last.records[0]);
-        const timeDiff = Math.abs(curr.records[curr.records.length - 1]._ts - last.records[0]._ts);
-        const isWithin24h = timeDiff <= 24 * 3600 * 1000;
+        const isBookingDuplicateInCluster = cl.some(m => (m.soBooking || "") === currBk);
+        const isLastFailed  = isCancelledOrFailedRecord(last.records[0]);
+        const timeDiff      = Math.abs(curr.records[curr.records.length - 1]._ts - last.records[0]._ts);
+        const isWithin24h   = timeDiff <= 24 * 3600 * 1000;
 
-        if (hasValidBk && hasValidCt && isDiffBk && isDiffCt && !isBookingDuplicateInCluster && isLastFailed && isWithin24h) {
-          matchedCluster = c;
+        if (hasValidBk && hasValidCont && isDiffBk && isDiffCont && !isBookingDuplicateInCluster && isLastFailed && isWithin24h) {
+          matchedCluster = cl;
           break;
         }
       }
@@ -341,42 +388,17 @@ function analyzeAndGroupOrders(records) {
       }
     });
 
-    clusters.forEach(c => {
-      if (c.length >= 2) {
-        const combinedRecords = [];
-        const seenBookings = new Set();
-        const seenConts = new Set();
-
-        c.forEach(mg => {
-          mg.records.forEach(r => {
-            combinedRecords.push(r);
-            if (r._cleanBooking) seenBookings.add(r._cleanBooking);
-            if (r._cleanCont) seenConts.add(r._cleanCont);
-          });
-          if (mg.allBookings) mg.allBookings.forEach(b => seenBookings.add(b));
-          if (mg.allConts) mg.allConts.forEach(c => seenConts.add(c));
-        });
-
-        combinedRecords.sort((a, b) => b._ts - a._ts);
-
-        const latestRecord = combinedRecords[0];
-        const latestBooking = latestRecord._cleanBooking || "-";
-        const latestCont = latestRecord._cleanCont || "-";
-
-        finalizedGroups.push({
-          groupKey: `PASS3__${p3.pass3Key}__${latestBooking}__${latestCont}`,
-          soBooking: latestBooking,
-          soContainer: latestCont,
+    clusters.forEach(cl => {
+      if (cl.length >= 2) {
+        const merged = mergeGroups(cl, `PASS4__${p4.p4Key}__${cl[cl.length-1].soBooking}__${cl[cl.length-1].soContainer}`, {
           loaiDonHang: "OUT",
-          depot: p3.depot,
-          hangTau: p3.line,
-          records: combinedRecords,
-          matchType: "OUT_REPLACED",
-          allBookings: Array.from(seenBookings),
-          allConts: Array.from(seenConts)
+          depot:   p4.depot,
+          hangTau: p4.line,
+          matchType: "OUT_REPLACED"
         });
+        finalizedGroups.push(merged);
       } else {
-        finalizedGroups.push(c[0]);
+        finalizedGroups.push(cl[0]);
       }
     });
   });
