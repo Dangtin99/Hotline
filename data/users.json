@@ -9,6 +9,9 @@
     "assignedDepots": [
       "ALL"
     ],
+    "allowedScreens": [
+      "ALL"
+    ],
     "isActive": true,
     "createdAt": "2026-10-03 02:56:19",
     "updatedAt": "2026-10-19 02:12:12"
@@ -27,9 +30,13 @@
       "ETD",
       "SCD"
     ],
+    "allowedScreens": [
+      "dashboard",
+      "data_table"
+    ],
     "isActive": true,
     "createdAt": "2026-10-03 02:56:19",
-    "updatedAt": "2026-10-14 08:12:41"
+    "updatedAt": "2026-10-24 05:00:27"
   },
   {
     "id": "3",
@@ -40,6 +47,10 @@
     "role": "user",
     "assignedDepots": [
       "ALL"
+    ],
+    "allowedScreens": [
+      "dashboard",
+      "data_table"
     ],
     "isActive": true,
     "createdAt": "2026-10-03 02:56:19",
@@ -55,6 +66,10 @@
     "assignedDepots": [
       "ALL"
     ],
+    "allowedScreens": [
+      "dashboard",
+      "data_table"
+    ],
     "isActive": true,
     "createdAt": "2026-10-03 02:56:19",
     "updatedAt": "2026-10-03 02:56:42"
@@ -68,6 +83,10 @@
     "role": "user",
     "assignedDepots": [
       "ALL"
+    ],
+    "allowedScreens": [
+      "dashboard",
+      "data_table"
     ],
     "isActive": true,
     "createdAt": "2026-10-12 13:17:39",
@@ -83,6 +102,10 @@
     "assignedDepots": [
       "ALL"
     ],
+    "allowedScreens": [
+      "dashboard",
+      "data_table"
+    ],
     "isActive": true,
     "createdAt": "2026-10-12 13:17:39",
     "updatedAt": "2026-10-12 13:17:39"
@@ -97,6 +120,10 @@
     "assignedDepots": [
       "ALL"
     ],
+    "allowedScreens": [
+      "dashboard",
+      "data_table"
+    ],
     "isActive": true,
     "createdAt": "2026-10-12 13:17:39",
     "updatedAt": "2026-10-12 13:17:39"
@@ -109,6 +136,9 @@
     "salt": "926b8c9ff1f06a2ff0ca22e7d32e6a21",
     "role": "admin",
     "assignedDepots": [
+      "ALL"
+    ],
+    "allowedScreens": [
       "ALL"
     ],
     "isActive": true,

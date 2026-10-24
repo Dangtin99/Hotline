@@ -971,6 +971,7 @@ async function initTursoUsersTable() {
         salt TEXT NOT NULL,
         role TEXT NOT NULL DEFAULT 'user',
         assigned_depots TEXT NOT NULL DEFAULT 'ALL',
+        allowed_screens TEXT NOT NULL DEFAULT 'dashboard,data_table',
         is_active INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
@@ -978,6 +979,9 @@ async function initTursoUsersTable() {
     `);
     try {
       await client.execute("ALTER TABLE users ADD COLUMN assigned_depots TEXT NOT NULL DEFAULT 'ALL';");
+    } catch (e) {}
+    try {
+      await client.execute("ALTER TABLE users ADD COLUMN allowed_screens TEXT NOT NULL DEFAULT 'dashboard,data_table';");
     } catch (e) {}
   } catch (e) {
     console.warn("[Turso] Không thể khởi tạo bảng users:", e.message);
@@ -1000,6 +1004,7 @@ async function getAllUsersFromTurso() {
       salt: r.salt,
       role: r.role,
       assignedDepots: String(r.assigned_depots || "ALL").split(",").map(d => d.trim().toUpperCase()).filter(Boolean),
+      allowedScreens: String(r.allowed_screens || (r.role === "admin" ? "ALL" : "dashboard,data_table")).split(",").map(s => s.trim()).filter(Boolean),
       isActive: Number(r.is_active) === 1,
       createdAt: r.created_at,
       updatedAt: r.updated_at
@@ -1021,16 +1026,21 @@ async function syncUserToTurso(user) {
       ? user.assignedDepots.join(",")
       : String(user.assignedDepots || "ALL");
 
+    const screensStr = Array.isArray(user.allowedScreens)
+      ? user.allowedScreens.join(",")
+      : String(user.allowedScreens || (user.role === "admin" ? "ALL" : "dashboard,data_table"));
+
     await client.execute({
       sql: `
-        INSERT INTO users (full_name, username, password_hash, salt, role, assigned_depots, is_active, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO users (full_name, username, password_hash, salt, role, assigned_depots, allowed_screens, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(username) DO UPDATE SET
           full_name = excluded.full_name,
           password_hash = excluded.password_hash,
           salt = excluded.salt,
           role = excluded.role,
           assigned_depots = excluded.assigned_depots,
+          allowed_screens = excluded.allowed_screens,
           is_active = excluded.is_active,
           updated_at = excluded.updated_at;
       `,
@@ -1041,6 +1051,7 @@ async function syncUserToTurso(user) {
         user.salt,
         user.role,
         depotsStr,
+        screensStr,
         user.isActive ? 1 : 0,
         user.createdAt || new Date().toISOString().replace("T", " ").substring(0, 19),
         user.updatedAt || new Date().toISOString().replace("T", " ").substring(0, 19)

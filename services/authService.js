@@ -85,6 +85,7 @@ try {
       salt TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'user',
       assigned_depots TEXT NOT NULL DEFAULT 'ALL',
+      allowed_screens TEXT NOT NULL DEFAULT 'dashboard,data_table',
       is_active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -93,8 +94,33 @@ try {
   try {
     sqliteEngine.exec("ALTER TABLE users ADD COLUMN assigned_depots TEXT NOT NULL DEFAULT 'ALL';");
   } catch (e) {}
+  try {
+    sqliteEngine.exec("ALTER TABLE users ADD COLUMN allowed_screens TEXT NOT NULL DEFAULT 'dashboard,data_table';");
+  } catch (e) {}
 } catch (e) {
   sqliteEngine = null;
+}
+
+// Danh sách các màn hình trong hệ thống
+const ALL_SYSTEM_SCREENS = ["dashboard", "data_table", "verification", "rebooking", "call_management", "upload"];
+
+// Hàm chuẩn hóa danh sách Màn hình được phép truy cập
+function parseScreens(val, role = "user") {
+  if (role === "admin") {
+    return ["ALL"];
+  }
+  let screens = [];
+  if (Array.isArray(val)) {
+    screens = val.map(s => String(s).trim().toLowerCase()).filter(Boolean);
+  } else if (typeof val === "string") {
+    screens = val.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+  }
+  if (screens.includes("all")) {
+    return ["ALL"];
+  }
+  // Giữ lại các screen hợp lệ
+  const validScreens = screens.filter(s => ALL_SYSTEM_SCREENS.includes(s));
+  return validScreens.length > 0 ? validScreens : ["dashboard", "data_table"];
 }
 
 // Hàm chuẩn hóa danh sách Depot trực thuộc
@@ -138,7 +164,7 @@ function validatePasswordStrength(password) {
   }
 }
 
-// 8 Tài khoản chuẩn theo yêu cầu của hệ thống kèm phân quyền Depot trực thuộc
+// 8 Tài khoản chuẩn theo yêu cầu của hệ thống kèm phân quyền Depot trực thuộc & Màn hình
 const SEED_ACCOUNTS = [
   {
     fullName: "ADMIN",
@@ -146,6 +172,7 @@ const SEED_ACCOUNTS = [
     password: "123456789@",
     role: "admin",
     assignedDepots: ["ALL"],
+    allowedScreens: ["ALL"],
     isActive: 1
   },
   {
@@ -154,6 +181,7 @@ const SEED_ACCOUNTS = [
     password: "123456789@",
     role: "admin",
     assignedDepots: ["ALL"],
+    allowedScreens: ["ALL"],
     isActive: 1
   },
   {
@@ -162,6 +190,7 @@ const SEED_ACCOUNTS = [
     password: "123456789@",
     role: "user",
     assignedDepots: ["BSD", "SLD"],
+    allowedScreens: ["dashboard", "data_table"],
     isActive: 1
   },
   {
@@ -170,6 +199,7 @@ const SEED_ACCOUNTS = [
     password: "123456789@",
     role: "user",
     assignedDepots: ["THT", "PMCM"],
+    allowedScreens: ["dashboard", "data_table"],
     isActive: 1
   },
   {
@@ -178,6 +208,7 @@ const SEED_ACCOUNTS = [
     password: "123456789@",
     role: "user",
     assignedDepots: ["AIC", "ETD"],
+    allowedScreens: ["dashboard", "data_table"],
     isActive: 1
   },
   {
@@ -186,6 +217,7 @@ const SEED_ACCOUNTS = [
     password: "123456789@",
     role: "user",
     assignedDepots: ["SCD", "GKP"],
+    allowedScreens: ["dashboard", "data_table"],
     isActive: 1
   },
   {
@@ -194,6 +226,7 @@ const SEED_ACCOUNTS = [
     password: "123456789@",
     role: "user",
     assignedDepots: ["EPD"],
+    allowedScreens: ["dashboard", "data_table"],
     isActive: 1
   },
   {
@@ -202,6 +235,7 @@ const SEED_ACCOUNTS = [
     password: "123456789@",
     role: "user",
     assignedDepots: ["ALL"],
+    allowedScreens: ["dashboard", "data_table"],
     isActive: 1
   }
 ];
@@ -231,6 +265,7 @@ function seedDefaultUsers() {
       const salt = crypto.randomBytes(16).toString("hex");
       const passwordHash = hashPassword(acc.password, salt);
       const depots = parseDepots(acc.assignedDepots);
+      const screens = parseScreens(acc.allowedScreens, acc.role);
       const newUser = {
         id: String(Date.now() + Math.floor(Math.random() * 1000)),
         fullName: acc.fullName,
@@ -239,6 +274,7 @@ function seedDefaultUsers() {
         salt,
         role: acc.role,
         assignedDepots: depots,
+        allowedScreens: screens,
         isActive: 1,
         createdAt: now,
         updatedAt: now
@@ -248,15 +284,16 @@ function seedDefaultUsers() {
       if (sqliteEngine) {
         try {
           const stmt = sqliteEngine.prepare(`
-            INSERT INTO users (full_name, username, password_hash, salt, role, assigned_depots, is_active, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO users (full_name, username, password_hash, salt, role, assigned_depots, allowed_screens, is_active, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(username) DO UPDATE SET
               full_name = excluded.full_name,
               role = excluded.role,
               assigned_depots = excluded.assigned_depots,
+              allowed_screens = excluded.allowed_screens,
               updated_at = excluded.updated_at;
           `);
-          stmt.run(acc.fullName, acc.username, passwordHash, salt, acc.role, depots.join(","), 1, now, now);
+          stmt.run(acc.fullName, acc.username, passwordHash, salt, acc.role, depots.join(","), screens.join(","), 1, now, now);
         } catch (err) {
           console.warn("Lỗi seed SQLite user:", err.message);
         }
@@ -304,6 +341,7 @@ function loadUsers() {
             salt: r.salt,
             role: r.role,
             assignedDepots: parseDepots(r.assigned_depots || (fallbackSeed ? fallbackSeed.assignedDepots : ["ALL"])),
+            allowedScreens: parseScreens(r.allowed_screens || (fallbackSeed ? fallbackSeed.allowedScreens : (r.role === "admin" ? "ALL" : "dashboard,data_table")), r.role),
             isActive: r.is_active === 1,
             createdAt: r.created_at,
             updatedAt: r.updated_at
@@ -327,7 +365,8 @@ function loadUsers() {
           const fallbackSeed = SEED_ACCOUNTS.find(s => s.username.toLowerCase() === String(u.username).toLowerCase());
           return {
             ...u,
-            assignedDepots: parseDepots(u.assignedDepots || (fallbackSeed ? fallbackSeed.assignedDepots : ["ALL"]))
+            assignedDepots: parseDepots(u.assignedDepots || (fallbackSeed ? fallbackSeed.assignedDepots : ["ALL"])),
+            allowedScreens: parseScreens(u.allowedScreens || (fallbackSeed ? fallbackSeed.allowedScreens : (u.role === "admin" ? "ALL" : "dashboard,data_table")), u.role)
           };
         });
         memoryUsersCache = users;
@@ -349,6 +388,7 @@ function syncUserToStorage(user) {
   const now = new Date().toISOString().replace("T", " ").substring(0, 19);
   user.updatedAt = now;
   user.assignedDepots = parseDepots(user.assignedDepots);
+  user.allowedScreens = parseScreens(user.allowedScreens, user.role);
 
   // 1. Cập nhật Memory Cache tức thời
   if (memoryUsersCache && Array.isArray(memoryUsersCache)) {
@@ -365,6 +405,7 @@ function syncUserToStorage(user) {
           salt = ?,
           role = ?,
           assigned_depots = ?,
+          allowed_screens = ?,
           is_active = ?,
           updated_at = ?
         WHERE username = ?
@@ -375,6 +416,7 @@ function syncUserToStorage(user) {
         user.salt,
         user.role,
         user.assignedDepots.join(","),
+        user.allowedScreens.join(","),
         user.isActive ? 1 : 0,
         now,
         user.username
@@ -438,6 +480,7 @@ function generateToken(user) {
       role: user.role,
       roleLabel: user.role === "admin" ? "Quản trị viên" : "Người dùng",
       assignedDepots: parseDepots(user.assignedDepots),
+      allowedScreens: parseScreens(user.allowedScreens, user.role),
       exp: Date.now() + 7 * 24 * 60 * 60 * 1000 // 7 ngày
     })
   ).toString("base64url");
@@ -495,7 +538,8 @@ function verifyToken(token) {
       fullName: currentUser.fullName,
       role: currentUser.role,
       roleLabel: currentUser.role === "admin" ? "Quản trị viên" : "Người dùng",
-      assignedDepots: parseDepots(currentUser.assignedDepots)
+      assignedDepots: parseDepots(currentUser.assignedDepots),
+      allowedScreens: parseScreens(currentUser.allowedScreens, currentUser.role)
     };
   } catch (e) {
     return null;
@@ -537,7 +581,8 @@ function authenticate(username, password) {
         fullName: user.fullName,
         role: user.role,
         roleLabel: user.role === "admin" ? "Quản trị viên" : "Người dùng",
-        assignedDepots: parseDepots(user.assignedDepots)
+        assignedDepots: parseDepots(user.assignedDepots),
+        allowedScreens: parseScreens(user.allowedScreens, user.role)
       }
     };
   }
@@ -565,7 +610,8 @@ function authenticate(username, password) {
         fullName: user.fullName,
         role: user.role,
         roleLabel: user.role === "admin" ? "Quản trị viên" : "Người dùng",
-        assignedDepots: parseDepots(user.assignedDepots)
+        assignedDepots: parseDepots(user.assignedDepots),
+        allowedScreens: parseScreens(user.allowedScreens, user.role)
       }
     };
   }
@@ -583,6 +629,7 @@ function getAllUsers() {
     role: u.role,
     roleLabel: u.role === "admin" ? "Quản trị viên" : "Người dùng",
     assignedDepots: parseDepots(u.assignedDepots),
+    allowedScreens: parseScreens(u.allowedScreens, u.role),
     isActive: u.isActive,
     createdAt: u.createdAt,
     updatedAt: u.updatedAt
@@ -609,6 +656,32 @@ function updateUserDepots(usernameOrId, depots) {
     fullName: user.fullName,
     role: user.role,
     assignedDepots: user.assignedDepots,
+    allowedScreens: user.allowedScreens,
+    isActive: user.isActive
+  };
+}
+
+// Phân quyền danh sách Màn hình được phép truy cập (Dành cho Admin)
+function updateUserScreens(usernameOrId, screens) {
+  const users = loadUsers();
+  const user = users.find(
+    u => String(u.username).toLowerCase() === String(usernameOrId).toLowerCase() || String(u.id) === String(usernameOrId)
+  );
+
+  if (!user) {
+    throw new Error(`Không tìm thấy người dùng: ${usernameOrId}`);
+  }
+
+  user.allowedScreens = parseScreens(screens, user.role);
+  syncUserToStorage(user);
+
+  return {
+    id: user.id,
+    username: user.username,
+    fullName: user.fullName,
+    role: user.role,
+    assignedDepots: user.assignedDepots,
+    allowedScreens: user.allowedScreens,
     isActive: user.isActive
   };
 }
@@ -698,12 +771,15 @@ module.exports = {
   verifyToken,
   getAllUsers,
   updateUserDepots,
+  updateUserScreens,
   setUserActive,
   resetPassword,
   changePassword,
   seedDefaultUsers,
   hashPassword,
   parseDepots,
+  parseScreens,
+  ALL_SYSTEM_SCREENS,
   revokeToken,      // Fix #13
   isTokenRevoked    // Fix #13
 };

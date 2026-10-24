@@ -87,6 +87,7 @@ const {
   verifyToken,
   getAllUsers,
   updateUserDepots,
+  updateUserScreens,
   setUserActive,
   resetPassword,
   changePassword,
@@ -549,6 +550,24 @@ app.post("/api/admin/users/:id/depots", adminRequired, (req, res) => {
     return res.json({
       success: true,
       message: `Đã cập nhật phân quyền Depot cho tài khoản ${updated.username} thành công.`,
+      user: updated
+    });
+  } catch (err) {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+/**
+ * API: Admin phân quyền danh sách Màn hình được phép truy cập cho user
+ */
+app.post("/api/admin/users/:id/screens", adminRequired, (req, res) => {
+  try {
+    const { id } = req.params;
+    const { screens } = req.body || {};
+    const updated = updateUserScreens(id, screens);
+    return res.json({
+      success: true,
+      message: `Đã cập nhật phân quyền màn hình cho tài khoản ${updated.username} thành công.`,
       user: updated
     });
   } catch (err) {

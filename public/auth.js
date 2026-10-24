@@ -1,4 +1,90 @@
-// auth.js - Quản lý phiên đăng nhập, phân quyền & bảo vệ toàn diện hệ thống Logistics Cancellation Analytics
+// Danh sách định nghĩa 6 màn hình chuẩn của hệ thống Logistics Analytics
+const SYSTEM_SCREENS_CONFIG = [
+  {
+    id: "dashboard",
+    name: "Bảng Điều Khiển",
+    path: "index.html",
+    navId: "navDashboard",
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>`,
+    desc: "Tổng quan KPI, biểu đồ sản lượng hủy & phân bổ lỗi"
+  },
+  {
+    id: "data_table",
+    name: "Dữ Liệu Chi Tiết",
+    path: "data-table.html",
+    navId: "navDataTable",
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`,
+    desc: "Bảng chi tiết 21 cột, phân loại hủy & trạng thái thanh toán"
+  },
+  {
+    id: "verification",
+    name: "Dữ Liệu Check Đơn",
+    path: "verification-table.html",
+    navId: "navVerificationTable",
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>`,
+    desc: "Bảng đối soát đơn hệ thống Smartlog & kiểm tra lệnh"
+  },
+  {
+    id: "rebooking",
+    name: "Báo Cáo Đặt Lại / Mới",
+    path: "new-feature.html",
+    navId: "navNewFeature",
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>`,
+    desc: "Thống kê & phân tích tỷ lệ khách đặt lại đơn hủy"
+  },
+  {
+    id: "call_management",
+    name: "Quản Lý Gọi Điện",
+    path: "call-management.html",
+    navId: "navCallManagement",
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>`,
+    desc: "Theo dõi cuộc gọi CSKH & xử lý lý do hủy đơn"
+  },
+  {
+    id: "upload",
+    name: "Đăng Tải Dữ Liệu",
+    path: "upload.html",
+    navId: "navUpload",
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>`,
+    desc: "Nạp file Excel/CSV báo cáo hủy & đối soát"
+  }
+];
+
+// Hàm xác định xem User có quyền truy cập vào màn hình screenId hay không
+function userHasScreenAccess(user, screenId) {
+  if (!user) return false;
+  if (user.role === "admin") return true;
+  const screens = Array.isArray(user.allowedScreens)
+    ? user.allowedScreens.map(s => String(s).trim().toLowerCase())
+    : (user.allowedScreens ? String(user.allowedScreens).split(",").map(s => s.trim().toLowerCase()) : ["dashboard", "data_table"]);
+  if (screens.includes("all")) return true;
+  return screens.includes(String(screenId).trim().toLowerCase());
+}
+
+// Hàm xác định screenId của trang hiện tại theo đường dẫn URL
+function getCurrentScreenId() {
+  const path = window.location.pathname.toLowerCase();
+  for (const item of SYSTEM_SCREENS_CONFIG) {
+    if (path.endsWith(item.path.toLowerCase())) {
+      return item.id;
+    }
+  }
+  // Mặc định trang chủ là dashboard
+  if (path.endsWith("/") || path.endsWith("/index") || path.endsWith("/index.html") || !path.includes(".html")) {
+    return "dashboard";
+  }
+  return null;
+}
+
+// Hàm tìm màn hình hợp lệ đầu tiên mà user được phép truy cập
+function getFirstAllowedScreenPath(user) {
+  for (const item of SYSTEM_SCREENS_CONFIG) {
+    if (userHasScreenAccess(user, item.id)) {
+      return item.path;
+    }
+  }
+  return "index.html";
+}
 
 (function() {
   const token = localStorage.getItem("gpg_auth_token");
@@ -23,13 +109,14 @@
       document.documentElement.classList.add("sidebar-collapsed");
     }
     const userStr = localStorage.getItem("gpg_auth_user");
-    if (userStr) {
+    if (userStr && !isLoginPage) {
       const u = JSON.parse(userStr);
       if (u && u.role !== "admin") {
         document.documentElement.classList.add("non-admin-user");
-        const path = window.location.pathname.toLowerCase();
-        if (path.endsWith("upload.html") || path.endsWith("verification-table.html") || path.endsWith("new-feature.html") || path.endsWith("call-management.html")) {
-          window.location.replace("index.html");
+        const currentScreenId = getCurrentScreenId();
+        if (currentScreenId && !userHasScreenAccess(u, currentScreenId)) {
+          const redirectPath = getFirstAllowedScreenPath(u);
+          window.location.replace(redirectPath);
           return;
         }
       }
@@ -118,24 +205,60 @@ async function initAuthProfile() {
   }
 }
 
-// Phân quyền giao diện người dùng theo Role (Chỉ Admin mới thấy tab Check đơn & Đăng tải dữ liệu)
+// Phân quyền giao diện người dùng theo Danh sách Màn hình (allowedScreens) và Role
 function applyRolePermissions(user) {
   if (!user) return;
   const isAdmin = user.role === "admin";
   if (!isAdmin) {
     document.documentElement.classList.add("non-admin-user");
-    const targets = document.querySelectorAll("#navVerificationTable, #navUpload, #sidebarHeadingUpload, [data-admin-only='true']");
-    targets.forEach(el => el.style.setProperty("display", "none", "important"));
 
-    const path = window.location.pathname.toLowerCase();
-    if (path.endsWith("upload.html") || path.endsWith("verification-table.html") || path.endsWith("new-feature.html") || path.endsWith("call-management.html")) {
-      alert("Chức năng này chỉ dành riêng cho tài khoản Quản trị viên (admin). Bạn sẽ được chuyển hướng về Bảng điều khiển.");
-      window.location.replace("index.html");
+    // 1. Duyệt qua từng màn hình được định nghĩa để ẩn/hiện mục menu tương ứng
+    SYSTEM_SCREENS_CONFIG.forEach(screen => {
+      const navEl = document.getElementById(screen.navId);
+      if (navEl) {
+        const hasAccess = userHasScreenAccess(user, screen.id);
+        if (hasAccess) {
+          navEl.style.removeProperty("display");
+        } else {
+          navEl.style.setProperty("display", "none", "important");
+        }
+      }
+    });
+
+    // 2. Ẩn tiêu đề Quản trị tải lên nếu không có quyền màn hình upload
+    const uploadHeading = document.getElementById("sidebarHeadingUpload");
+    if (uploadHeading) {
+      if (userHasScreenAccess(user, "upload")) {
+        uploadHeading.style.removeProperty("display");
+      } else {
+        uploadHeading.style.setProperty("display", "none", "important");
+      }
+    }
+
+    // 3. Ẩn các phần tử có thuộc tính data-admin-only="true"
+    const adminOnlyEls = document.querySelectorAll("[data-admin-only='true']:not(#navDashboard):not(#navDataTable):not(#navVerificationTable):not(#navNewFeature):not(#navCallManagement):not(#navUpload):not(#sidebarHeadingUpload)");
+    adminOnlyEls.forEach(el => el.style.setProperty("display", "none", "important"));
+
+    // 4. Kiểm tra quyền truy cập vào màn hình hiện tại
+    const currentScreenId = getCurrentScreenId();
+    if (currentScreenId && !userHasScreenAccess(user, currentScreenId)) {
+      const allowedTarget = SYSTEM_SCREENS_CONFIG.find(s => s.id === currentScreenId);
+      const screenName = allowedTarget ? allowedTarget.name : "này";
+      const redirectPath = getFirstAllowedScreenPath(user);
+      alert(`Bạn không có quyền truy cập vào màn hình "${screenName}". Hệ thống sẽ tự động chuyển hướng về trang hợp lệ.`);
+      window.location.replace(redirectPath);
     }
   } else {
     document.documentElement.classList.remove("non-admin-user");
-    const targets = document.querySelectorAll("#navVerificationTable, #navUpload, #sidebarHeadingUpload, [data-admin-only='true']");
-    targets.forEach(el => el.style.removeProperty("display"));
+    // Đối với Admin: Hiển thị đầy đủ tất cả các màn hình
+    SYSTEM_SCREENS_CONFIG.forEach(screen => {
+      const navEl = document.getElementById(screen.navId);
+      if (navEl) navEl.style.removeProperty("display");
+    });
+    const uploadHeading = document.getElementById("sidebarHeadingUpload");
+    if (uploadHeading) uploadHeading.style.removeProperty("display");
+    const adminOnlyEls = document.querySelectorAll("[data-admin-only='true']");
+    adminOnlyEls.forEach(el => el.style.removeProperty("display"));
   }
 }
 
@@ -280,6 +403,7 @@ function ensureAdminUserModal() {
                   <th>Họ và Tên</th>
                   <th>Tài Khoản</th>
                   <th>Quyền Hạn</th>
+                  <th style="text-align: center;">Màn Hình Được Cấp</th>
                   <th style="text-align: center;">Trạng Thái (isActive)</th>
                   <th style="text-align: right; width: 230px;">Hành Động</th>
                 </tr>
@@ -294,6 +418,7 @@ function ensureAdminUserModal() {
         <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; padding: 14px 24px;">
           <div class="modal-footer-count" id="adminUsersCountLabel">Tổng số: 0 tài khoản</div>
           <div style="display: flex; gap: 10px; align-items: center;">
+            <button type="button" class="btn btn-primary btn-sm" id="btnAdminFooterScreens" style="font-weight: 700; background: #059669; color: #ffffff; padding: 6px 14px; border-radius: 6px; border: none; cursor: pointer;" title="Chọn user bằng tickbox và bấm để phân quyền màn hình">Phân Quyền Màn Hình</button>
             <button type="button" class="btn btn-primary btn-sm" id="btnAdminFooterDepot" style="font-weight: 700; background: #1d4ed8; color: #ffffff; padding: 6px 14px; border-radius: 6px; border: none; cursor: pointer;" title="Chọn user bằng tickbox và bấm để phân quyền Depot">Phân Quyền Depot</button>
             <button type="button" class="btn btn-secondary btn-sm" id="closeAdminUserModalFooterBtn">Đóng</button>
           </div>
@@ -323,6 +448,38 @@ function ensureAdminUserModal() {
       const isChecked = selectAllCb.checked;
       const rowCbs = modal.querySelectorAll(".admin-user-row-cb");
       rowCbs.forEach(cb => { cb.checked = isChecked; });
+    };
+  }
+
+  // Nút Phân Quyền Màn Hình ở dưới chân trang
+  const btnFooterScreens = modal.querySelector("#btnAdminFooterScreens");
+  if (btnFooterScreens) {
+    btnFooterScreens.onclick = () => {
+      const selectedCbs = Array.from(modal.querySelectorAll(".admin-user-row-cb:checked"));
+      const notice = document.getElementById("adminUserNotice");
+      if (selectedCbs.length === 0) {
+        if (notice) {
+          notice.className = "auth-notice-box error";
+          notice.textContent = "Vui lòng tick chọn ít nhất một người dùng để thực hiện phân quyền màn hình.";
+        }
+        alert("Vui lòng tick chọn ít nhất một người dùng để thực hiện phân quyền màn hình.");
+        return;
+      }
+
+      const selectedUsers = selectedCbs.map(cb => {
+        let screens = ["dashboard", "data_table"];
+        try {
+          screens = JSON.parse(cb.getAttribute("data-screens") || '["dashboard", "data_table"]');
+        } catch (e) {}
+        return {
+          username: cb.value,
+          fullName: cb.getAttribute("data-fullname") || cb.value,
+          role: cb.getAttribute("data-role") || "user",
+          screens: screens
+        };
+      });
+
+      openAdminScreensModalForUsers(selectedUsers);
     };
   }
 
@@ -381,7 +538,7 @@ async function loadAdminUsersList() {
     selectAllCb.indeterminate = false;
   }
 
-  tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: var(--text-muted);">Đang tải dữ liệu...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 20px; color: var(--text-muted);">Đang tải dữ liệu...</td></tr>`;
 
   try {
     const res = await fetch("/api/admin/users");
@@ -410,6 +567,19 @@ async function loadAdminUsersList() {
       const userDepots = Array.isArray(u.assignedDepots) ? u.assignedDepots : (u.assignedDepots ? String(u.assignedDepots).split(",").map(d => d.trim()).filter(Boolean) : ["ALL"]);
       const depotsJson = JSON.stringify(userDepots).replace(/"/g, '&quot;');
 
+      // Chuẩn bị dữ liệu danh sách Màn hình để lưu vào data attribute
+      const userScreens = Array.isArray(u.allowedScreens) ? u.allowedScreens : (u.allowedScreens ? String(u.allowedScreens).split(",").map(s => s.trim().toLowerCase()).filter(Boolean) : (u.role === "admin" ? ["ALL"] : ["dashboard", "data_table"]));
+      const screensJson = JSON.stringify(userScreens).replace(/"/g, '&quot;');
+
+      // Badge hiển thị màn hình
+      let screensBadge = "";
+      if (u.role === "admin" || userScreens.includes("all")) {
+        screensBadge = `<span style="display: inline-block; background: #ecfdf5; color: #047857; font-weight: 700; font-size: 11.5px; padding: 2px 8px; border-radius: 9999px; border: 1px solid #a7f3d0;">Tất cả (6/6)</span>`;
+      } else {
+        const count = userScreens.length;
+        screensBadge = `<span style="display: inline-block; background: #eff6ff; color: #1d4ed8; font-weight: 600; font-size: 11.5px; padding: 2px 8px; border-radius: 9999px; border: 1px solid #bfdbfe;" title="${userScreens.join(', ')}">${count}/6 màn hình</span>`;
+      }
+
       // Nút bật/tắt isActive
       let toggleBtnHtml = "";
       if (isCurrentLoggedIn) {
@@ -425,12 +595,13 @@ async function loadAdminUsersList() {
       return `
         <tr>
           <td style="text-align: center;">
-            <input type="checkbox" class="admin-user-row-cb" value="${u.username}" data-fullname="${u.fullName}" data-depots="${depotsJson}" style="cursor: pointer; width: 15px; height: 15px;">
+            <input type="checkbox" class="admin-user-row-cb" value="${u.username}" data-fullname="${u.fullName}" data-role="${u.role}" data-depots="${depotsJson}" data-screens="${screensJson}" style="cursor: pointer; width: 15px; height: 15px;">
           </td>
           <td style="text-align: center; font-weight: 600; color: #64748b;">${idx + 1}</td>
           <td><strong>${u.fullName}</strong></td>
           <td><code style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-weight: 600;">${u.username}</code></td>
           <td>${roleBadge}</td>
+          <td style="text-align: center;">${screensBadge}</td>
           <td style="text-align: center;">${statusBadge}</td>
           <td style="text-align: right;">
             <div style="display: inline-flex; gap: 6px; align-items: center;">
@@ -454,7 +625,7 @@ async function loadAdminUsersList() {
       };
     });
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: #ef4444;">Lỗi: ${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 20px; color: #ef4444;">Lỗi: ${err.message}</td></tr>`;
   }
 }
 
@@ -749,11 +920,239 @@ async function handleSaveUsersDepots(selectedUsers) {
   }
 }
 
+// =========================================================================
+// MODAL PHÂN QUYỀN MÀN HÌNH (DÀNH CHO ADMIN)
+// =========================================================================
+
+function ensureAdminScreensModal() {
+  let modal = document.getElementById("adminScreensModal");
+  if (modal) return modal;
+
+  modal = document.createElement("div");
+  modal.id = "adminScreensModal";
+  modal.className = "modal-backdrop";
+  modal.hidden = true;
+  modal.innerHTML = `
+    <div class="modal-dialog auth-modal-dialog-md" style="max-width: 680px;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div class="modal-title-group">
+            <div>
+              <div class="modal-title" id="adminScreensModalTitle">Phân Quyền Màn Hình Hệ Thống</div>
+              <div class="modal-subtitle" id="adminScreensModalSubtitle">Chọn các màn hình/chức năng mà người dùng này được phép truy cập</div>
+            </div>
+          </div>
+          <button type="button" class="modal-close-btn" id="closeAdminScreensModalBtn" title="Đóng">&times;</button>
+        </div>
+
+        <div style="padding: 16px 24px 0 24px;">
+          <div id="adminScreensNotice" class="auth-notice-box" style="margin-bottom: 12px;"></div>
+          <div style="background: #f8fafc; padding: 10px 14px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 13px; color: #475569; margin-bottom: 14px;">
+            <strong>Nguyên tắc phân quyền:</strong> Nếu chọn <em>Tất cả Màn hình (ALL)</em>, người dùng có quyền truy cập toàn bộ 6 màn hình. Nếu chỉ cấp các màn hình cụ thể, thanh điều hướng sidebar sẽ chỉ hiển thị các màn hình đó và hệ thống sẽ chặn truy cập nếu người dùng nhập URL trực tiếp.
+          </div>
+        </div>
+
+        <div class="modal-body" style="padding: 0 24px 16px 24px;">
+          <div style="margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid #e2e8f0;">
+            <label style="display: flex; align-items: center; gap: 8px; font-weight: 700; color: #059669; cursor: pointer; font-size: 13.5px;">
+              <input type="checkbox" id="screensCbAll" style="width: 16px; height: 16px; cursor: pointer;">
+              <span>Tất cả Màn hình (Toàn quyền 6/6 màn hình)</span>
+            </label>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;" id="screensCheckboxesContainer">
+            ${SYSTEM_SCREENS_CONFIG.map(s => `
+              <label style="display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: #334155; cursor: pointer; background: #ffffff; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px; transition: border-color 0.15s, background-color 0.15s;">
+                <input type="checkbox" class="screen-item-cb" value="${s.id}" style="width: 16px; height: 16px; margin-top: 2px; cursor: pointer;">
+                <div style="display: flex; flex-direction: column;">
+                  <div style="display: flex; align-items: center; gap: 6px; font-weight: 600; color: #0f172a;">
+                    <span style="display: inline-flex; color: #2563eb;">${s.icon}</span>
+                    <span>${s.name}</span>
+                  </div>
+                  <span style="font-size: 11.5px; color: #64748b; margin-top: 3px; line-height: 1.35;">${s.desc}</span>
+                </div>
+              </label>
+            `).join("")}
+          </div>
+        </div>
+
+        <div class="modal-footer" style="padding: 12px 24px; display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="button" class="btn btn-secondary btn-sm" id="cancelAdminScreensModalBtn">Hủy</button>
+          <button type="button" class="btn btn-primary btn-sm" id="saveAdminScreensModalBtn" style="font-weight: 700; background: #059669; border-color: #059669;">Lưu Quyền Màn Hình</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  const closeBtn = modal.querySelector("#closeAdminScreensModalBtn");
+  const cancelBtn = modal.querySelector("#cancelAdminScreensModalBtn");
+  [closeBtn, cancelBtn].forEach(b => {
+    if (b) b.onclick = () => { modal.hidden = true; };
+  });
+
+  modal.onclick = (e) => {
+    if (e.target === modal) modal.hidden = true;
+  };
+
+  const cbAll = modal.querySelector("#screensCbAll");
+  const itemCbs = modal.querySelectorAll(".screen-item-cb");
+  if (cbAll) {
+    cbAll.onchange = () => {
+      const isChecked = cbAll.checked;
+      itemCbs.forEach(cb => { cb.checked = isChecked; });
+    };
+  }
+
+  itemCbs.forEach(cb => {
+    cb.onchange = () => {
+      const allChecked = Array.from(itemCbs).every(c => c.checked);
+      if (cbAll) cbAll.checked = allChecked;
+    };
+  });
+
+  return modal;
+}
+
+let currentSelectedUsersForScreens = [];
+
+function openAdminScreensModalForUsers(selectedUsers) {
+  const modal = ensureAdminScreensModal();
+  currentSelectedUsersForScreens = selectedUsers;
+
+  const titleElem = document.getElementById("adminScreensModalTitle");
+  const subElem = document.getElementById("adminScreensModalSubtitle");
+  const notice = document.getElementById("adminScreensNotice");
+
+  if (notice) {
+    notice.className = "auth-notice-box";
+    notice.textContent = "";
+  }
+
+  let precheckScreens = [];
+  if (selectedUsers.length === 1) {
+    const single = selectedUsers[0];
+    if (titleElem) titleElem.textContent = `Phân Quyền Màn Hình: ${single.fullName}`;
+    if (subElem) subElem.textContent = `Tài khoản: ${single.username} (${single.role === 'admin' ? 'Quản trị viên' : 'Người dùng'})`;
+    precheckScreens = Array.isArray(single.screens) ? single.screens : ["dashboard", "data_table"];
+  } else {
+    if (titleElem) titleElem.textContent = `Phân Quyền Màn Hình: ${selectedUsers.length} tài khoản đã chọn`;
+    if (subElem) subElem.textContent = `Áp dụng cho: ${selectedUsers.map(u => u.fullName).join(", ")}`;
+    precheckScreens = Array.isArray(selectedUsers[0].screens) ? selectedUsers[0].screens : ["dashboard", "data_table"];
+  }
+
+  const isAll = precheckScreens.includes("ALL") || precheckScreens.includes("all");
+  const cbAll = document.getElementById("screensCbAll");
+  if (cbAll) cbAll.checked = isAll;
+
+  const itemCbs = modal.querySelectorAll(".screen-item-cb");
+  itemCbs.forEach(cb => {
+    cb.checked = isAll || precheckScreens.includes(cb.value);
+  });
+
+  const saveBtn = document.getElementById("saveAdminScreensModalBtn");
+  if (saveBtn) {
+    saveBtn.onclick = () => handleSaveUsersScreens(selectedUsers);
+  }
+
+  modal.hidden = false;
+}
+
+function openAdminScreensModal(username, fullName, currentScreens) {
+  const screensArr = Array.isArray(currentScreens) ? currentScreens : String(currentScreens || "dashboard,data_table").split(",").map(s => s.trim().toLowerCase());
+  openAdminScreensModalForUsers([{
+    username,
+    fullName,
+    role: "user",
+    screens: screensArr
+  }]);
+}
+
+async function handleSaveUsersScreens(selectedUsers) {
+  const modal = document.getElementById("adminScreensModal");
+  const notice = document.getElementById("adminScreensNotice");
+  const saveBtn = document.getElementById("saveAdminScreensModalBtn");
+  const cbAll = document.getElementById("screensCbAll");
+  const itemCbs = modal.querySelectorAll(".screen-item-cb");
+
+  let selected = [];
+  if (cbAll && cbAll.checked) {
+    selected = ["ALL"];
+  } else {
+    selected = Array.from(itemCbs).filter(c => c.checked).map(c => c.value);
+    if (selected.length === 0) {
+      if (notice) {
+        notice.className = "auth-notice-box error";
+        notice.textContent = "Vui lòng chọn ít nhất 1 màn hình hoặc chọn Tất cả Màn hình (ALL).";
+      }
+      return;
+    }
+  }
+
+  const originalText = saveBtn ? saveBtn.textContent : "Lưu Quyền Màn Hình";
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Đang lưu...";
+  }
+
+  try {
+    for (const u of selectedUsers) {
+      const res = await fetch(`/api/admin/users/${encodeURIComponent(u.username)}/screens`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ screens: selected })
+      });
+      let result = null;
+      try {
+        result = await res.json();
+      } catch (e) {
+        throw new Error(`Máy chủ không thể xử lý yêu cầu (HTTP ${res.status}). Vui lòng kiểm tra Backend Node.js.`);
+      }
+      if (!res.ok || !result || !result.success) {
+        throw new Error((result && result.message) || `Lỗi khi lưu phân quyền màn hình cho tài khoản ${u.username}.`);
+      }
+    }
+
+    // Nếu người dùng đang chỉnh sửa có tài khoản đang đăng nhập, cập nhật localStorage và áp dụng ngay
+    try {
+      const cur = JSON.parse(localStorage.getItem("gpg_auth_user") || "{}");
+      if (cur && selectedUsers.some(u => String(u.username).toLowerCase() === String(cur.username).toLowerCase())) {
+        cur.allowedScreens = selected;
+        localStorage.setItem("gpg_auth_user", JSON.stringify(cur));
+        applyRolePermissions(cur);
+      }
+    } catch (e) {}
+
+    const adminNotice = document.getElementById("adminUserNotice");
+    if (adminNotice) {
+      adminNotice.className = "auth-notice-box success";
+      const userListStr = selectedUsers.map(u => u.username).join(", ");
+      adminNotice.textContent = `Đã cập nhật phân quyền màn hình thành công cho ${selectedUsers.length} tài khoản (${userListStr}).`;
+    }
+
+    modal.hidden = true;
+    await loadAdminUsersList();
+  } catch (err) {
+    if (notice) {
+      notice.className = "auth-notice-box error";
+      notice.textContent = err.message;
+    }
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = originalText;
+    }
+  }
+}
+
 window.openAdminUserModal = openAdminUserModal;
 window.handleToggleUserActive = handleToggleUserActive;
 window.handleAdminResetPassword = handleAdminResetPassword;
 window.openAdminDepotModal = openAdminDepotModal;
 window.openAdminDepotModalForUsers = openAdminDepotModalForUsers;
+window.openAdminScreensModal = openAdminScreensModal;
+window.openAdminScreensModalForUsers = openAdminScreensModalForUsers;
 
 // =========================================================================
 // MODAL ĐỔI MẬT KHẨU (DÀNH CHO NGƯỜI DÙNG HIỆN TẠI)
