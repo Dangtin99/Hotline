@@ -28,12 +28,9 @@ function loadEnv() {
 
 const env = loadEnv();
 
-// Cấu hình dự phòng chuẩn xác bảo đảm hoạt động ngay lập tức trên Vercel Serverless
-const DEFAULT_TURSO_URL = "libsql://hotline-analytics-dangtin99.aws-ap-southeast-2.turso.io";
-const DEFAULT_TURSO_AUTH_TOKEN = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTE0MzI1ODQsImlkIjoiMDFhMTE5YjMtNTYwMS03ZTI1LTg1MTktNGQ2YmVjMDlhNzQ4Iiwia2lkIjoiZlZKSGN6YVRLMHZEWFhIc1czc1M2X2F5SlZHM1p6eTIxcEd2Si1rY0lYVSIsInJpZCI6IjUxMjVmZDA4LWJmY2MtNGZkMS1iOWViLTQ0YjYwN2Q3ZTA1OCJ9.c8ONqNk3rxLEvnnZKCSV2gxVWnrkWnaORRNhetk4iA9aw2nAdNv7wGcwJiZQM1dqBBpsdHyV9U9-nXesAnybBA";
-
-const TURSO_URL = process.env.TURSO_DATABASE_URL || env.TURSO_DATABASE_URL || DEFAULT_TURSO_URL;
-const TURSO_AUTH_TOKEN = process.env.TURSO_AUTH_TOKEN || env.TURSO_AUTH_TOKEN || DEFAULT_TURSO_AUTH_TOKEN;
+// Cấu hình Turso (chỉ kích hoạt nếu có biến môi trường trực tiếp, ưu tiên Supabase làm Primary Cloud Database)
+const TURSO_URL = process.env.TURSO_DATABASE_URL || env.TURSO_DATABASE_URL || "";
+const TURSO_AUTH_TOKEN = process.env.TURSO_AUTH_TOKEN || env.TURSO_AUTH_TOKEN || "";
 
 let tursoClient = null;
 

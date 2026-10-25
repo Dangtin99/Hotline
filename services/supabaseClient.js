@@ -43,16 +43,22 @@ try {
   }
 }
 
+const DEFAULT_SUPABASE_HOST = "aws-0-ap-southeast-1.pooler.supabase.com";
+const DEFAULT_SUPABASE_PORT = "6543";
+const DEFAULT_SUPABASE_DATABASE = "postgres";
+const DEFAULT_SUPABASE_USER = "postgres.zuhvtxhyjgyasjublcam";
+const DEFAULT_SUPABASE_PASSWORD = "Dangtin992004@";
+
 let pool = null;
 
 function getPool() {
   if (!Pool) return null;
   if (!pool) {
-    const host = process.env.SUPABASE_HOST || env.SUPABASE_HOST || "aws-0-ap-southeast-1.pooler.supabase.com";
-    const port = parseInt(process.env.SUPABASE_PORT || env.SUPABASE_PORT || "6543", 10);
-    const database = process.env.SUPABASE_DATABASE || env.SUPABASE_DATABASE || "postgres";
-    const user = process.env.SUPABASE_USER || env.SUPABASE_USER || "postgres.zuhvtxhyjgyasjublcam";
-    const password = process.env.SUPABASE_PASSWORD || env.SUPABASE_PASSWORD || "";
+    const host = process.env.SUPABASE_HOST || env.SUPABASE_HOST || DEFAULT_SUPABASE_HOST;
+    const port = parseInt(process.env.SUPABASE_PORT || env.SUPABASE_PORT || DEFAULT_SUPABASE_PORT, 10);
+    const database = process.env.SUPABASE_DATABASE || env.SUPABASE_DATABASE || DEFAULT_SUPABASE_DATABASE;
+    const user = process.env.SUPABASE_USER || env.SUPABASE_USER || DEFAULT_SUPABASE_USER;
+    const password = process.env.SUPABASE_PASSWORD || env.SUPABASE_PASSWORD || DEFAULT_SUPABASE_PASSWORD;
 
     pool = new Pool({
       host,
@@ -80,9 +86,9 @@ function getPool() {
 }
 
 function isSupabaseAvailable() {
-  const host = process.env.SUPABASE_HOST || env.SUPABASE_HOST;
-  const user = process.env.SUPABASE_USER || env.SUPABASE_USER;
-  const password = process.env.SUPABASE_PASSWORD || env.SUPABASE_PASSWORD;
+  const host = process.env.SUPABASE_HOST || env.SUPABASE_HOST || DEFAULT_SUPABASE_HOST;
+  const user = process.env.SUPABASE_USER || env.SUPABASE_USER || DEFAULT_SUPABASE_USER;
+  const password = process.env.SUPABASE_PASSWORD || env.SUPABASE_PASSWORD || DEFAULT_SUPABASE_PASSWORD;
   return Boolean(host && user && password);
 }
 

@@ -2417,8 +2417,8 @@ async function insertRecordsAsync(records, metadata = {}) {
         const recordsToSync = (res.processedRecords && res.processedRecords.length > 0) ? res.processedRecords : records;
         await tursoClient.syncOrdersToTurso(recordsToSync);
       } catch (e) {
-        console.error("[Turso] Lỗi đồng bộ orders lên Turso:", e.message);
-        throw new Error(`Lỗi đồng bộ lên CSDL đám mây Turso: ${e.message}`);
+        console.error("[Cloud] Lỗi đồng bộ orders:", e.message);
+        throw new Error(`Lỗi đồng bộ lên CSDL đám mây: ${e.message}`);
       }
     }
 
