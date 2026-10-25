@@ -1164,41 +1164,51 @@ async function getOperationalUpdatesFromTurso(since) {
   }
 }
 
+// Tích hợp chuyển tiếp tự động sang Supabase khi được cấu hình (Primary Cloud Database)
+let supabaseClient = null;
+try {
+  supabaseClient = require("./supabaseClient");
+} catch (e) {}
+
+function isUsingSupabase() {
+  return Boolean(supabaseClient && supabaseClient.isSupabaseAvailable());
+}
+
 module.exports = {
   getTursoClient,
-  isTursoAvailable,
-  testConnection,
-  initTursoSchema,
-  getAllOrdersFromTurso,
-  syncOrdersToTurso,
-  deleteOrderRowsInTurso,
-  updateOrderNoteInTurso,
-  deleteOrdersByUploadIdInTurso,
-  clearAllOrdersInTurso,
-  getAllVerificationOrdersFromTurso,
-  syncVerificationOrdersToTurso,
-  deleteVerificationOrderRowInTurso,
-  deleteVerificationOrderRowsInTurso,
-  deleteVerificationOrdersByUploadIdInTurso,
-  clearAllVerificationOrdersInTurso,
-  getUploadHistoryFromTurso,
-  saveUploadHistoryItemToTurso,
-  deleteUploadHistoryItemFromTurso,
-  clearUploadHistoryInTurso,
-  getVerificationHistoryFromTurso,
-  saveVerificationHistoryItemToTurso,
-  deleteVerificationHistoryItemFromTurso,
-  getTursoRowCount,
-  syncPendingStateToTurso,
-  getAllOperationalStatesFromTurso,
-  initTursoUsersTable,
-  getAllUsersFromTurso,
-  syncUserToTurso,
-  getOrdersByDateRangeFromTurso,
-  getLatestDateFromTurso,
-  getSystemMetadataFromTurso,
-  setSystemMetadataInTurso,
-  getOperationalVersionFromTurso,
-  bumpOperationalVersionInTurso,
-  getOperationalUpdatesFromTurso
+  isTursoAvailable: () => isUsingSupabase() ? true : isTursoAvailable(),
+  testConnection: (...args) => isUsingSupabase() ? supabaseClient.testConnection(...args) : testConnection(...args),
+  initTursoSchema: (...args) => isUsingSupabase() ? supabaseClient.initSupabaseSchema(...args) : initTursoSchema(...args),
+  getAllOrdersFromTurso: (...args) => isUsingSupabase() ? supabaseClient.getAllOrdersFromSupabase(...args) : getAllOrdersFromTurso(...args),
+  syncOrdersToTurso: (...args) => isUsingSupabase() ? supabaseClient.syncOrdersToSupabase(...args) : syncOrdersToTurso(...args),
+  deleteOrderRowsInTurso: (...args) => isUsingSupabase() ? supabaseClient.deleteOrderRowsInSupabase(...args) : deleteOrderRowsInTurso(...args),
+  updateOrderNoteInTurso: (...args) => isUsingSupabase() ? supabaseClient.updateOrderNoteInSupabase(...args) : updateOrderNoteInTurso(...args),
+  deleteOrdersByUploadIdInTurso: (...args) => isUsingSupabase() ? supabaseClient.deleteOrdersByUploadIdInSupabase(...args) : deleteOrdersByUploadIdInTurso(...args),
+  clearAllOrdersInTurso: (...args) => isUsingSupabase() ? supabaseClient.clearAllOrdersInSupabase(...args) : clearAllOrdersInTurso(...args),
+  getAllVerificationOrdersFromTurso: (...args) => isUsingSupabase() ? supabaseClient.getAllVerificationOrdersFromSupabase(...args) : getAllVerificationOrdersFromTurso(...args),
+  syncVerificationOrdersToTurso: (...args) => isUsingSupabase() ? supabaseClient.syncVerificationOrdersToSupabase(...args) : syncVerificationOrdersToTurso(...args),
+  deleteVerificationOrderRowInTurso: (...args) => isUsingSupabase() ? supabaseClient.deleteVerificationOrderRowInSupabase(...args) : deleteVerificationOrderRowInTurso(...args),
+  deleteVerificationOrderRowsInTurso: (...args) => isUsingSupabase() ? supabaseClient.deleteVerificationOrderRowsInSupabase(...args) : deleteVerificationOrderRowsInTurso(...args),
+  deleteVerificationOrdersByUploadIdInTurso: (...args) => isUsingSupabase() ? supabaseClient.deleteVerificationOrdersByUploadIdInSupabase(...args) : deleteVerificationOrdersByUploadIdInTurso(...args),
+  clearAllVerificationOrdersInTurso: (...args) => isUsingSupabase() ? supabaseClient.clearAllVerificationOrdersInSupabase(...args) : clearAllVerificationOrdersInTurso(...args),
+  getUploadHistoryFromTurso: (...args) => isUsingSupabase() ? supabaseClient.getUploadHistoryFromSupabase(...args) : getUploadHistoryFromTurso(...args),
+  saveUploadHistoryItemToTurso: (...args) => isUsingSupabase() ? supabaseClient.saveUploadHistoryItemToSupabase(...args) : saveUploadHistoryItemToTurso(...args),
+  deleteUploadHistoryItemFromTurso: (...args) => isUsingSupabase() ? supabaseClient.deleteUploadHistoryItemFromSupabase(...args) : deleteUploadHistoryItemFromTurso(...args),
+  clearUploadHistoryInTurso: (...args) => isUsingSupabase() ? supabaseClient.clearUploadHistoryInSupabase(...args) : clearUploadHistoryInTurso(...args),
+  getVerificationHistoryFromTurso: (...args) => isUsingSupabase() ? supabaseClient.getVerificationHistoryFromSupabase(...args) : getVerificationHistoryFromTurso(...args),
+  saveVerificationHistoryItemToTurso: (...args) => isUsingSupabase() ? supabaseClient.saveVerificationHistoryItemToSupabase(...args) : saveVerificationHistoryItemToTurso(...args),
+  deleteVerificationHistoryItemFromTurso: (...args) => isUsingSupabase() ? supabaseClient.deleteVerificationHistoryItemFromSupabase(...args) : deleteVerificationHistoryItemFromTurso(...args),
+  getTursoRowCount: (...args) => isUsingSupabase() ? supabaseClient.getSupabaseRowCount(...args) : getTursoRowCount(...args),
+  syncPendingStateToTurso: (...args) => isUsingSupabase() ? supabaseClient.syncPendingStateToSupabase(...args) : syncPendingStateToTurso(...args),
+  getAllOperationalStatesFromTurso: (...args) => isUsingSupabase() ? supabaseClient.getAllOperationalStatesFromSupabase(...args) : getAllOperationalStatesFromTurso(...args),
+  initTursoUsersTable: (...args) => initTursoUsersTable(...args),
+  getAllUsersFromTurso: (...args) => getAllUsersFromTurso(...args),
+  syncUserToTurso: (...args) => syncUserToTurso(...args),
+  getOrdersByDateRangeFromTurso: (...args) => isUsingSupabase() ? supabaseClient.getOrdersByDateRangeFromSupabase(...args) : getOrdersByDateRangeFromTurso(...args),
+  getLatestDateFromTurso: (...args) => isUsingSupabase() ? supabaseClient.getLatestDateFromSupabase(...args) : getLatestDateFromTurso(...args),
+  getSystemMetadataFromTurso: (...args) => getSystemMetadataFromTurso(...args),
+  setSystemMetadataInTurso: (...args) => setSystemMetadataInTurso(...args),
+  getOperationalVersionFromTurso: (...args) => isUsingSupabase() ? supabaseClient.getOperationalVersionFromSupabase(...args) : getOperationalVersionFromTurso(...args),
+  bumpOperationalVersionInTurso: (...args) => isUsingSupabase() ? supabaseClient.bumpOperationalVersionInSupabase(...args) : bumpOperationalVersionInTurso(...args),
+  getOperationalUpdatesFromTurso: (...args) => isUsingSupabase() ? supabaseClient.getOperationalUpdatesFromSupabase(...args) : getOperationalUpdatesFromTurso(...args)
 };
