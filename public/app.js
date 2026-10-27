@@ -2716,8 +2716,8 @@ function renderReasonsTable(reasons) {
 // Chuẩn hóa danh mục 7 nhóm lý do giải trình hủy đơn
 const CANCELLATION_REASON_GROUPS = [
   "Thay đổi kế hoạch vận chuyển",
-  "Thay đổi hoặc không còn nhu cầu đặt đơn",
-  "Không đáp ứng điều kiện thực hiện đơn",
+  "Thay đổi kế hoạch nâng hạ",
+  "Không có nhu cầu đặt đơn",
   "Lý do khác từ khách hàng",
   "Không đáp ứng điều kiện xử lý đơn",
   "Không thể thực hiện do điều kiện Depot/Container",
@@ -2746,14 +2746,17 @@ function getExplanationGroup(rawVal) {
 
   // 3. Ánh xạ tương thích ngược từ dữ liệu cũ
   const lower = trimmed.toLowerCase();
+  if (lower.includes("nâng hạ")) {
+    return "Thay đổi kế hoạch nâng hạ";
+  }
   if (lower.includes("thay đổi kế hoạch") || lower.includes("kế hoạch") || lower.includes("hoãn lấy cont") || lower.includes("chủ hàng & kế hoạch") || lower.includes("chủ hàng")) {
     return "Thay đổi kế hoạch vận chuyển";
   }
   if (lower.includes("không còn nhu cầu") || lower.includes("hủy đóng hàng") || lower.includes("không lấy cont")) {
-    return "Thay đổi hoặc không còn nhu cầu đặt đơn";
+    return "Không có nhu cầu đặt đơn";
   }
   if (lower.includes("thực hiện đơn") || lower.includes("booking") || lower.includes("book") || lower.includes("hết hạn") || lower.includes("chứng từ") || lower.includes("đặt lệnh") || lower.includes("sai booking") || lower.includes("khai nhầm") || lower.includes("trùng đơn") || lower.includes("chưa đóng phí")) {
-    return "Không đáp ứng điều kiện thực hiện đơn";
+    return "Lý do khác từ khách hàng";
   }
   if (lower.includes("xử lý đơn") || lower.includes("lỗi cổng") || lower.includes("hệ thống")) {
     return "Không đáp ứng điều kiện xử lý đơn";
@@ -3355,7 +3358,7 @@ function renderSourceCancellationTable(records = []) {
   }
 
   // Khởi tạo các nhóm:
-  // Nhóm khách (0..3): 1. Thay đổi kế hoạch vận chuyển, 2. Thay đổi hoặc không còn nhu cầu đặt đơn, 3. Không đáp ứng điều kiện thực hiện đơn, 4. Lý do khác từ khách hàng
+  // Nhóm khách (0..3): 1. Thay đổi kế hoạch vận chuyển, 2. Thay đổi kế hoạch nâng hạ, 3. Không có nhu cầu đặt đơn, 4. Lý do khác từ khách hàng
   // Nhóm trung tâm (4..6): 5. Không đáp ứng điều kiện xử lý đơn, 6. Không thể thực hiện do điều kiện Depot/Container, 7. Lý do khác từ Trung tâm
   const customerGroups = [0, 1, 2, 3].map(idx => ({
     groupNumber: idx + 1,

@@ -118,6 +118,7 @@ let isSchemaInitialized = false;
 
 /**
  * Tự động kiểm tra và khởi tạo toàn bộ cấu trúc bảng trên Supabase
+ * Tối ưu hóa siêu tốc: Kiểm tra nhanh 1 round-trip (SELECT 1), tránh chạy lại các câu lệnh CREATE TABLE/INDEX gây statement timeout
  */
 async function initSupabaseSchema() {
   if (isSchemaInitialized) return;
@@ -126,6 +127,15 @@ async function initSupabaseSchema() {
 
   const client = await p.connect();
   try {
+    // 1. Kiểm tra nhanh: Nếu bảng chính cancellation_orders đã tồn tại -> đánh dấu hoàn tất ngay lập tức
+    try {
+      await client.query("SELECT 1 FROM cancellation_orders LIMIT 1;");
+      isSchemaInitialized = true;
+      return;
+    } catch (checkErr) {
+      // Bảng chưa có -> Tiếp tục khởi tạo bên dưới
+    }
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS cancellation_orders (
         id BIGSERIAL PRIMARY KEY,

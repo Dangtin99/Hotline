@@ -609,7 +609,8 @@ async function handleExecuteImportVerification() {
   }
 
   btnExecuteImportVerification.disabled = true;
-  btnExecuteImportVerification.textContent = "Đang Import...";
+  btnExecuteImportVerification.textContent = "Đang xử lý & lưu dữ liệu...";
+  showAlert("Đang trích xuất dữ liệu và đồng bộ vào cơ sở dữ liệu...", false);
 
   const formData = new FormData();
   formData.append("file", selectedFileVerification);

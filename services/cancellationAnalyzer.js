@@ -680,6 +680,22 @@ function parseVerificationFile(input) {
 
   const headers = rawRows[headerIdx].map(h => cleanString(h));
 
+  // Tối ưu hóa siêu tốc: Định vị vị trí cột 1 lần duy nhất trước vòng lặp duyệt dòng O(1)
+  const findColIdx = (keyKeywords, excludeKeywords = []) => {
+    for (let k of keyKeywords) {
+      const kNorm = k.toLowerCase().replace(/[\s_\-\/]+/g, "");
+      const idx = headers.findIndex(h => {
+        const hLower = h.toLowerCase();
+        if (excludeKeywords.some(ex => hLower.includes(ex.toLowerCase()))) return false;
+        if (hLower.includes(k.toLowerCase())) return true;
+        const hNorm = hLower.replace(/[\s_\-\/]+/g, "");
+        return hNorm.includes(kNorm);
+      });
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  };
+
   // Xác định vị trí cột BK Check và cột Số BL số vận đơn
   const bkCheckColIdx = headers.findIndex(h => {
     const l = h.toLowerCase();
@@ -701,19 +717,33 @@ function parseVerificationFile(input) {
            n.includes("blsovandon");
   });
 
-  const getVal = (row, keyKeywords, excludeKeywords = []) => {
-    for (let k of keyKeywords) {
-      const kNorm = k.toLowerCase().replace(/[\s_\-\/]+/g, "");
-      const idx = headers.findIndex(h => {
-        const hLower = h.toLowerCase();
-        if (excludeKeywords.some(ex => hLower.includes(ex.toLowerCase()))) return false;
-        if (hLower.includes(k.toLowerCase())) return true;
-        const hNorm = hLower.replace(/[\s_\-\/]+/g, "");
-        return hNorm.includes(kNorm);
-      });
-      if (idx !== -1 && row[idx] !== undefined && cleanString(row[idx]) !== "") {
-        return cleanString(row[idx]);
-      }
+  // Ánh xạ trước toàn bộ vị trí cột để không chạy findIndex/regex trong từng dòng
+  const colSoEir = findColIdx(["Số EIR", "STT"]);
+  const colDepot = findColIdx(["Depot"]);
+  const colHangTau = findColIdx(["Hãng tàu check", "Hãng tàu"]);
+  const colBkFallback = findColIdx(["BK check", "BK_check", "BKCheck", "Booking check"]);
+  const colBlFallback = findColIdx(["Số B/L //Số vận đơn", "Số B/L", "Số vận đơn", "Số BL số vận đơn", "Số BL"]);
+  const colSoCont = findColIdx(["Số cont"]);
+  const colSize = findColIdx(["Size Check", "Size"]);
+  const colLoaiDon = findColIdx(["Loại đơn hàng"]);
+  const colNgayTao = findColIdx(["Ngày tạo"]);
+  const colThoiDiemTuChoi = findColIdx(["Thời điểm từ chối", "Thời điểm BC từ chối", "Thời điểm hoàn tiền"]);
+  const colNgayDuyet = findColIdx(["Ngày được duyệt"]);
+  const colTrangThaiDon = findColIdx(["Trạng thái đơn hàng"]);
+  const colThoiDiemXepTai = findColIdx(["Thời điểm xếp tài"]);
+  const colLyDoHuy = findColIdx(["Lý do Huỷ"]);
+  const colLyDoTuChoi = findColIdx(["Ghi chú (Lý do từ chối duyệt)", "Lý do đảo chuyển", "Lý do đảo chuyền", "Lý do từ chối", "Lý do từ chối duyệt"]);
+  const colLyDoCheck = findColIdx(["Ghi chú thêm (Gate OUT)"]);
+  const colTaiXe = findColIdx(["Họ tên tài xế", "Tên tài xế", "Tài xế"], ["sđt", "sdt", "điện thoại", "phone"]);
+  const colSdtTaiXe = findColIdx(["SĐT", "Số điện thoại tài xế", "SĐT tài xế", "Điện thoại tài xế"], ["nhà xe", "nha xe", "công ty", "đơn vị"]);
+  const colNhaXe = findColIdx(["Tên nhà xe", "Đơn vị vận tải", "Đơn vị vận chuyển", "Công ty vận tải", "Tên công ty", "Nhà xe", "Ten nha xe", "Don vi van tai"], ["sđt", "sdt", "điện thoại", "phone", "tel", "tài xế", "tai xe"]);
+  const colSdtNhaXe = findColIdx(["Số điện thoại nhà xe", "SĐT nhà xe", "SDT nhà xe", "Số điện thoại đơn vị vận tải", "SĐT đơn vị vận tải", "SDT đơn vị vận tải", "Điện thoại nhà xe", "SĐT công ty", "SDT cong ty", "So dien thoai nha xe", "Sdt nha xe"], ["tài xế", "tai xe"]);
+  const colSoXe = findColIdx(["Số xe", "Số Xe", "Biển số xe", "Biển số", "Bien so xe", "So xe", "Biển Số Xe", "Truck no", "Truck"]);
+  const colNguoiTao = findColIdx(["Người tạo", "Nguoi tao", "Người tạo đơn", "Nguoi tao don", "Created by", "User tạo", "Tài khoản tạo", "User tao"]);
+
+  const getCell = (row, idx) => {
+    if (idx !== -1 && row[idx] !== undefined && cleanString(row[idx]) !== "") {
+      return cleanString(row[idx]);
     }
     return "";
   };
@@ -723,9 +753,9 @@ function parseVerificationFile(input) {
     const row = rawRows[i];
     if (!row || row.every(c => cleanString(c) === "")) continue;
 
-    const soEir = getVal(row, ["Số EIR", "STT"]);
-    const depot = getVal(row, ["Depot"]);
-    const hangTau = getVal(row, ["Hãng tàu check", "Hãng tàu"]);
+    const soEir = getCell(row, colSoEir);
+    const depot = getCell(row, colDepot);
+    const hangTau = getCell(row, colHangTau);
     // Thứ tự ưu tiên lấy cột Booking cho Dữ liệu check đơn (eir_cancellation_orders):
     // 1. Ưu tiên lấy từ cột "BK Check"
     // 2. Nếu "BK Check" rỗng -> lấy dữ liệu theo cột "Số BL số vận đơn"
@@ -736,34 +766,34 @@ function parseVerificationFile(input) {
     } else if (soBlColIdx !== -1 && row[soBlColIdx] !== undefined && cleanString(row[soBlColIdx]) !== "") {
       booking = cleanString(row[soBlColIdx]);
     } else {
-      const valBk = getVal(row, ["BK check", "BK_check", "BKCheck", "Booking check"]);
+      const valBk = getCell(row, colBkFallback);
       if (valBk) {
         booking = valBk;
       } else {
-        const valBl = getVal(row, ["Số B/L //Số vận đơn", "Số B/L", "Số vận đơn", "Số BL số vận đơn", "Số BL"]);
+        const valBl = getCell(row, colBlFallback);
         if (valBl) {
           booking = valBl;
         }
       }
     }
-    const soCont = getVal(row, ["Số cont"]) || soEir;
-    const size = getVal(row, ["Size Check", "Size"]);
-    const loaiDon = getVal(row, ["Loại đơn hàng"]);
-    const ngayTao = normalizeDate(getVal(row, ["Ngày tạo"]));
-    const thoiDiemTuChoi = normalizeDate(getVal(row, ["Thời điểm từ chối", "Thời điểm BC từ chối", "Thời điểm hoàn tiền"]));
+    const soCont = getCell(row, colSoCont) || soEir;
+    const size = getCell(row, colSize);
+    const loaiDon = getCell(row, colLoaiDon);
+    const ngayTao = normalizeDate(getCell(row, colNgayTao));
+    const thoiDiemTuChoi = normalizeDate(getCell(row, colThoiDiemTuChoi));
     const ngayHuyDon = thoiDiemTuChoi || ngayTao;
-    const ngayDuyet = normalizeDate(getVal(row, ["Ngày được duyệt"]));
-    const trangThaiDon = getVal(row, ["Trạng thái đơn hàng"]);
-    const thoiDiemXepTai = normalizeDate(getVal(row, ["Thời điểm xếp tài"]));
-    const lyDoHuy = getVal(row, ["Lý do Huỷ"]);
-    const lyDoTuChoi = getVal(row, ["Ghi chú (Lý do từ chối duyệt)", "Lý do đảo chuyển", "Lý do đảo chuyền", "Lý do từ chối", "Lý do từ chối duyệt"]);
-    const lyDoCheck = getVal(row, ["Ghi chú thêm (Gate OUT)"]);
-    const taiXe = getVal(row, ["Họ tên tài xế", "Tên tài xế", "Tài xế"], ["sđt", "sdt", "điện thoại", "phone"]);
-    const sdtTaiXe = getVal(row, ["SĐT", "Số điện thoại tài xế", "SĐT tài xế", "Điện thoại tài xế"], ["nhà xe", "nha xe", "công ty", "đơn vị"]);
-    const nhaXe = getVal(row, ["Tên nhà xe", "Đơn vị vận tải", "Đơn vị vận chuyển", "Công ty vận tải", "Tên công ty", "Nhà xe", "Ten nha xe", "Don vi van tai"], ["sđt", "sdt", "điện thoại", "phone", "tel", "tài xế", "tai xe"]);
-    const sdtNhaXe = getVal(row, ["Số điện thoại nhà xe", "SĐT nhà xe", "SDT nhà xe", "Số điện thoại đơn vị vận tải", "SĐT đơn vị vận tải", "SDT đơn vị vận tải", "Điện thoại nhà xe", "SĐT công ty", "SDT cong ty", "So dien thoai nha xe", "Sdt nha xe"], ["tài xế", "tai xe"]);
-    const soXe = getVal(row, ["Số xe", "Số Xe", "Biển số xe", "Biển số", "Bien so xe", "So xe", "Biển Số Xe", "Truck no", "Truck"]);
-    const nguoiTao = getVal(row, ["Người tạo", "Nguoi tao", "Người tạo đơn", "Nguoi tao don", "Created by", "User tạo", "Tài khoản tạo", "User tao"]);
+    const ngayDuyet = normalizeDate(getCell(row, colNgayDuyet));
+    const trangThaiDon = getCell(row, colTrangThaiDon);
+    const thoiDiemXepTai = normalizeDate(getCell(row, colThoiDiemXepTai));
+    const lyDoHuy = getCell(row, colLyDoHuy);
+    const lyDoTuChoi = getCell(row, colLyDoTuChoi);
+    const lyDoCheck = getCell(row, colLyDoCheck);
+    const taiXe = getCell(row, colTaiXe);
+    const sdtTaiXe = getCell(row, colSdtTaiXe);
+    const nhaXe = getCell(row, colNhaXe);
+    const sdtNhaXe = getCell(row, colSdtNhaXe);
+    const soXe = getCell(row, colSoXe);
+    const nguoiTao = getCell(row, colNguoiTao);
 
     let loaiDonHang = "N/A";
     if (loaiDon.toUpperCase().includes("OUT")) loaiDonHang = "OUT";

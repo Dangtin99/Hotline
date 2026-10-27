@@ -867,8 +867,8 @@ window.onStatusSelectChange = function(selectElem) {
 // ==========================================
 const CANCELLATION_REASON_GROUPS = [
   "Thay đổi kế hoạch vận chuyển",
-  "Thay đổi hoặc không còn nhu cầu đặt đơn",
-  "Không đáp ứng điều kiện thực hiện đơn",
+  "Thay đổi kế hoạch nâng hạ",
+  "Không có nhu cầu đặt đơn",
   "Lý do khác từ khách hàng",
   "Không đáp ứng điều kiện xử lý đơn",
   "Không thể thực hiện do điều kiện Depot/Container",
@@ -908,13 +908,16 @@ function parseExplanationValue(rawVal) {
 
   // 3. Tương thích ngược dữ liệu tự do / danh mục cũ
   const lower = trimmed.toLowerCase();
+  if (lower.includes("nâng hạ")) {
+    return { group: "Thay đổi kế hoạch nâng hạ", detail: "" };
+  }
   if (lower.includes("thay đổi kế hoạch") || lower.includes("kế hoạch") || lower.includes("hoãn lấy cont") || lower.includes("chủ hàng & kế hoạch") || lower.includes("chủ hàng")) {
     return { group: "Thay đổi kế hoạch vận chuyển", detail: "" };
   }
-  if (lower.includes("không còn nhu cầu") || lower.includes("hủy đóng hàng") || lower.includes("không lấy cont")) {
-    return { group: "Thay đổi hoặc không còn nhu cầu đặt đơn", detail: "" };
+  if (lower.includes("không có nhu cầu") || lower.includes("không còn nhu cầu") || lower.includes("hủy đóng hàng") || lower.includes("không lấy cont") || lower.includes("thay đổi hoặc không còn nhu cầu")) {
+    return { group: "Không có nhu cầu đặt đơn", detail: "" };
   }
-  if (lower.includes("thực hiện đơn") || lower.includes("booking") || lower.includes("hết hạn") || lower.includes("chứng từ") || lower.includes("đặt lệnh") || lower.includes("sai booking") || lower.includes("khai nhầm") || lower.includes("trùng đơn") || lower.includes("chưa đóng phí")) {
+  if (trimmed === "Không đáp ứng điều kiện thực hiện đơn") {
     return { group: "Không đáp ứng điều kiện thực hiện đơn", detail: "" };
   }
   if (lower.includes("xử lý đơn") || lower.includes("lỗi cổng") || lower.includes("hệ thống")) {

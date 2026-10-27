@@ -33,6 +33,18 @@ const TURSO_URL = process.env.TURSO_DATABASE_URL || env.TURSO_DATABASE_URL || ""
 const TURSO_AUTH_TOKEN = process.env.TURSO_AUTH_TOKEN || env.TURSO_AUTH_TOKEN || "";
 
 let tursoClient = null;
+let isTursoWriteBlocked = false;
+
+function checkWriteBlockedError(err) {
+  if (err && (String(err.message).includes("writes are blocked") || String(err.message).includes("SQL write operations are forbidden"))) {
+    if (!isTursoWriteBlocked) {
+      isTursoWriteBlocked = true;
+      console.warn("[Turso] Phát hiện Turso chạm trần quota ghi (writes blocked). Tự động ngắt các lệnh ghi lên Turso để bảo toàn hiệu năng hệ thống.");
+    }
+    return true;
+  }
+  return false;
+}
 
 function getTursoClient() {
   if (!tursoClient && TURSO_URL && TURSO_AUTH_TOKEN) {
@@ -393,49 +405,62 @@ async function getLatestDateFromTurso(dateType = "ngayHuy") {
  * Đồng bộ / lưu đơn hủy lên Turso Cloud SQLite
  */
 async function syncOrdersToTurso(orders) {
-  if (!Array.isArray(orders) || orders.length === 0) return { synced: 0, total: 0 };
+  if (!Array.isArray(orders) || orders.length === 0 || isTursoWriteBlocked) return { synced: 0, total: orders ? orders.length : 0 };
   const client = getTursoClient();
   if (!client) throw new Error("Chưa khởi tạo client Turso");
 
-  await initTursoSchema();
+  try {
+    await initTursoSchema();
+  } catch (schemaErr) {
+    if (checkWriteBlockedError(schemaErr)) return { synced: 0, total: orders.length };
+  }
 
   const batchSize = 400;
   let synced = 0;
 
+  const chunks = [];
   for (let i = 0; i < orders.length; i += batchSize) {
-    const chunk = orders.slice(i, i + batchSize);
-    const statements = chunk.map(o => ({
-      sql: `
-        INSERT INTO cancellation_orders (
-          row_key, upload_id, file_name, stt, depot, hang_tau, ngay_huy_don, ngay_duoc_duyet,
-          so_booking, so_container, trang_thai_don_hang, trang_thai_kich_hoat, thoi_gian_kich_hoat,
-          ly_do_huy, loai_container, loai_don_hang, size_teus, ten_tai_xe, sdt_tai_xe,
-          ten_nha_xe, sdt_nha_xe, ly_do_tu_choi, trang_thai_xu_ly, giai_trinh, giai_trinh_chi_tiet,
-          original_trang_thai, is_auto_cancelled_3h, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-        ON CONFLICT(row_key) DO UPDATE SET
-          trang_thai_don_hang = excluded.trang_thai_don_hang,
-          ngay_duoc_duyet = excluded.ngay_duoc_duyet,
-          trang_thai_xu_ly = COALESCE(NULLIF(excluded.trang_thai_xu_ly, ''), cancellation_orders.trang_thai_xu_ly),
-          giai_trinh = COALESCE(NULLIF(excluded.giai_trinh, ''), cancellation_orders.giai_trinh),
-          giai_trinh_chi_tiet = COALESCE(NULLIF(excluded.giai_trinh_chi_tiet, ''), cancellation_orders.giai_trinh_chi_tiet),
-          is_auto_cancelled_3h = excluded.is_auto_cancelled_3h,
-          updated_at = datetime('now');
-      `,
-      args: [
-        o.rowKey, o.uploadId || "UP-MIGRATE", o.fileName || "", o.stt || "", o.depot || "",
-        o.hangTau || "", o.ngayHuyDon || "", o.ngayDuocDuyet || "", o.soBooking || "",
-        o.soContainer || "", o.trangThaiDonHang || "", o.trangThaiKichHoat || "",
-        o.thoiGianKichHoat || "", o.lyDoHuy || "", o.loaiContainer || "", o.loaiDonHang || "",
-        Number(o.sizeTeus) || 0, o.tenTaiXe || "", o.sdtTaiXe || "", o.tenNhaXe || "",
-        o.sdtNhaXe || "", o.lyDoTuChoi || "", o.trangThaiXuLy || "", o.giaiTrinh || "",
-        o.giaiTrinhChiTiet || null,
-        o.originalTrangThaiDonHang || "", o.isAutoCancelledBy3h ? 1 : 0
-      ]
-    }));
+    chunks.push(orders.slice(i, i + batchSize));
+  }
 
-    await client.batch(statements, "write");
-    synced += chunk.length;
+  // Chạy song song có kiểm soát (Concurrency = 3) để tối ưu thời gian RTT mạng tới AWS Sydney
+  const CONCURRENCY = 3;
+  for (let i = 0; i < chunks.length; i += CONCURRENCY) {
+    const slice = chunks.slice(i, i + CONCURRENCY);
+    await Promise.all(slice.map(async chunk => {
+      const statements = chunk.map(o => ({
+        sql: `
+          INSERT INTO cancellation_orders (
+            row_key, upload_id, file_name, stt, depot, hang_tau, ngay_huy_don, ngay_duoc_duyet,
+            so_booking, so_container, trang_thai_don_hang, trang_thai_kich_hoat, thoi_gian_kich_hoat,
+            ly_do_huy, loai_container, loai_don_hang, size_teus, ten_tai_xe, sdt_tai_xe,
+            ten_nha_xe, sdt_nha_xe, ly_do_tu_choi, trang_thai_xu_ly, giai_trinh, giai_trinh_chi_tiet,
+            original_trang_thai, is_auto_cancelled_3h, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          ON CONFLICT(row_key) DO UPDATE SET
+            trang_thai_don_hang = excluded.trang_thai_don_hang,
+            ngay_duoc_duyet = excluded.ngay_duoc_duyet,
+            trang_thai_xu_ly = COALESCE(NULLIF(excluded.trang_thai_xu_ly, ''), cancellation_orders.trang_thai_xu_ly),
+            giai_trinh = COALESCE(NULLIF(excluded.giai_trinh, ''), cancellation_orders.giai_trinh),
+            giai_trinh_chi_tiet = COALESCE(NULLIF(excluded.giai_trinh_chi_tiet, ''), cancellation_orders.giai_trinh_chi_tiet),
+            is_auto_cancelled_3h = excluded.is_auto_cancelled_3h,
+            updated_at = datetime('now');
+        `,
+        args: [
+          o.rowKey, o.uploadId || "UP-MIGRATE", o.fileName || "", o.stt || "", o.depot || "",
+          o.hangTau || "", o.ngayHuyDon || "", o.ngayDuocDuyet || "", o.soBooking || "",
+          o.soContainer || "", o.trangThaiDonHang || "", o.trangThaiKichHoat || "",
+          o.thoiGianKichHoat || "", o.lyDoHuy || "", o.loaiContainer || "", o.loaiDonHang || "",
+          Number(o.sizeTeus) || 0, o.tenTaiXe || "", o.sdtTaiXe || "", o.tenNhaXe || "",
+          o.sdtNhaXe || "", o.lyDoTuChoi || "", o.trangThaiXuLy || "", o.giaiTrinh || "",
+          o.giaiTrinhChiTiet || null,
+          o.originalTrangThaiDonHang || "", o.isAutoCancelledBy3h ? 1 : 0
+        ]
+      }));
+
+      await client.batch(statements, "write");
+      synced += chunk.length;
+    }));
   }
 
   return { synced, total: orders.length };
@@ -651,47 +676,60 @@ async function getAllVerificationOrdersFromTurso() {
  * Đồng bộ / lưu bản ghi kiểm tra đơn lên Turso
  */
 async function syncVerificationOrdersToTurso(orders) {
-  if (!Array.isArray(orders) || orders.length === 0) return { synced: 0, total: 0 };
+  if (!Array.isArray(orders) || orders.length === 0 || isTursoWriteBlocked) return { synced: 0, total: orders ? orders.length : 0 };
   const client = getTursoClient();
   if (!client) throw new Error("Chưa khởi tạo client Turso");
 
-  await initTursoSchema();
+  try {
+    await initTursoSchema();
+  } catch (schemaErr) {
+    if (checkWriteBlockedError(schemaErr)) return { synced: 0, total: orders.length };
+  }
 
   const batchSize = 400;
   let synced = 0;
 
+  const chunks = [];
   for (let i = 0; i < orders.length; i += batchSize) {
-    const chunk = orders.slice(i, i + batchSize);
-    const statements = chunk.map(o => ({
-      sql: `
-        INSERT INTO eir_cancellation_orders (
-          row_key, upload_id, file_name, stt_file, depot, hang_tau, ngay_huy_don, ngay_duoc_duyet,
-          so_booking, so_container, loai_container, loai_don_hang, size_teus, trang_thai_don_hang,
-          trang_thai_kich_hoat, thoi_gian_kich_hoat, ly_do_huy, ly_do_tu_choi, ly_do_huy_check,
-          ten_tai_xe, sdt_tai_xe, ten_nha_xe, sdt_nha_xe, so_xe, file_nguon, nguoi_tao, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-        ON CONFLICT(row_key) DO UPDATE SET
-          upload_id = excluded.upload_id,
-          file_name = excluded.file_name,
-          trang_thai_don_hang = excluded.trang_thai_don_hang,
-          ngay_duoc_duyet = excluded.ngay_duoc_duyet,
-          so_xe = excluded.so_xe,
-          nguoi_tao = excluded.nguoi_tao,
-          updated_at = datetime('now');
-      `,
-      args: [
-        o.rowKey, o.uploadId || "VER-UP", o.fileName || "", o.sttFile || "", o.depot || "",
-        o.hangTau || "", o.ngayHuyDon || "", o.ngayDuocDuyet || "", o.soBooking || "",
-        o.soContainer || "", o.loaiContainer || "", o.loaiDonHang || "", Number(o.sizeTeus) || 0,
-        o.trangThaiDonHang || "Chưa xác định", o.trangThaiKichHoat || "Chưa kích hoạt",
-        o.thoiGianKichHoat || "", o.lyDoHuy || "", o.lyDoTuChoi || "", o.lyDoHuyCheck || "",
-        o.tenTaiXe || "", o.sdtTaiXe || "", o.tenNhaXe || "", o.sdtNhaXe || "", o.soXe || "", o.fileName || "",
-        o.nguoiTao || ""
-      ]
-    }));
+    chunks.push(orders.slice(i, i + batchSize));
+  }
 
-    await client.batch(statements, "write");
-    synced += chunk.length;
+  // Chạy song song có kiểm soát (Concurrency = 3) để tối ưu thời gian RTT mạng tới AWS Sydney
+  const CONCURRENCY = 3;
+  for (let i = 0; i < chunks.length; i += CONCURRENCY) {
+    const slice = chunks.slice(i, i + CONCURRENCY);
+    await Promise.all(slice.map(async chunk => {
+      const statements = chunk.map(o => ({
+        sql: `
+          INSERT INTO eir_cancellation_orders (
+            row_key, upload_id, file_name, stt_file, depot, hang_tau, ngay_huy_don, ngay_duoc_duyet,
+            so_booking, so_container, loai_container, loai_don_hang, size_teus, trang_thai_don_hang,
+            trang_thai_kich_hoat, thoi_gian_kich_hoat, ly_do_huy, ly_do_tu_choi, ly_do_huy_check,
+            ten_tai_xe, sdt_tai_xe, ten_nha_xe, sdt_nha_xe, so_xe, file_nguon, nguoi_tao, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          ON CONFLICT(row_key) DO UPDATE SET
+            upload_id = excluded.upload_id,
+            file_name = excluded.file_name,
+            trang_thai_don_hang = excluded.trang_thai_don_hang,
+            ngay_duoc_duyet = excluded.ngay_duoc_duyet,
+            so_xe = excluded.so_xe,
+            nguoi_tao = excluded.nguoi_tao,
+            updated_at = datetime('now');
+        `,
+        args: [
+          o.rowKey, o.uploadId || "VER-UP", o.fileName || "", o.sttFile || "", o.depot || "",
+          o.hangTau || "", o.ngayHuyDon || "", o.ngayDuocDuyet || "", o.soBooking || "",
+          o.soContainer || "", o.loaiContainer || "", o.loaiDonHang || "", Number(o.sizeTeus) || 0,
+          o.trangThaiDonHang || "Chưa xác định", o.trangThaiKichHoat || "Chưa kích hoạt",
+          o.thoiGianKichHoat || "", o.lyDoHuy || "", o.lyDoTuChoi || "", o.lyDoHuyCheck || "",
+          o.tenTaiXe || "", o.sdtTaiXe || "", o.tenNhaXe || "", o.sdtNhaXe || "", o.soXe || "", o.fileName || "",
+          o.nguoiTao || ""
+        ]
+      }));
+
+      await client.batch(statements, "write");
+      synced += chunk.length;
+    }));
   }
 
   return { synced, total: orders.length };
@@ -956,9 +994,15 @@ async function getTursoRowCount() {
  * Khởi tạo bảng users trong Turso nếu chưa có
  */
 async function initTursoUsersTable() {
+  if (isTursoWriteBlocked) return;
   const client = getTursoClient();
   if (!client) return;
   try {
+    try {
+      await client.execute("SELECT 1 FROM users LIMIT 1;");
+      return;
+    } catch (checkErr) {}
+
     await client.execute(`
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -981,7 +1025,9 @@ async function initTursoUsersTable() {
       await client.execute("ALTER TABLE users ADD COLUMN allowed_screens TEXT NOT NULL DEFAULT 'dashboard,data_table';");
     } catch (e) {}
   } catch (e) {
-    console.warn("[Turso] Không thể khởi tạo bảng users:", e.message);
+    if (!checkWriteBlockedError(e)) {
+      console.warn("[Turso] Không thể khởi tạo bảng users:", e.message);
+    }
   }
 }
 
