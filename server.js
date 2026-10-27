@@ -1372,11 +1372,15 @@ app.post("/api/verification/upload", authRequired, upload.single("file"), async 
       timeZone: "Asia/Ho_Chi_Minh",
       year: "numeric",
       month: "2-digit",
-      day: "2-digit"
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false
     }).formatToParts(now);
     const vp = {};
     for (const part of vParts) { vp[part.type] = part.value; }
-    const newId = `VER-${vp.year}${vp.month}${vp.day}-${String(Date.now()).slice(-4)}`;
+    const newId = `VER-${vp.year}${vp.month}${vp.day}-${vp.hour}${vp.minute}${vp.second}`;
 
     // 2. Lưu trữ toàn bộ bảng SQL lên hệ thống cơ sở dữ liệu (Chờ Turso Cloud hoàn tất)
     const dbResult = await insertVerificationRecordsAsync(records, {
@@ -1421,7 +1425,31 @@ app.post("/api/verification/upload", authRequired, upload.single("file"), async 
 app.get("/api/verification/history", authRequired, async (req, res) => {
   try {
     const history = await loadVerificationHistoryAsync();
-    const formattedHistory = (history || []).map(item => ({
+
+    // Sắp xếp lịch sử kiểm tra đơn theo thời gian thực (mới nhất lên đầu)
+    const parseTime = (item) => {
+      if (!item) return 0;
+      if (item.createdAt) {
+        const t = new Date(item.createdAt).getTime();
+        if (!isNaN(t) && t > 0) return t;
+      }
+      const val = item.uploadedAt;
+      if (!val) return 0;
+      const str = String(val).trim();
+      const dmy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+      if (dmy) {
+        return new Date(parseInt(dmy[3], 10), parseInt(dmy[2], 10) - 1, parseInt(dmy[1], 10), parseInt(dmy[4] || 0, 10), parseInt(dmy[5] || 0, 10), parseInt(dmy[6] || 0, 10)).getTime();
+      }
+      const ymd = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+      if (ymd) {
+        return new Date(parseInt(ymd[1], 10), parseInt(ymd[2], 10) - 1, parseInt(ymd[3], 10), parseInt(ymd[4] || 0, 10), parseInt(ymd[5] || 0, 10), parseInt(ymd[6] || 0, 10)).getTime();
+      }
+      const t = new Date(str).getTime();
+      return isNaN(t) ? 0 : t;
+    };
+
+    const sortedHistory = [...(history || [])].sort((a, b) => parseTime(b) - parseTime(a));
+    const formattedHistory = sortedHistory.map(item => ({
       ...item,
       uploadedAt: formatVietnamDateTime(item.uploadedAt, item.id)
     }));

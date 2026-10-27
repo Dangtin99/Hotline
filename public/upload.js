@@ -652,7 +652,29 @@ async function loadVerificationHistory() {
     const result = await res.json();
     if (!res.ok || result.status !== "success") return;
 
-    rawVerificationData = result.data || [];
+    const list = result.data || [];
+    const parseItemTime = (item) => {
+      if (!item) return 0;
+      if (item.createdAt) {
+        const t = new Date(item.createdAt).getTime();
+        if (!isNaN(t) && t > 0) return t;
+      }
+      const val = item.uploadedAt;
+      if (!val) return 0;
+      const str = String(val).trim();
+      const dmy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+      if (dmy) {
+        return new Date(parseInt(dmy[3], 10), parseInt(dmy[2], 10) - 1, parseInt(dmy[1], 10), parseInt(dmy[4] || 0, 10), parseInt(dmy[5] || 0, 10), parseInt(dmy[6] || 0, 10)).getTime();
+      }
+      const ymd = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+      if (ymd) {
+        return new Date(parseInt(ymd[1], 10), parseInt(ymd[2], 10) - 1, parseInt(ymd[3], 10), parseInt(ymd[4] || 0, 10), parseInt(ymd[5] || 0, 10), parseInt(ymd[6] || 0, 10)).getTime();
+      }
+      const t = new Date(str).getTime();
+      return isNaN(t) ? 0 : t;
+    };
+
+    rawVerificationData = [...list].sort((a, b) => parseItemTime(b) - parseItemTime(a));
     renderVerificationHistoryTable();
   } catch (err) {
     console.error("Lỗi tải lịch sử kiểm tra đơn:", err);

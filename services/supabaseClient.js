@@ -662,7 +662,7 @@ async function getUploadHistoryFromSupabase() {
     await initSupabaseSchema();
     const client = await p.connect();
     try {
-      const res = await client.query("SELECT id, file_name, file_size, uploaded_at, record_count, teus_count, match_percent, is_valid, validation_json FROM upload_history ORDER BY id DESC;");
+      const res = await client.query("SELECT id, file_name, file_size, uploaded_at, record_count, teus_count, match_percent, is_valid, validation_json FROM upload_history ORDER BY created_at DESC, id DESC;");
       return res.rows.map(r => ({
         id: r.id,
         fileName: r.file_name,
@@ -750,7 +750,7 @@ async function getVerificationHistoryFromSupabase() {
     await initSupabaseSchema();
     const client = await p.connect();
     try {
-      const res = await client.query("SELECT * FROM verification_upload_history ORDER BY id DESC;");
+      const res = await client.query("SELECT * FROM verification_upload_history ORDER BY created_at DESC, id DESC;");
       return res.rows.map(r => ({
         id: r.id,
         fileName: r.file_name,
