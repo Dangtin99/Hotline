@@ -4617,3 +4617,8 @@ html.non-admin-user [data-admin-only="true"] {
 
 
 
+
+/* Ẩn hoàn toàn tab Dữ Liệu Check Đơn trên thanh điều hướng bên trái */
+#navVerificationTable {
+  display: none !important;
+}

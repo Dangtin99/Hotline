@@ -221,6 +221,10 @@ function applyRolePermissions(user) {
     SYSTEM_SCREENS_CONFIG.forEach(screen => {
       const navEl = document.getElementById(screen.navId);
       if (navEl) {
+        if (screen.id === "verification") {
+          navEl.style.setProperty("display", "none", "important");
+          return;
+        }
         const hasAccess = userHasScreenAccess(user, screen.id);
         if (hasAccess) {
           navEl.style.removeProperty("display");
@@ -262,10 +266,16 @@ function applyRolePermissions(user) {
     }
   } else {
     document.documentElement.classList.remove("non-admin-user");
-    // Đối với Admin: Hiển thị đầy đủ tất cả các màn hình
+    // Đối với Admin: Hiển thị đầy đủ tất cả các màn hình (trừ các tab ẩn hệ thống)
     SYSTEM_SCREENS_CONFIG.forEach(screen => {
       const navEl = document.getElementById(screen.navId);
-      if (navEl) navEl.style.removeProperty("display");
+      if (navEl) {
+        if (screen.id === "verification") {
+          navEl.style.setProperty("display", "none", "important");
+          return;
+        }
+        navEl.style.removeProperty("display");
+      }
     });
     const uploadHeading = document.getElementById("sidebarHeadingUpload");
     if (uploadHeading) {
