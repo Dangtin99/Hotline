@@ -281,7 +281,7 @@
   }
 
   // Key lưu cache phía Client (SessionStorage) để trang hiển thị tức thì (0ms)
-  const CLIENT_CACHE_KEY = "CACHED_REBOOKING_ORDERS_V3";
+  const CLIENT_CACHE_KEY = "CACHED_REBOOKING_ORDERS_V4";
 
   // Hàm chuẩn hóa biển số xe để so khớp (bỏ khoảng trắng, dấu gạch ngang, chấm)
   function cleanTruckPlate(t) {
