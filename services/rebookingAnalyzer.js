@@ -69,7 +69,7 @@ function parseRecordTimestamp(r) {
  *
  * VÒNG 1: Booking + Container + Chiều + Depot + Hãng tàu
  *          → Gom các lần hủy/đặt lại trên cùng vỏ Container
- * VÒNG 2: Booking + Chiều + Depot + Hãng tàu (KHÁC Container)
+ * VÒNG 2 (CHỈ CHIỀU OUT): Booking + Chiều OUT + Depot + Hãng tàu (KHÁC Container)
  *          → Gom đơn đổi vỏ cont mới trong cùng Booking
  * VÒNG 3: Container + Chiều + Người tạo + Số xe + Depot + Hãng tàu (KHÁC Booking)
  *          → Gom đơn bị cấp số Booking mới cho cùng Container
@@ -88,7 +88,8 @@ function analyzeAndGroupOrders(records) {
       }
       r._cleanBooking = (r.soBooking || "").toString().trim().toUpperCase();
       r._cleanCont    = (r.soContainer || "").toString().trim().toUpperCase();
-      r._cleanDir     = (r.loaiDonHang || "").toString().trim().toUpperCase();
+      const dirRaw = (r.loaiDonHang || "").toString().trim().toUpperCase();
+      r._cleanDir     = dirRaw.includes("OUT") ? "OUT" : (dirRaw.includes("IN") ? "IN" : dirRaw);
       r._cleanCreator = (r.nguoiTao || "").toString().trim().toUpperCase();
       r._cleanDepot   = (r.depot || "").toString().trim().toUpperCase();
       r._cleanLine    = (r.hangTau || "").toString().trim().toUpperCase();
@@ -212,7 +213,7 @@ function analyzeAndGroupOrders(records) {
   });
 
   // ============================================================
-  // VÒNG 2 (MỚI): Gom theo Booking + Chiều + Depot + Hãng tàu (KHÁC Container)
+  // VÒNG 2 (MỚI): Gom theo Booking + Chiều OUT + Depot + Hãng tàu (KHÁC Container — CHỈ ÁP DỤNG CHIỀU OUT)
   // Tình huống: Cont cũ bị hủy → đổi vỏ Container mới trong cùng Booking
   // Ràng buộc: Đơn Container cũ phải có trạng thái HỦY, 2 Container phải KHÁC NHAU
   // ============================================================
@@ -226,8 +227,9 @@ function analyzeAndGroupOrders(records) {
     const dep  = latest._cleanDepot || (candidate.depot  || "").toString().trim().toUpperCase();
     const line = latest._cleanLine  || (candidate.hangTau || "").toString().trim().toUpperCase();
 
-    // Chỉ gom vào Vòng 2 khi có đủ Booking + Depot + Hãng tàu hợp lệ
-    if (!bk || bk === "-" || bk === "CHUA_CO_BOOKING" || !dep || dep === "-" || !line || line === "-") {
+    // Chỉ gom vào Vòng 2 khi có chiều OUT và đủ Booking + Depot + Hãng tàu hợp lệ
+    const isOutDir = dir && dir.toString().toUpperCase().includes("OUT");
+    if (!isOutDir || !bk || bk === "-" || bk === "CHUA_CO_BOOKING" || !dep || dep === "-" || !line || line === "-") {
       pass2Groups.push(candidate);
       return;
     }
