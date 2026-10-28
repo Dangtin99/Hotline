@@ -144,5 +144,22 @@
     "isActive": true,
     "createdAt": "2026-10-15 02:47:40",
     "updatedAt": "2026-10-15 02:47:40"
+  },
+  {
+    "id": "13",
+    "fullName": "Lại Thị Kim Hồng",
+    "username": "user07",
+    "passwordHash": "8ef0a8b33c21e441095b48fa5c60700d28b5df47306a7a6b3c38c6be956676718cd33e99c5c7e81098626c8bbe5af2650e4e1504720d913fd5ab6858a92d50d2",
+    "salt": "d65879f505886f33024789c1ffe58fb7",
+    "role": "user",
+    "assignedDepots": [
+      "ALL"
+    ],
+    "allowedScreens": [
+      "call_management"
+    ],
+    "isActive": true,
+    "createdAt": "2026-10-28 04:37:30",
+    "updatedAt": "2026-10-28 04:39:44"
   }
 ]

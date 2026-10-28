@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quản Trị Người Dùng & Phân Quyền Hệ Thống - GPG Logistics</title>
+  <link rel="stylesheet" href="style.css?v=20261028_1105">
+  <script src="auth.js?v=20261028_1105"></script>
+  <script defer src="user-management.js?v=20261028_1105"></script>
+</head>
+<body>
+  <div class="app-wrapper">
+    <!-- Thanh Tab Bên Trái (Left Sidebar) -->
+    <aside class="app-sidebar">
+      <div class="sidebar-brand">
+        <div>
+          <div class="brand-title">GPG LOGISTICS</div>
+          <div class="brand-subtitle">Quản Trị Đơn Hủy 24/7</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="sidebar-heading">
+          <span>TỔNG QUAN</span>
+          <span style="font-size: 9px; opacity: 0.85;">▼</span>
+        </div>
+        <a href="index.html" class="sidebar-link" id="navDashboard">
+          <span>Bảng Điều Khiển</span>
+        </a>
+
+        <div class="sidebar-heading" style="margin-top: 10px;">
+          <span>PHÂN HỆ DỮ LIỆU</span>
+          <span style="font-size: 9px; opacity: 0.85;">▼</span>
+        </div>
+        <a href="data-table.html" class="sidebar-link" id="navDataTable">
+          <span>Dữ Liệu Chi Tiết</span>
+        </a>
+        <a href="verification-table.html" class="sidebar-link" id="navVerificationTable" data-admin-only="true">
+          <span>Dữ Liệu Check Đơn</span>
+        </a>
+        <a href="new-feature.html" class="sidebar-link" id="navNewFeature" data-admin-only="true">
+          <span>Báo Cáo Mới</span>
+        </a>
+        <a href="call-management.html" class="sidebar-link" id="navCallManagement" data-admin-only="true">
+          <span>Quản Lý Gọi Điện</span>
+        </a>
+
+        <div class="sidebar-heading" id="sidebarHeadingSystemAdmin" data-admin-only="true" style="margin-top: 10px;">
+          <span>QUẢN TRỊ HỆ THỐNG</span>
+          <span style="font-size: 9px; opacity: 0.85;">▼</span>
+        </div>
+        <a href="user-management.html" class="sidebar-link active" id="navUserManagement" data-admin-only="true">
+          <span>Phân Quyền Tài Khoản</span>
+        </a>
+
+        <div class="sidebar-heading" id="sidebarHeadingUpload" data-admin-only="true" style="margin-top: 10px;">
+          <span>QUẢN TRỊ TẢI LÊN</span>
+          <span style="font-size: 9px; opacity: 0.85;">▼</span>
+        </div>
+        <a href="upload.html" class="sidebar-link" id="navUpload" data-admin-only="true">
+          <span>Đăng Tải Dữ Liệu</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-user-card" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; background: rgba(255,255,255,0.08); border-radius: 8px; margin-bottom: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px; overflow: hidden;">
+            <span id="sidebarUserName" style="font-size: 12px; font-weight: 500; color: #f8fafc; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Admin</span>
+          </div>
+          <button type="button" id="sidebarBtnLogout" style="background: none; border: none; color: #94a3b8; font-size: 14px; cursor: pointer; padding: 2px;" title="Đăng xuất">Đăng xuất</button>
+        </div>
+        <div class="system-status">
+          <span class="status-dot"></span>
+          <span>Hệ thống trực tuyến</span>
+        </div>
+        <div class="sidebar-copyright">
+          <span>© 2026 GPG Logistics</span>
+          <span>v3.7</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Nội dung chính (Main Content) -->
+    <div class="main-content">
+      <!-- Header -->
+      <header class="app-header">
+        <div class="header-brand">
+          <div>
+            <h1>HỆ THỐNG TRỢ LÝ AI - PHÂN TÍCH ĐƠN HỦY 24/7</h1>
+            <p class="subtitle">Phân Hệ Quản Trị Hệ Thống & Phân Quyền Người Dùng</p>
+          </div>
+        </div>
+
+        <div class="header-actions">
+          <button type="button" class="btn btn-outline btn-sm" id="btnRefreshList" title="Tải lại danh sách tài khoản">
+            Làm Mới
+          </button>
+          <div class="header-user-dropdown-container" id="headerUserMenu">
+            <button type="button" class="user-chip-btn" id="userChipBtn" aria-haspopup="true" aria-expanded="false" title="Menu người dùng">
+              tài khoản
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <!-- Nội dung trang Quản trị người dùng -->
+      <main class="user-mgt-container">
+        <!-- Tiêu đề trang & Breadcrumb -->
+        <div class="user-mgt-header">
+          <div class="user-mgt-title-group">
+            <h2>Phân Quyền & Quản Trị Tài Khoản Người Dùng</h2>
+            <p>Quản lý tập trung tài khoản, vai trò vận hành, cấp quyền truy cập theo từng Depot và phân quyền theo từng Màn hình hệ thống.</p>
+          </div>
+        </div>
+
+        <!-- Hộp thông báo phản hồi thao tác -->
+        <div id="userMgtNoticeBox" class="auth-notice-box" style="display: none;"></div>
+
+        <!-- Các thẻ thống kê tổng quan (Summary KPI Cards) -->
+        <section class="admin-kpi-grid">
+          <div class="admin-kpi-card card-primary">
+            <span class="kpi-label">Tổng Số Tài Khoản</span>
+            <span class="kpi-value" id="kpiTotalUsers">0</span>
+          </div>
+          <div class="admin-kpi-card card-success">
+            <span class="kpi-label">Đang Hoạt Động</span>
+            <span class="kpi-value" id="kpiActiveUsers">0</span>
+          </div>
+          <div class="admin-kpi-card card-danger">
+            <span class="kpi-label">Đã Tạm Khóa</span>
+            <span class="kpi-value" id="kpiInactiveUsers">0</span>
+          </div>
+          <div class="admin-kpi-card card-primary">
+            <span class="kpi-label">Quản Trị Viên (Admin)</span>
+            <span class="kpi-value" id="kpiAdminUsers">0</span>
+          </div>
+          <div class="admin-kpi-card card-warning">
+            <span class="kpi-label">Người Dùng (User)</span>
+            <span class="kpi-value" id="kpiRegularUsers">0</span>
+          </div>
+        </section>
+
+        <!-- Thanh 3 Tab Con: Phân Quyền Dữ Liệu Depot vs Phân Quyền Xem Báo Cáo vs Khóa User -->
+        <nav class="user-mgt-tabs-bar" role="tablist">
+          <button type="button" class="user-mgt-tab-btn active" id="tabBtnDepot" role="tab" aria-selected="true">
+            <span>Phân Quyền Vào Dữ Liệu Depot</span>
+          </button>
+          <button type="button" class="user-mgt-tab-btn" id="tabBtnScreens" role="tab" aria-selected="false">
+            <span>Phân Quyền Xem Báo Cáo</span>
+          </button>
+          <button type="button" class="user-mgt-tab-btn" id="tabBtnLock" role="tab" aria-selected="false">
+            <span>Khóa / Kích Hoạt User</span>
+          </button>
+        </nav>
+
+        <!-- Thẻ tóm tắt nghiệp vụ theo tab đang chọn -->
+        <div class="tab-guidance-card" id="tabGuidanceCard">
+          <div>
+            <strong id="tabGuidanceTitle">Phân Quyền Dữ Liệu Theo Depot Vận Hành:</strong>
+            <span id="tabGuidanceDesc" style="margin-left: 6px; color: #475569;">Cấp quyền xem các đơn hàng phát sinh tại từng bãi Depot hoặc Toàn quyền xem toàn bộ hệ thống (ALL).</span>
+          </div>
+          <span style="font-size: 11.5px; font-weight: 700; color: #1d4ed8; background: #eff6ff; padding: 2px 8px; border-radius: 4px; border: 1px solid #bfdbfe;" id="tabGuidanceTag">DỮ LIỆU BÃI CONT</span>
+        </div>
+
+        <!-- Khối công cụ tìm kiếm, lọc & thao tác hàng loạt -->
+        <section class="admin-toolbar-card">
+          <div class="admin-filter-row">
+            <div class="admin-search-wrapper">
+              <input type="text" id="filterSearch" class="admin-search-input" placeholder="Tìm kiếm theo họ tên, tên đăng nhập (username)..." autocomplete="off">
+            </div>
+
+            <select id="filterRole" class="admin-filter-select" title="Lọc theo vai trò">
+              <option value="ALL">Tất cả vai trò</option>
+              <option value="admin">Quản trị viên (admin)</option>
+              <option value="user">Người dùng (user)</option>
+            </select>
+
+            <select id="filterStatus" class="admin-filter-select" title="Lọc theo trạng thái">
+              <option value="ALL">Tất cả trạng thái</option>
+              <option value="active">Đang hoạt động</option>
+              <option value="inactive">Đã khóa</option>
+            </select>
+
+            <!-- Dropdown lọc theo Depot (Hiển thị khi ở Tab Depot) -->
+            <select id="filterDepot" class="admin-filter-select" title="Lọc theo Depot">
+              <option value="ALL">Tất cả Depot</option>
+              <option value="ALL_DEPOTS">Toàn quyền (ALL)</option>
+              <option value="AIC">Depot AIC</option>
+              <option value="BSD">Depot BSD</option>
+              <option value="CPD">Depot CPD</option>
+              <option value="EAD">Depot EAD</option>
+              <option value="EPD">Depot EPD</option>
+              <option value="ETD">Depot ETD</option>
+              <option value="GKP">Depot GKP</option>
+              <option value="PMCM">Depot PMCM</option>
+              <option value="RCS">Depot RCS</option>
+              <option value="SCD">Depot SCD</option>
+              <option value="SLD">Depot SLD</option>
+              <option value="TES">Depot TES</option>
+              <option value="THT">Depot THT</option>
+            </select>
+
+            <!-- Dropdown lọc theo Báo Cáo (Hiển thị khi ở Tab Báo Cáo) -->
+            <select id="filterScreen" class="admin-filter-select" title="Lọc theo Báo cáo" style="display: none;">
+              <option value="ALL">Tất cả báo cáo</option>
+              <option value="ALL_SCREENS">Toàn quyền (6/6 Báo Cáo)</option>
+              <option value="dashboard">Bảng Điều Khiển</option>
+              <option value="data_table">Dữ Liệu Chi Tiết</option>
+              <option value="verification">Dữ Liệu Check Đơn</option>
+              <option value="rebooking">Báo Cáo Đặt Lại / Mới</option>
+              <option value="call_management">Quản Lý Gọi Điện</option>
+              <option value="upload">Đăng Tải Dữ Liệu</option>
+            </select>
+
+            <button type="button" class="btn btn-secondary btn-sm" id="btnResetFilters">
+              Đặt Lại Lọc
+            </button>
+          </div>
+
+          <!-- Thanh tác vụ hàng loạt khi chọn nhiều checkbox -->
+          <div id="bulkActionBar" class="admin-bulk-bar" style="display: none;">
+            <span class="bulk-info-label" id="bulkSelectedCount">Đã chọn: 0 tài khoản</span>
+            <div class="bulk-actions-group" id="bulkActionsGroup">
+              <button type="button" class="btn btn-primary btn-sm" id="btnBulkActionActiveTab" style="background: var(--blue-primary); border-color: var(--blue-primary); font-weight: 700;">
+                Phân Quyền Depot
+              </button>
+              <button type="button" class="btn btn-sm btn-lock-action btn-lock-danger" id="btnBulkLockUsers" style="display: none;">
+                Khóa Tài Khoản Đã Chọn
+              </button>
+              <button type="button" class="btn btn-sm btn-lock-action btn-lock-success" id="btnBulkUnlockUsers" style="display: none;">
+                Kích Hoạt Tài Khoản Đã Chọn
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" id="btnDeselectAll">
+                Bỏ Chọn
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Bảng Danh Sách Tài Khoản -->
+        <section class="admin-table-container">
+          <div class="admin-table-header-box">
+            <strong id="tableHeaderTitle">Danh Sách Phân Quyền Dữ Liệu Depot</strong>
+            <span id="tableCountLabel" style="font-size: 13px; color: var(--text-muted); font-weight: 500;">Hiển thị: 0 tài khoản</span>
+          </div>
+
+          <div class="table-responsive-wrapper">
+            <table class="admin-user-table" id="adminUsersMainTable">
+              <thead id="usersTableHead">
+                <!-- Nội dung thead được tạo động theo tab active -->
+                <tr>
+                  <th style="width: 44px; text-align: center;">
+                    <input type="checkbox" id="userSelectAllCb" title="Chọn tất cả" style="cursor: pointer; width: 16px; height: 16px;">
+                  </th>
+                  <th style="width: 50px; text-align: center;">STT</th>
+                  <th>Họ và Tên</th>
+                  <th>Tài Khoản</th>
+                  <th>Vai Trò</th>
+                  <th id="thPermissionColumn">Quyền Truy Cập Depot</th>
+                  <th style="text-align: center; width: 110px;">Trạng Thái</th>
+                  <th style="text-align: right; width: 190px;">Thao Tác</th>
+                </tr>
+              </thead>
+              <tbody id="usersTableBody">
+                <tr>
+                  <td colspan="8" style="text-align: center; padding: 28px; color: var(--text-muted);">
+                    Đang nạp dữ liệu...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="admin-table-footer-box">
+            <span id="tableFooterNotice">Nguyên tắc: Quản trị viên (admin) có toàn quyền truy cập tất cả Depot và Màn hình báo cáo.</span>
+            <span>Hệ thống phân quyền thời gian thực</span>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- MODAL: PHÂN QUYỀN DEPOT -->
+  <div id="depotModal" class="modal-backdrop" hidden>
+    <div class="modal-dialog" style="max-width: 540px;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div class="modal-title-group">
+            <div>
+              <div class="modal-title" id="depotModalTitle">Phân Quyền Depot Trực Thuộc</div>
+              <div class="modal-subtitle" id="depotModalSubtitle">Chọn các Depot mà người dùng này được phép xem dữ liệu</div>
+            </div>
+          </div>
+          <button type="button" class="modal-close-btn" id="btnCloseDepotModal" title="Đóng">&times;</button>
+        </div>
+
+        <div style="padding: 16px 24px 0 24px;">
+          <div id="depotModalNotice" class="auth-notice-box" style="margin-bottom: 12px; display: none;"></div>
+          <div style="background: #f8fafc; padding: 10px 14px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 13px; color: #475569; margin-bottom: 14px; line-height: 1.45;">
+            <strong>Nguyên tắc phân quyền:</strong> Nếu chọn <em>Tất cả Depot (Toàn quyền ALL)</em>, người dùng sẽ có quyền xem dữ liệu của toàn bộ các bãi. Nếu chọn các Depot cụ thể, người dùng chỉ xem được các đơn hàng thuộc các Depot đó.
+          </div>
+        </div>
+
+        <div class="modal-body" style="padding: 0 24px 16px 24px;">
+          <div style="margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #e2e8f0;">
+            <label style="display: flex; align-items: center; gap: 8px; font-weight: 700; color: #1d4ed8; cursor: pointer; font-size: 13.5px;">
+              <input type="checkbox" id="depotModalCbAll" style="width: 16px; height: 16px; cursor: pointer;">
+              <span>Tất cả Depot (Toàn quyền ALL)</span>
+            </label>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;" id="depotCheckboxesGrid">
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: #334155; cursor: pointer; background: #ffffff; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px;">
+              <input type="checkbox" class="depot-modal-item-cb" value="AIC" style="width: 15px; height: 15px; cursor: pointer;">
+              <span>Depot AIC</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: #334155; cursor: pointer; background: #ffffff; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px;">
+              <input type="checkbox" class="depot-modal-item-cb" value="BSD" style="width: 15px; height: 15px; cursor: pointer;">
+              <span>Depot BSD</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: #334155; cursor: pointer; background: #ffffff; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px;">
+              <input type="checkbox" class="depot-modal-item-cb" value="CPD" style="width: 15px; height: 15px; cursor: pointer;">
+              <span>Depot CPD</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: #334155; cursor: pointer; background: #ffffff; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px;">
+              <input type="checkbox" class="depot-modal-item-cb" value="EAD" style="width: 15px; height: 15px; cursor: pointer;">
+              <span>Depot EAD</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: #334155; cursor: pointer; background: #ffffff; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px;">
+              <input type="checkbox" class="depot-modal-item-cb" value="EPD" style="width: 15px; height: 15px; cursor: pointer;">
+              <span>Depot EPD</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: #334155; cursor: pointer; background: #ffffff; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px;">
+              <input type="checkbox" class="depot-modal-item-cb" value="ETD" style="width: 15px; height: 15px; cursor: pointer;">
+              <span>Depot ETD</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: #334155; cursor: pointer; background: #ffffff; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px;">
+              <input type="checkbox" class="depot-modal-item-cb" value="GKP" style="width: 15px; height: 15px; cursor: pointer;">
+              <span>Depot GKP</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: #334155; cursor: pointer; background: #ffffff; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px;">
+              <input type="checkbox" class="depot-modal-item-cb" value="PMCM" style="width: 15px; height: 15px; cursor: pointer;">
+              <span>Depot PMCM</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: #334155; cursor: pointer; background: #ffffff; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px;">
+              <input type="checkbox" class="depot-modal-item-cb" value="RCS" style="width: 15px; height: 15px; cursor: pointer;">
+              <span>Depot RCS</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: #334155; cursor: pointer; background: #ffffff; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px;">
+              <input type="checkbox" class="depot-modal-item-cb" value="SCD" style="width: 15px; height: 15px; cursor: pointer;">
+              <span>Depot SCD</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: #334155; cursor: pointer; background: #ffffff; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px;">
+              <input type="checkbox" class="depot-modal-item-cb" value="SLD" style="width: 15px; height: 15px; cursor: pointer;">
+              <span>Depot SLD</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: #334155; cursor: pointer; background: #ffffff; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px;">
+              <input type="checkbox" class="depot-modal-item-cb" value="TES" style="width: 15px; height: 15px; cursor: pointer;">
+              <span>Depot TES</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: #334155; cursor: pointer; background: #ffffff; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px;">
+              <input type="checkbox" class="depot-modal-item-cb" value="THT" style="width: 15px; height: 15px; cursor: pointer;">
+              <span>Depot THT</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-footer" style="padding: 14px 24px; display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="button" class="btn btn-secondary btn-sm" id="btnCancelDepotModal">Hủy</button>
+          <button type="button" class="btn btn-primary btn-sm" id="btnSaveDepots" style="font-weight: 700; background: var(--blue-primary); border-color: var(--blue-primary);">Lưu Phân Quyền</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: PHÂN QUYỀN MÀN HÌNH / BÁO CÁO -->
+  <div id="screensModal" class="modal-backdrop" hidden>
+    <div class="modal-dialog auth-modal-dialog-md" style="max-width: 680px;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div class="modal-title-group">
+            <div>
+              <div class="modal-title" id="screensModalTitle">Phân Quyền Xem Báo Cáo Hệ Thống</div>
+              <div class="modal-subtitle" id="screensModalSubtitle">Chọn các phân hệ báo cáo & màn hình mà người dùng này được phép xem</div>
+            </div>
+          </div>
+          <button type="button" class="modal-close-btn" id="btnCloseScreensModal" title="Đóng">&times;</button>
+        </div>
+
+        <div style="padding: 16px 24px 0 24px;">
+          <div id="screensModalNotice" class="auth-notice-box" style="margin-bottom: 12px; display: none;"></div>
+          <div style="background: #f8fafc; padding: 10px 14px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 13px; color: #475569; margin-bottom: 14px; line-height: 1.45;">
+            <strong>Nguyên tắc phân quyền:</strong> Nếu chọn <em>Tất cả Báo cáo (Toàn quyền 6/6)</em>, người dùng có quyền truy cập toàn bộ 6 màn hình báo cáo. Nếu chỉ cấp các báo cáo cụ thể, thanh điều hướng sidebar sẽ chỉ hiển thị các báo cáo đó và hệ thống sẽ chặn truy cập nếu người dùng nhập URL trực tiếp.
+          </div>
+        </div>
+
+        <div class="modal-body" style="padding: 0 24px 16px 24px;">
+          <div style="margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid #e2e8f0;">
+            <label style="display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--success); cursor: pointer; font-size: 13.5px;">
+              <input type="checkbox" id="screensModalCbAll" style="width: 16px; height: 16px; cursor: pointer;">
+              <span>Tất cả Báo Cáo (Toàn quyền 6/6 báo cáo)</span>
+            </label>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;" id="screensCheckboxesGrid">
+            <label style="display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: #334155; cursor: pointer; background: #ffffff; padding: 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
+              <input type="checkbox" class="screen-modal-item-cb" value="dashboard" style="width: 16px; height: 16px; margin-top: 2px; cursor: pointer;">
+              <div style="display: flex; flex-direction: column;">
+                <span style="font-weight: 700; color: #0f172a;">Bảng Điều Khiển</span>
+                <span style="font-size: 11.5px; color: #64748b; margin-top: 3px; line-height: 1.35;">Tổng quan KPI, biểu đồ sản lượng hủy & phân bổ lỗi</span>
+              </div>
+            </label>
+
+            <label style="display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: #334155; cursor: pointer; background: #ffffff; padding: 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
+              <input type="checkbox" class="screen-modal-item-cb" value="data_table" style="width: 16px; height: 16px; margin-top: 2px; cursor: pointer;">
+              <div style="display: flex; flex-direction: column;">
+                <span style="font-weight: 700; color: #0f172a;">Dữ Liệu Chi Tiết</span>
+                <span style="font-size: 11.5px; color: #64748b; margin-top: 3px; line-height: 1.35;">Bảng chi tiết 21 cột, phân loại hủy & trạng thái thanh toán</span>
+              </div>
+            </label>
+
+            <label style="display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: #334155; cursor: pointer; background: #ffffff; padding: 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
+              <input type="checkbox" class="screen-modal-item-cb" value="verification" style="width: 16px; height: 16px; margin-top: 2px; cursor: pointer;">
+              <div style="display: flex; flex-direction: column;">
+                <span style="font-weight: 700; color: #0f172a;">Dữ Liệu Check Đơn</span>
+                <span style="font-size: 11.5px; color: #64748b; margin-top: 3px; line-height: 1.35;">Bảng đối soát đơn hệ thống Smartlog & kiểm tra lệnh</span>
+              </div>
+            </label>
+
+            <label style="display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: #334155; cursor: pointer; background: #ffffff; padding: 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
+              <input type="checkbox" class="screen-modal-item-cb" value="rebooking" style="width: 16px; height: 16px; margin-top: 2px; cursor: pointer;">
+              <div style="display: flex; flex-direction: column;">
+                <span style="font-weight: 700; color: #0f172a;">Báo Cáo Đặt Lại / Mới</span>
+                <span style="font-size: 11.5px; color: #64748b; margin-top: 3px; line-height: 1.35;">Thống kê & phân tích tỷ lệ khách đặt lại đơn hủy</span>
+              </div>
+            </label>
+
+            <label style="display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: #334155; cursor: pointer; background: #ffffff; padding: 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
+              <input type="checkbox" class="screen-modal-item-cb" value="call_management" style="width: 16px; height: 16px; margin-top: 2px; cursor: pointer;">
+              <div style="display: flex; flex-direction: column;">
+                <span style="font-weight: 700; color: #0f172a;">Quản Lý Gọi Điện</span>
+                <span style="font-size: 11.5px; color: #64748b; margin-top: 3px; line-height: 1.35;">Theo dõi cuộc gọi CSKH & xử lý lý do hủy đơn</span>
+              </div>
+            </label>
+
+            <label style="display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: #334155; cursor: pointer; background: #ffffff; padding: 12px; border: 1px solid #cbd5e1; border-radius: 6px;">
+              <input type="checkbox" class="screen-modal-item-cb" value="upload" style="width: 16px; height: 16px; margin-top: 2px; cursor: pointer;">
+              <div style="display: flex; flex-direction: column;">
+                <span style="font-weight: 700; color: #0f172a;">Đăng Tải Dữ Liệu</span>
+                <span style="font-size: 11.5px; color: #64748b; margin-top: 3px; line-height: 1.35;">Nạp file Excel/CSV báo cáo hủy & đối soát</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-footer" style="padding: 14px 24px; display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="button" class="btn btn-secondary btn-sm" id="btnCancelScreensModal">Hủy</button>
+          <button type="button" class="btn btn-primary btn-sm" id="btnSaveScreens" style="font-weight: 700; background: var(--success); border-color: var(--success);">Lưu Quyền Báo Cáo</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

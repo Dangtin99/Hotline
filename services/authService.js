@@ -237,6 +237,16 @@ const SEED_ACCOUNTS = [
     assignedDepots: ["ALL"],
     allowedScreens: ["dashboard", "data_table"],
     isActive: 1
+  },
+  {
+    fullName: "Lại Thị Kim Hồng",
+    username: "user07",
+    password: "123456789@",
+    role: "user",
+    assignedDepots: ["ALL"],
+    allowedScreens: ["dashboard", "data_table"],
+    isActive: 1,
+    aliases: ["hongltk", "kimhong", "laithikimhong"]
   }
 ];
 
@@ -553,7 +563,14 @@ function authenticate(username, password) {
   }
 
   const users = loadUsers();
-  const user = users.find(u => u.username.toLowerCase() === String(username).toLowerCase().trim());
+  const searchKey = String(username).toLowerCase().trim();
+  const user = users.find(u => {
+    if (u.username.toLowerCase() === searchKey) return true;
+    if (u.fullName && u.fullName.toLowerCase() === searchKey) return true;
+    if (u.aliases && Array.isArray(u.aliases) && u.aliases.some(a => a.toLowerCase() === searchKey)) return true;
+    if (u.username.toLowerCase() === "user07" && ["hongltk", "kimhong", "laithikimhong", "lai thi kim hong"].includes(searchKey)) return true;
+    return false;
+  });
   if (!user) {
     return { success: false, message: "Tên đăng nhập hoặc mật khẩu không chính xác." };
   }

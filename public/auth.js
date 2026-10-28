@@ -113,6 +113,11 @@ function getFirstAllowedScreenPath(user) {
       const u = JSON.parse(userStr);
       if (u && u.role !== "admin") {
         document.documentElement.classList.add("non-admin-user");
+        if (window.location.pathname.toLowerCase().endsWith("user-management.html")) {
+          alert("Chức năng Phân quyền tài khoản chỉ dành riêng cho Quản trị viên (admin).\nTài khoản hiện tại của bạn là Người dùng (user).");
+          window.location.replace("index.html");
+          return;
+        }
         const currentScreenId = getCurrentScreenId();
         if (currentScreenId && !userHasScreenAccess(u, currentScreenId)) {
           const redirectPath = getFirstAllowedScreenPath(u);
@@ -317,7 +322,7 @@ function renderUserProfile(user) {
       dropdown.hidden = true;
       if (chipBtn) chipBtn.setAttribute("aria-expanded", "false");
       if (isAdmin) {
-        openAdminUserModal();
+        window.location.href = "user-management.html";
       } else {
         alert("Chức năng Phân quyền tài khoản chỉ dành riêng cho Quản trị viên (admin).\nTài khoản hiện tại của bạn là Người dùng (user).");
       }
