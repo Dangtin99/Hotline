@@ -20,46 +20,60 @@
       </div>
 
       <nav class="sidebar-nav">
-        <div class="sidebar-heading">
+        <div class="sidebar-heading" data-group="overview" role="button" tabindex="0">
           <span>TỔNG QUAN</span>
-          <span style="font-size: 9px; opacity: 0.85;">▼</span>
+          <span class="sidebar-heading-arrow">▼</span>
         </div>
-        <a href="index.html" class="sidebar-link" id="navDashboard">
-          <span>Bảng Điều Khiển</span>
-        </a>
+        <div class="sidebar-group-items">
+          <a href="index.html" class="sidebar-link" id="navDashboard">
+            <span>Bảng Điều Khiển</span>
+          </a>
+        </div>
 
-        <div class="sidebar-heading" style="margin-top: 10px;">
+        <div class="sidebar-heading" data-group="data_modules" role="button" tabindex="0" style="margin-top: 10px;">
           <span>PHÂN HỆ DỮ LIỆU</span>
-          <span style="font-size: 9px; opacity: 0.85;">▼</span>
+          <span class="sidebar-heading-arrow">▼</span>
         </div>
-        <a href="data-table.html" class="sidebar-link" id="navDataTable">
-          <span>Dữ Liệu Chi Tiết</span>
-        </a>
-        <a href="verification-table.html" class="sidebar-link" id="navVerificationTable" data-admin-only="true">
-          <span>Dữ Liệu Check Đơn</span>
-        </a>
-        <a href="new-feature.html" class="sidebar-link" id="navNewFeature" data-admin-only="true">
-          <span>Báo Cáo Mới</span>
-        </a>
-        <a href="call-management.html" class="sidebar-link" id="navCallManagement" data-admin-only="true">
-          <span>Quản Lý Gọi Điện</span>
-        </a>
+        <div class="sidebar-group-items">
+          <a href="data-table.html" class="sidebar-link" id="navDataTable">
+            <span>Dữ Liệu Chi Tiết</span>
+          </a>
+          <a href="data-table.html?tab=unpaid" class="sidebar-link" id="navUnpaid" style="display: none !important;">
+            <span>Đơn Chưa Thanh Toán</span>
+          </a>
+          <a href="data-table.html?tab=cancelled" class="sidebar-link" id="navCancelled" style="display: none !important;">
+            <span>Đơn Hủy</span>
+          </a>
+          <a href="verification-table.html" class="sidebar-link" id="navVerificationTable" data-admin-only="true">
+            <span>Dữ Liệu Check Đơn</span>
+          </a>
+          <a href="new-feature.html" class="sidebar-link" id="navNewFeature" data-admin-only="true">
+            <span>Báo Cáo Mới</span>
+          </a>
+          <a href="call-management.html" class="sidebar-link" id="navCallManagement" data-admin-only="true">
+            <span>Quản Lý Gọi Điện</span>
+          </a>
+        </div>
 
-        <div class="sidebar-heading" id="sidebarHeadingSystemAdmin" data-admin-only="true" style="margin-top: 10px;">
+        <div class="sidebar-heading" id="sidebarHeadingSystemAdmin" data-admin-only="true" data-group="system_admin" role="button" tabindex="0" style="margin-top: 10px;">
           <span>QUẢN TRỊ HỆ THỐNG</span>
-          <span style="font-size: 9px; opacity: 0.85;">▼</span>
+          <span class="sidebar-heading-arrow">▼</span>
         </div>
-        <a href="user-management.html" class="sidebar-link active" id="navUserManagement" data-admin-only="true">
-          <span>Phân Quyền Tài Khoản</span>
-        </a>
+        <div class="sidebar-group-items" data-admin-only="true">
+          <a href="user-management.html" class="sidebar-link active" id="navUserManagement" data-admin-only="true">
+            <span>Phân Quyền Tài Khoản</span>
+          </a>
+        </div>
 
-        <div class="sidebar-heading" id="sidebarHeadingUpload" data-admin-only="true" style="margin-top: 10px;">
+        <div class="sidebar-heading" id="sidebarHeadingUpload" data-admin-only="true" data-group="upload_admin" role="button" tabindex="0" style="margin-top: 10px;">
           <span>QUẢN TRỊ TẢI LÊN</span>
-          <span style="font-size: 9px; opacity: 0.85;">▼</span>
+          <span class="sidebar-heading-arrow">▼</span>
         </div>
-        <a href="upload.html" class="sidebar-link" id="navUpload" data-admin-only="true">
-          <span>Đăng Tải Dữ Liệu</span>
-        </a>
+        <div class="sidebar-group-items">
+          <a href="upload.html" class="sidebar-link" id="navUpload" data-admin-only="true">
+            <span>Đăng Tải Dữ Liệu</span>
+          </a>
+        </div>
       </nav>
 
       <div class="sidebar-footer">

@@ -230,13 +230,20 @@ function applyRolePermissions(user) {
       }
     });
 
-    // 2. Ẩn tiêu đề Quản trị tải lên nếu không có quyền màn hình upload
+    // 2. Ẩn tiêu đề và danh mục con Quản trị tải lên nếu không có quyền màn hình upload
     const uploadHeading = document.getElementById("sidebarHeadingUpload");
     if (uploadHeading) {
+      const uploadContainer = uploadHeading.nextElementSibling;
       if (userHasScreenAccess(user, "upload")) {
         uploadHeading.style.removeProperty("display");
+        if (uploadContainer && uploadContainer.classList.contains("sidebar-group-items")) {
+          uploadContainer.style.removeProperty("display");
+        }
       } else {
         uploadHeading.style.setProperty("display", "none", "important");
+        if (uploadContainer && uploadContainer.classList.contains("sidebar-group-items")) {
+          uploadContainer.style.setProperty("display", "none", "important");
+        }
       }
     }
 
@@ -261,7 +268,12 @@ function applyRolePermissions(user) {
       if (navEl) navEl.style.removeProperty("display");
     });
     const uploadHeading = document.getElementById("sidebarHeadingUpload");
-    if (uploadHeading) uploadHeading.style.removeProperty("display");
+    if (uploadHeading) {
+      uploadHeading.style.removeProperty("display");
+      if (uploadHeading.nextElementSibling && uploadHeading.nextElementSibling.classList.contains("sidebar-group-items")) {
+        uploadHeading.nextElementSibling.style.removeProperty("display");
+      }
+    }
     const adminOnlyEls = document.querySelectorAll("[data-admin-only='true']");
     adminOnlyEls.forEach(el => el.style.removeProperty("display"));
   }
@@ -1376,7 +1388,121 @@ function initSidebarToggle() {
   });
 }
 
+
+// Quản lý thu gọn / mở rộng các nhóm tab con (Dropdown / Accordion) ở thanh điều hướng bên trái
+function initSidebarDropdowns() {
+  const headings = document.querySelectorAll(".sidebar-heading");
+  if (!headings || headings.length === 0) return;
+
+  let collapsedGroups = [];
+  try {
+    const saved = localStorage.getItem("gpg_collapsed_nav_groups");
+    if (saved) collapsedGroups = JSON.parse(saved);
+    if (!Array.isArray(collapsedGroups)) collapsedGroups = [];
+  } catch (e) {
+    collapsedGroups = [];
+  }
+
+  headings.forEach((heading, idx) => {
+    // 1. Chuẩn hóa mũi tên hiển thị
+    let arrow = heading.querySelector(".sidebar-heading-arrow");
+    if (!arrow) {
+      const spans = heading.querySelectorAll("span");
+      if (spans.length > 1) {
+        arrow = spans[spans.length - 1];
+        arrow.classList.add("sidebar-heading-arrow");
+      } else {
+        arrow = document.createElement("span");
+        arrow.className = "sidebar-heading-arrow";
+        arrow.textContent = "▼";
+        heading.appendChild(arrow);
+      }
+    }
+
+    // 2. Định danh group duy nhất
+    const groupKey = heading.getAttribute("data-group") ||
+      heading.id ||
+      (heading.firstElementChild ? heading.firstElementChild.textContent.trim().toLowerCase().replace(/\s+/g, "_") : `group_${idx}`);
+    heading.setAttribute("data-group", groupKey);
+
+    // 3. Tìm hoặc gom tự động các link con vào .sidebar-group-items
+    let itemsContainer = heading.nextElementSibling;
+    let items = [];
+
+    if (itemsContainer && itemsContainer.classList.contains("sidebar-group-items")) {
+      items = Array.from(itemsContainer.querySelectorAll(".sidebar-link"));
+    } else {
+      const wrapper = document.createElement("div");
+      wrapper.className = "sidebar-group-items";
+      let next = heading.nextElementSibling;
+      while (next && !next.classList.contains("sidebar-heading")) {
+        const current = next;
+        next = next.nextElementSibling;
+        if (current.classList.contains("sidebar-link")) {
+          wrapper.appendChild(current);
+          items.push(current);
+        }
+      }
+      heading.parentNode.insertBefore(wrapper, next);
+      itemsContainer = wrapper;
+    }
+
+    // 4. Nếu nhóm có chứa link trang hiện tại (.active) -> luôn mở để người dùng biết mình đang ở đâu
+    const hasActiveChild = items.some(it => it.classList.contains("active"));
+    const isInitiallyCollapsed = !hasActiveChild && collapsedGroups.includes(groupKey);
+
+    function applyCollapseState(isCollapsed) {
+      if (isCollapsed) {
+        heading.classList.add("collapsed");
+        heading.setAttribute("aria-expanded", "false");
+        if (itemsContainer) itemsContainer.classList.add("collapsed");
+      } else {
+        heading.classList.remove("collapsed");
+        heading.setAttribute("aria-expanded", "true");
+        if (itemsContainer) itemsContainer.classList.remove("collapsed");
+      }
+    }
+
+    applyCollapseState(isInitiallyCollapsed);
+
+    // 5. Gắn sự kiện click toggle
+    heading.style.cursor = "pointer";
+    heading.setAttribute("role", "button");
+    heading.setAttribute("tabindex", "0");
+    heading.setAttribute("title", "Nhấn để thu gọn hoặc mở rộng danh mục con");
+
+    heading.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const willCollapse = !heading.classList.contains("collapsed");
+      applyCollapseState(willCollapse);
+
+      try {
+        let currentCollapsed = [];
+        const saved = localStorage.getItem("gpg_collapsed_nav_groups");
+        if (saved) currentCollapsed = JSON.parse(saved);
+        if (!Array.isArray(currentCollapsed)) currentCollapsed = [];
+
+        if (willCollapse) {
+          if (!currentCollapsed.includes(groupKey)) currentCollapsed.push(groupKey);
+        } else {
+          currentCollapsed = currentCollapsed.filter(k => k !== groupKey);
+        }
+        localStorage.setItem("gpg_collapsed_nav_groups", JSON.stringify(currentCollapsed));
+      } catch (err) {}
+    };
+
+    heading.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        heading.click();
+      }
+    };
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+  initSidebarDropdowns();
   initSidebarToggle();
   initAuthProfile();
 
