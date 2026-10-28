@@ -281,7 +281,7 @@
   }
 
   // Key lưu cache phía Client (SessionStorage) để trang hiển thị tức thì (0ms)
-  const CLIENT_CACHE_KEY = "CACHED_REBOOKING_ORDERS_V4";
+  const CLIENT_CACHE_KEY = "CACHED_REBOOKING_ORDERS_V5";
 
   // Hàm chuẩn hóa biển số xe để so khớp (bỏ khoảng trắng, dấu gạch ngang, chấm)
   function cleanTruckPlate(t) {
@@ -529,7 +529,8 @@
         const cKey = c || "CHUA_CO_CONT";
         const depKey = dep || "CHUA_CO_DEPOT";
         const lineKey = line || "CHUA_CO_HANG_TAU";
-        groupKey = `${bKey}__${cKey}__${dir}__${depKey}__${lineKey}`;
+        const creator = (r._cleanCreator && r._cleanCreator !== "-" && r._cleanCreator !== "UNKNOWN" && r._cleanCreator !== "UNDEFINED") ? r._cleanCreator : "CHUA_CO_NGUOI_TAO";
+        groupKey = `${bKey}__${cKey}__${dir}__${creator}__${depKey}__${lineKey}`;
       }
 
       if (!pass1Map.has(groupKey)) {
@@ -561,7 +562,8 @@
       const hasRealBk = g.soBooking && g.soBooking !== "-" && g.soBooking !== "CHUA_CO_BOOKING";
       const hasCont = g.soContainer && g.soContainer !== "-" && g.soContainer !== "CHUA_CO_CONT";
       if (hasRealBk && hasCont) {
-        const key = `${g.soContainer}__${g.loaiDonHang}`;
+        const creator = (g.records[0] && g.records[0]._cleanCreator) || "";
+        const key = `${g.soContainer}__${g.loaiDonHang}__${creator}`;
         if (!contWithRealBookingMap.has(key)) contWithRealBookingMap.set(key, []);
         contWithRealBookingMap.get(key).push(g);
       }
@@ -622,14 +624,17 @@
       const dep = latest._cleanDepot || (candidate.depot || "").toString().trim().toUpperCase();
       const line = latest._cleanLine || (candidate.hangTau || "").toString().trim().toUpperCase();
 
-      // Chỉ gom vào Vòng 2 khi có chiều OUT và đủ Booking + Depot + Hãng tàu hợp lệ
+      const creator = latest._cleanCreator;
+      const isValidCreator = creator && creator !== "-" && creator !== "UNKNOWN" && creator !== "UNDEFINED";
+
+      // Chỉ gom vào Vòng 2 khi có chiều OUT, cùng người tạo hợp lệ và đủ Booking + Depot + Hãng tàu
       const isOutDir = dir && dir.toString().toUpperCase().includes("OUT");
-      if (!isOutDir || !bk || bk === "-" || bk === "CHUA_CO_BOOKING" || !dep || dep === "-" || !line || line === "-") {
+      if (!isOutDir || !isValidCreator || !bk || bk === "-" || bk === "CHUA_CO_BOOKING" || !dep || dep === "-" || !line || line === "-") {
         pass2Groups.push(candidate);
         return;
       }
 
-      const p2Key = `${bk}__${dir}__${dep}__${line}`;
+      const p2Key = `${bk}__${dir}__${creator}__${dep}__${line}`;
 
       if (!pass2Map.has(p2Key)) {
         pass2Map.set(p2Key, {
