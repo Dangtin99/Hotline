@@ -1585,6 +1585,29 @@ function updateOrdersFromCheckData() {
   const nowStr = new Date().toISOString().replace("T", " ").substring(0, 19);
 
   // -------------------------------------------------------------------------
+  // QUY TẮC GIỚI HẠN THỜI GIAN: Chỉ lấy tối đa dữ liệu trong từ [Ngày hiện tại - 2] đến nay
+  // -------------------------------------------------------------------------
+  const todayYmd = getVietnamTodayYmd();
+  const todayDt = new Date(todayYmd + "T00:00:00Z");
+  const minDateLimitDt = new Date(todayDt.getTime() - (2 * 24 * 3600 * 1000));
+  const minDateLimitYmd = minDateLimitDt.toISOString().substring(0, 10); // YYYY-MM-DD
+  const minDateLimitMs = minDateLimitDt.getTime();
+
+  const isWithinUpdateWindow = (rec) => {
+    if (!rec) return false;
+    const dStr = rec.ngayDuocDuyet || rec.ngayHuyDon || rec.createdAt;
+    if (!dStr) return true; // Giữ lại nếu không có ngày để tránh loại trừ nhầm
+    const p = extractDateParts(dStr);
+    if (p) {
+      const ymd = `${p.y}-${String(p.m).padStart(2, "0")}-${String(p.d).padStart(2, "0")}`;
+      if (ymd < minDateLimitYmd) return false;
+    }
+    const ms = parseDateMs(dStr);
+    if (ms !== null && ms < minDateLimitMs) return false;
+    return true;
+  };
+
+  // -------------------------------------------------------------------------
   // BƯỚC 0: LÀM GIÀU DỮ LIỆU (DATA ENRICHMENT QUA MÃ EIR)
   // Bổ sung soXe và nguoiTao từ eir_cancellation_orders sang cancellation_orders
   // -------------------------------------------------------------------------
@@ -1621,6 +1644,7 @@ function updateOrdersFromCheckData() {
   // -------------------------------------------------------------------------
   const bookingOrdersMap = new Map();
   memoryOrders.forEach(order => {
+    if (!isWithinUpdateWindow(order)) return;
     const booking = clean(order.soBooking);
     if (!booking) return;
     if (!bookingOrdersMap.has(booking)) {
@@ -1640,6 +1664,7 @@ function updateOrdersFromCheckData() {
 
       const matchedIndex = memoryVerificationOrders.findIndex(check => {
         if (usedCheckKeys.has(check.rowKey)) return false;
+        if (!isWithinUpdateWindow(check)) return false;
         if (clean(check.soBooking) !== orderBooking) return false;
 
         const checkStatusNorm = clean(check.trangThaiDonHang);
@@ -1708,10 +1733,11 @@ function updateOrdersFromCheckData() {
   }
 
   // -------------------------------------------------------------------------
-  // PHASE 2 (ƯU TIÊN 2): PIPELINE 3 VÒNG CHO ĐƠN ĐÃ HỦY & MULTI-ATTEMPT PROPAGATION
+  // PHASE 2 (ƯU TIÊN 2): PIPELINE 4 VÒNG CHO ĐƠN ĐÃ HỦY & MULTI-ATTEMPT PROPAGATION
   // -------------------------------------------------------------------------
   const availableChecks = memoryVerificationOrders.filter(c => {
     if (usedCheckKeys.has(c.rowKey)) return false;
+    if (!isWithinUpdateWindow(c)) return false;
     return !isCancelled(c.trangThaiDonHang);
   });
 
@@ -1726,34 +1752,36 @@ function updateOrdersFromCheckData() {
     c._ts = parseDateMs(c.ngayDuocDuyet || c.ngayHuyDon) || 0;
   });
 
-  // Bước 1.5: Chuẩn hóa Booking cho các đơn check rỗng booking dựa trên cùng cont và chiều
+  // Bước 1.5: Chuẩn hóa Booking cho các đơn check rỗng booking dựa trên cùng cont, chiều và người tạo
   const contWithBkMap = new Map();
   availableChecks.forEach(c => {
     if (c._bk && c._info.cont) {
-      const key = `${c._info.cont}__${c._dir}`;
+      const key = `${c._info.cont}__${c._dir}__${c._creator}`;
       if (!contWithBkMap.has(key)) contWithBkMap.set(key, c._bk);
     }
   });
   availableChecks.forEach(c => {
     if (!c._bk && c._info.cont) {
-      const key = `${c._info.cont}__${c._dir}`;
+      const key = `${c._info.cont}__${c._dir}__${c._creator}`;
       if (contWithBkMap.has(key)) c._bk = contWithBkMap.get(key);
     }
   });
 
-  // Tập hợp các đơn hủy trong cancellation_orders
-  const cancelledOrders = memoryOrders.filter(o => isCancelled(o.trangThaiDonHang) || o.isAutoCancelledBy3h);
+  // Tập hợp các đơn hủy trong cancellation_orders (trong phạm vi cửa sổ thời gian)
+  const cancelledOrders = memoryOrders.filter(o => 
+    (isCancelled(o.trangThaiDonHang) || o.isAutoCancelledBy3h) && isWithinUpdateWindow(o)
+  );
   cancelledOrders.forEach(o => {
     o._ts = parseDateMs(o.ngayHuyDon || o.ngayDuocDuyet) || 0;
     if (!o._bk && o._cont) {
-      const key = `${o._cont}__${o._dir}`;
+      const key = `${o._cont}__${o._dir}__${o._creator}`;
       if (contWithBkMap.has(key)) o._bk = contWithBkMap.get(key);
     }
   });
 
   // Xây dựng Indexed Maps cho các đơn hủy để tra cứu tức thì theo 4 VÒNG TUẦN TỰ
-  const v1Map = new Map(); // key: bk__cont__dir__depot__line -> [orders]
-  const v2Map = new Map(); // key: bk__dir__depot__line -> [orders] (đổi vỏ cont)
+  const v1Map = new Map(); // key: bk__cont__dir__creator__depot__line -> [orders]
+  const v2Map = new Map(); // key: bk__OUT__creator__truck__depot__line -> [orders] (đơn cont=null)
   const v3Map = new Map(); // key: cont__dir__creator__truck__depot__line -> [orders] (đổi booking)
   const v4Map = new Map(); // key: creator__depot__line__truck -> [orders] (đơn OUT trong 24h)
 
@@ -1763,9 +1791,10 @@ function updateOrdersFromCheckData() {
       if (!v1Map.has(k1)) v1Map.set(k1, []);
       v1Map.get(k1).push(o);
     }
-    // VÒNG 2: Chỉ áp dụng cho các cont có chiều OUT và cùng Người tạo
-    if (o._dir === "OUT" && o._bk && o._creator && o._depot && o._line) {
-      const k2 = `${o._bk}__OUT__${o._creator}__${o._depot}__${o._line}`;
+    // VÒNG 2: Chỉ áp dụng cho các đơn có chiều OUT, cont = null (hoặc rỗng/chưa có cont), cùng Người tạo và cùng Biển số xe
+    const isContNull = !o._cont || o._cont === "-" || o._cont === "CHUA_CO_CONT";
+    if (o._dir === "OUT" && isContNull && o._bk && o._creator && o._truck && o._depot && o._line) {
+      const k2 = `${o._bk}__OUT__${o._creator}__${o._truck}__${o._depot}__${o._line}`;
       if (!v2Map.has(k2)) v2Map.set(k2, []);
       v2Map.get(k2).push(o);
     }
@@ -1804,18 +1833,19 @@ function updateOrdersFromCheckData() {
       }
     }
 
-    // --- VÒNG 2 (MỚI): Cùng Booking + Chiều OUT + Cùng Người tạo + Cùng Depot + Cùng Hãng tàu + KHÁC Cont ---
-    // Ràng buộc: Vòng 2 CHỈ áp dụng cho các cont có chiều OUT và cùng Người tạo
-    if (!matchedCancelledList && check._dir === "OUT" && check._bk && check._creator && check._depot && check._line) {
-      const k2 = `${check._bk}__OUT__${check._creator}__${check._depot}__${check._line}`;
+    // --- VÒNG 2 (MỚI): Cùng Booking + Chiều OUT + Cùng Người tạo + Cùng Biển số xe + Cùng Depot + Cùng Hãng tàu ---
+    // Ràng buộc: Đơn hủy đầu vào phải có cont = null; Đơn check có cont <> null (đã được cấp vỏ cont)
+    if (!matchedCancelledList && check._dir === "OUT" && cInfo.cont && check._bk && check._creator && check._truck && check._depot && check._line) {
+      const k2 = `${check._bk}__OUT__${check._creator}__${check._truck}__${check._depot}__${check._line}`;
       const candidates = v2Map.get(k2);
       if (candidates && candidates.length > 0) {
         const fresh = candidates.filter(o => 
           !updatedOrderKeys.has(o.rowKey) && 
           o._dir === "OUT" &&
+          (!o._cont || o._cont === "-" || o._cont === "CHUA_CO_CONT") &&
           o._creator === check._creator &&
+          o._truck === check._truck &&
           o._eir !== cInfo.eir &&
-          o._cont !== cInfo.cont &&
           (isCancelled(o.trangThaiDonHang) || o.isAutoCancelledBy3h)
         );
         if (fresh.length > 0) {

@@ -281,7 +281,7 @@
   }
 
   // Key lưu cache phía Client (SessionStorage) để trang hiển thị tức thì (0ms)
-  const CLIENT_CACHE_KEY = "CACHED_REBOOKING_ORDERS_V5";
+  const CLIENT_CACHE_KEY = "CACHED_REBOOKING_ORDERS_V6";
 
   // Hàm chuẩn hóa biển số xe để so khớp (bỏ khoảng trắng, dấu gạch ngang, chấm)
   function cleanTruckPlate(t) {
@@ -617,6 +617,12 @@
     const pass2Map = new Map();
     const pass2Groups = [];
 
+    function isGroupContNull(g) {
+      if (!g) return true;
+      const c = g.soContainer;
+      return !c || c === "-" || c === "CHUA_CO_CONT" || c === "null" || c === "undefined";
+    }
+
     pass1Groups.forEach(candidate => {
       const latest = candidate.records[0];
       const bk = candidate.soBooking;
@@ -627,20 +633,25 @@
       const creator = latest._cleanCreator;
       const isValidCreator = creator && creator !== "-" && creator !== "UNKNOWN" && creator !== "UNDEFINED";
 
-      // Chỉ gom vào Vòng 2 khi có chiều OUT, cùng người tạo hợp lệ và đủ Booking + Depot + Hãng tàu
+      const truck = latest._cleanTruck;
+      const isValidTruck = truck && truck !== "-" && truck !== "UNKNOWN" && truck !== "UNDEFINED";
+
+      // Chỉ xét các đơn có chiều OUT, cùng người tạo và cùng biển số xe hợp lệ, đủ Booking + Depot + Hãng tàu
       const isOutDir = dir && dir.toString().toUpperCase().includes("OUT");
-      if (!isOutDir || !isValidCreator || !bk || bk === "-" || bk === "CHUA_CO_BOOKING" || !dep || dep === "-" || !line || line === "-") {
+      if (!isOutDir || !isValidCreator || !isValidTruck || !bk || bk === "-" || bk === "CHUA_CO_BOOKING" || !dep || dep === "-" || !line || line === "-") {
         pass2Groups.push(candidate);
         return;
       }
 
-      const p2Key = `${bk}__${dir}__${creator}__${dep}__${line}`;
+      const p2Key = `${bk}__${dir}__${creator}__${truck}__${dep}__${line}`;
 
       if (!pass2Map.has(p2Key)) {
         pass2Map.set(p2Key, {
           p2Key,
           soBooking: bk,
           loaiDonHang: dir,
+          nguoiTao: creator,
+          truck: truck,
           depot: dep,
           hangTau: line,
           memberGroups: []
@@ -650,21 +661,54 @@
     });
 
     pass2Map.forEach(p2 => {
-      const eligible = p2.memberGroups.filter((mg, idx) => {
-        if (idx === 0) return true;
-        return p2.memberGroups.slice(0, idx).some(prev =>
-          prev.soContainer !== mg.soContainer &&
-          prev.soContainer !== "-" && mg.soContainer !== "-" &&
-          isCancelledOrFailedRecord(prev.records[0])
-        );
+      // Sắp xếp các đơn trong cùng khóa theo thời gian tăng dần (cũ nhất -> mới nhất)
+      p2.memberGroups.sort((a, b) => {
+        const tsA = parseRecordTimestamp(a.records[0]);
+        const tsB = parseRecordTimestamp(b.records[0]);
+        return tsA - tsB;
       });
 
-      if (eligible.length >= 2) {
-        const merged = mergeGroups(eligible, `PASS2__${p2.p2Key}`, { matchType: "CHANGED_CONT" });
-        pass2Groups.push(merged);
-        p2.memberGroups.filter(mg => !eligible.includes(mg)).forEach(mg => pass2Groups.push(mg));
-      } else {
-        p2.memberGroups.forEach(mg => pass2Groups.push(mg));
+      let i = 0;
+      while (i < p2.memberGroups.length) {
+        const cur = p2.memberGroups[i];
+
+        // ĐIỀU KIỆN ĐẦU VÀO VÒNG 2: Chỉ chọn các dữ liệu cont = null để bắt đầu xét
+        if (!isGroupContNull(cur)) {
+          // Đơn này đã có số cont ngay từ đầu -> không phải đơn đầu vào của Vòng 2 -> giữ nguyên
+          pass2Groups.push(cur);
+          i++;
+          continue;
+        }
+
+        // Khởi tạo chuỗi xét bắt đầu từ đơn cont = null
+        const chain = [cur];
+        let j = i + 1;
+
+        // Duyệt kiểm tra các đơn tiếp theo đến khi cont <> null hoặc hết đơn cùng điều kiện ban đầu
+        while (j < p2.memberGroups.length) {
+          const next = p2.memberGroups[j];
+          if (isGroupContNull(next)) {
+            // next vẫn chưa có cont (cont = null) -> tiếp tục gom vào chuỗi và xét tiếp
+            chain.push(next);
+            j++;
+          } else {
+            // next đã có cont <> null (đã được cấp số vỏ container) -> gom vào chuỗi và DỪNG XÉT
+            chain.push(next);
+            j++;
+            break; // Dừng xét cho chuỗi này vì đã tìm được cont <> null
+          }
+        }
+
+        // Đã xét xong chuỗi
+        if (chain.length >= 2) {
+          const merged = mergeGroups(chain, `PASS2__${p2.p2Key}`, { matchType: "CHANGED_CONT" });
+          pass2Groups.push(merged);
+        } else {
+          // Chỉ có 1 đơn cont = null đơn lẻ không có đơn tạo lại tiếp theo
+          pass2Groups.push(cur);
+        }
+
+        i = j; // Nhảy con trỏ tới sau chuỗi đã xét
       }
     });
 

@@ -217,12 +217,18 @@ function analyzeAndGroupOrders(records) {
   });
 
   // ============================================================
-  // VÒNG 2 (MỚI): Gom theo Booking + Chiều OUT + Depot + Hãng tàu (KHÁC Container — CHỈ ÁP DỤNG CHIỀU OUT)
-  // Tình huống: Cont cũ bị hủy → đổi vỏ Container mới trong cùng Booking
-  // Ràng buộc: Đơn Container cũ phải có trạng thái HỦY, 2 Container phải KHÁC NHAU
+  // VÒNG 2 (MỚI): Bắt đầu từ đơn Cont = NULL + Chiều OUT + Cùng Booking + Cùng Người tạo + Cùng Biển số xe + Depot + Hãng tàu
+  // Tình huống: Đơn OUT đăng ký ban đầu chưa có cont (cont = null) → kiểm tra gom các đơn tạo lại cùng xe/booking/người tạo
+  // Duyệt tuần tự theo thời gian cho đến khi gặp đơn có Cont <> NULL thì dừng, hoặc dừng khi hết dữ liệu ban đầu
   // ============================================================
   const pass2Map = new Map();
   const pass2Groups = [];
+
+  function isGroupContNull(g) {
+    if (!g) return true;
+    const c = g.soContainer;
+    return !c || c === "-" || c === "CHUA_CO_CONT" || c === "null" || c === "undefined";
+  }
 
   pass1Groups.forEach(candidate => {
     const latest = candidate.records[0];
@@ -234,20 +240,25 @@ function analyzeAndGroupOrders(records) {
     const creator = latest._cleanCreator;
     const isValidCreator = creator && creator !== "-" && creator !== "UNKNOWN" && creator !== "UNDEFINED";
 
-    // Chỉ gom vào Vòng 2 khi có chiều OUT, cùng người tạo hợp lệ và đủ Booking + Depot + Hãng tàu
+    const truck = latest._cleanTruck;
+    const isValidTruck = truck && truck !== "-" && truck !== "UNKNOWN" && truck !== "UNDEFINED";
+
+    // Chỉ xét các đơn có chiều OUT, cùng người tạo và cùng biển số xe hợp lệ, đủ Booking + Depot + Hãng tàu
     const isOutDir = dir && dir.toString().toUpperCase().includes("OUT");
-    if (!isOutDir || !isValidCreator || !bk || bk === "-" || bk === "CHUA_CO_BOOKING" || !dep || dep === "-" || !line || line === "-") {
+    if (!isOutDir || !isValidCreator || !isValidTruck || !bk || bk === "-" || bk === "CHUA_CO_BOOKING" || !dep || dep === "-" || !line || line === "-") {
       pass2Groups.push(candidate);
       return;
     }
 
-    const p2Key = `${bk}__${dir}__${creator}__${dep}__${line}`;
+    const p2Key = `${bk}__${dir}__${creator}__${truck}__${dep}__${line}`;
 
     if (!pass2Map.has(p2Key)) {
       pass2Map.set(p2Key, {
         p2Key,
         soBooking:   bk,
         loaiDonHang: dir,
+        nguoiTao:    creator,
+        truck:       truck,
         depot:       dep,
         hangTau:     line,
         memberGroups: []
@@ -257,24 +268,54 @@ function analyzeAndGroupOrders(records) {
   });
 
   pass2Map.forEach(p2 => {
-    // Chỉ gom khi có >= 2 nhóm với Cont khác nhau và đơn trước bị hủy
-    const eligible = p2.memberGroups.filter((mg, idx) => {
-      if (idx === 0) return true; // Giữ nhóm đầu làm gốc
-      // Đơn này phải có Container khác với ít nhất 1 nhóm trước
-      return p2.memberGroups.slice(0, idx).some(prev =>
-        prev.soContainer !== mg.soContainer &&
-        prev.soContainer !== "-" && mg.soContainer !== "-" &&
-        isCancelledOrFailedRecord(prev.records[0])
-      );
+    // Sắp xếp các đơn trong cùng khóa theo thời gian tăng dần (cũ nhất -> mới nhất)
+    p2.memberGroups.sort((a, b) => {
+      const tsA = parseRecordTimestamp(a.records[0]);
+      const tsB = parseRecordTimestamp(b.records[0]);
+      return tsA - tsB;
     });
 
-    if (eligible.length >= 2) {
-      const merged = mergeGroups(eligible, `PASS2__${p2.p2Key}`, { matchType: "CHANGED_CONT" });
-      pass2Groups.push(merged);
-      // Nhóm không đủ điều kiện gom thì trả về pass2Groups riêng lẻ
-      p2.memberGroups.filter(mg => !eligible.includes(mg)).forEach(mg => pass2Groups.push(mg));
-    } else {
-      p2.memberGroups.forEach(mg => pass2Groups.push(mg));
+    let i = 0;
+    while (i < p2.memberGroups.length) {
+      const cur = p2.memberGroups[i];
+
+      // ĐIỀU KIỆN ĐẦU VÀO VÒNG 2: Chỉ chọn các dữ liệu cont = null để bắt đầu xét
+      if (!isGroupContNull(cur)) {
+        // Đơn này đã có số cont ngay từ đầu -> không phải đơn đầu vào của Vòng 2 -> giữ nguyên
+        pass2Groups.push(cur);
+        i++;
+        continue;
+      }
+
+      // Khởi tạo chuỗi xét bắt đầu từ đơn cont = null
+      const chain = [cur];
+      let j = i + 1;
+
+      // Duyệt kiểm tra các đơn tiếp theo đến khi cont <> null hoặc hết đơn cùng điều kiện ban đầu
+      while (j < p2.memberGroups.length) {
+        const next = p2.memberGroups[j];
+        if (isGroupContNull(next)) {
+          // next vẫn chưa có cont (cont = null) -> tiếp tục gom vào chuỗi và xét tiếp
+          chain.push(next);
+          j++;
+        } else {
+          // next đã có cont <> null (đã được cấp số vỏ container) -> gom vào chuỗi và DỪNG XÉT
+          chain.push(next);
+          j++;
+          break; // Dừng xét cho chuỗi này vì đã tìm được cont <> null
+        }
+      }
+
+      // Đã xét xong chuỗi
+      if (chain.length >= 2) {
+        const merged = mergeGroups(chain, `PASS2__${p2.p2Key}`, { matchType: "CHANGED_CONT" });
+        pass2Groups.push(merged);
+      } else {
+        // Chỉ có 1 đơn cont = null đơn lẻ không có đơn tạo lại tiếp theo
+        pass2Groups.push(cur);
+      }
+
+      i = j; // Nhảy con trỏ tới sau chuỗi đã xét
     }
   });
 

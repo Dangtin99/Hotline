@@ -1288,7 +1288,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Lắng nghe sự kiện click nút Cập Nhật Dữ Liệu (Tab Tất Cả Đơn)
   if (btnUpdateData) {
     btnUpdateData.onclick = async () => {
-      const confirmRun = confirm("Bạn có chắc chắn muốn thực hiện Cập Nhật Dữ Liệu đối soát từ Bảng Check Đơn không?\n\n- Đơn chưa thanh toán: Đối soát và thay thế dữ liệu khi trùng số Booking, trùng số Container và trùng số EIR.\n- Đơn đã hủy: Đối soát và thay thế dữ liệu khi khớp Booking, Container, khác Số EIR và Ngày phát sinh cách Ngày duyệt > 5 phút.\n- Các dòng check đơn đã thay thế sẽ tự động được xóa khỏi bảng check đơn.");
+      const confirmRun = confirm("Bạn có chắc chắn muốn thực hiện Cập Nhật Dữ Liệu đối soát từ Bảng Check Đơn không?\n\n- Phạm vi cập nhật: Chỉ lấy tối đa dữ liệu trong vòng 3 ngày gần nhất (từ Ngày hiện tại - 2 đến nay).\n- Đơn chưa thanh toán: Đối soát và thay thế dữ liệu khi trùng số Booking, trùng số Container và trùng số EIR.\n- Đơn đã hủy: Đối soát tuần tự 4 vòng (V1: cùng Cont; V2: đơn OUT chưa có Cont cùng xe tìm cont mới; V3: đổi Booking cùng xe; V4: đơn OUT cùng xe trong 24h).\n- Các dòng check đơn đã thay thế sẽ tự động được xóa khỏi bảng check đơn.");
       if (!confirmRun) return;
 
       const originalText = btnUpdateData.textContent;
