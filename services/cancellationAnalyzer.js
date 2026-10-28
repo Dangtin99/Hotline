@@ -696,33 +696,39 @@ function parseVerificationFile(input) {
     return -1;
   };
 
-  // Xác định vị trí cột BK Check và cột Số BL số vận đơn
-  const bkCheckColIdx = headers.findIndex(h => {
-    const l = h.toLowerCase();
-    const n = l.replace(/[\s_\-\/]+/g, "");
-    return n.includes("bkcheck") || n.includes("bookingcheck") || l.includes("bk check") || l.includes("booking check");
-  });
+  // Hàm kiểm tra giá trị Booking hợp lệ (loại trừ rỗng, '-', 'null', 'undefined', '0', 'N/A')
+  const isValidBookingVal = (val) => {
+    if (val === null || val === undefined) return false;
+    const s = String(val).trim();
+    if (!s || s === "-" || s === "--" || s === "---" || s === "null" || s === "undefined" || s === "NaN" || s === "N/A" || s === "0") {
+      return false;
+    }
+    return true;
+  };
 
-  const soBlColIdx = headers.findIndex(h => {
-    const l = h.toLowerCase();
-    const n = l.replace(/[\s_\-\/]+/g, "");
-    return l.includes("số b/l") || 
-           l.includes("so b/l") || 
-           l.includes("số bl") || 
-           l.includes("so bl") || 
-           l.includes("số vận đơn") || 
-           l.includes("so van don") || 
-           n.includes("sobl") || 
-           n.includes("sovandon") ||
-           n.includes("blsovandon");
-  });
+  // Xác định vị trí cột BK Check và cột Số BL // số vận đơn theo đúng quy tắc ưu tiên
+  // 1. Cột BK Check (Ưu tiên số 1)
+  const colBkCheck = findColIdx([
+    "BK check", "BK_check", "BKCheck", "Booking check", "BookingCheck", 
+    "Số BK check", "Số booking check", "So bk check", "So booking check",
+    "BK (check)", "Booking (check)"
+  ]);
+
+  // 2. Cột Số B/L // số vận đơn (Ưu tiên số 2 - Fallback khi BK check không có dữ liệu)
+  const colSoBl = findColIdx([
+    "Số B/L //Số vận đơn", "Số B/L // số vận đơn", "Số B/L// số vận đơn", "Số B/L//số vận đơn",
+    "Số B/L / Số vận đơn", "Số B/L/Số vận đơn", "Số BL số vận đơn", "Số BL // Số vận đơn",
+    "Số BL / Số vận đơn", "Số B/L", "Số vận đơn", "Số BL", "So B/L", "So BL", 
+    "So van don", "Số Vận Đơn", "B/L", "Vận đơn"
+  ]);
+
+  // Cột dự phòng trường hợp file chỉ có cột Số booking chung
+  const colBookingGeneral = findColIdx(["Số booking", "Số Booking", "Booking", "BK"]);
 
   // Ánh xạ trước toàn bộ vị trí cột để không chạy findIndex/regex trong từng dòng
   const colSoEir = findColIdx(["Số EIR", "STT"]);
   const colDepot = findColIdx(["Depot"]);
   const colHangTau = findColIdx(["Hãng tàu check", "Hãng tàu"]);
-  const colBkFallback = findColIdx(["BK check", "BK_check", "BKCheck", "Booking check"]);
-  const colBlFallback = findColIdx(["Số B/L //Số vận đơn", "Số B/L", "Số vận đơn", "Số BL số vận đơn", "Số BL"]);
   const colSoCont = findColIdx(["Số cont"]);
   const colSize = findColIdx(["Size Check", "Size"]);
   const colLoaiDon = findColIdx(["Loại đơn hàng"]);
@@ -756,25 +762,26 @@ function parseVerificationFile(input) {
     const soEir = getCell(row, colSoEir);
     const depot = getCell(row, colDepot);
     const hangTau = getCell(row, colHangTau);
-    // Thứ tự ưu tiên lấy cột Booking cho Dữ liệu check đơn (eir_cancellation_orders):
-    // 1. Ưu tiên lấy từ cột "BK Check"
-    // 2. Nếu "BK Check" rỗng -> lấy dữ liệu theo cột "Số BL số vận đơn"
-    // Chỉ thực hiện lấy dữ liệu của 2 cột này theo thứ tự ưu tiên, không lấy thêm dữ liệu của cột nào khác
+
+    // =========================================================================
+    // NGUYÊN TẮC LẤY CỘT BOOKING CỦA DỮ LIỆU CHECK ĐƠN (EIR CANCELLATION ORDERS):
+    // 1. Ưu tiên 1: Lấy theo cột "BK check" trước.
+    // 2. Ưu tiên 2: Nếu không có dữ liệu từ cột "BK check" (rỗng, '-', 'null') -> Lấy theo cột "Số B/L // số vận đơn".
+    // 3. Dự phòng: Nếu cả 2 đều rỗng -> Lấy theo cột Số booking chung (nếu có).
+    // =========================================================================
     let booking = "";
-    if (bkCheckColIdx !== -1 && row[bkCheckColIdx] !== undefined && cleanString(row[bkCheckColIdx]) !== "") {
-      booking = cleanString(row[bkCheckColIdx]);
-    } else if (soBlColIdx !== -1 && row[soBlColIdx] !== undefined && cleanString(row[soBlColIdx]) !== "") {
-      booking = cleanString(row[soBlColIdx]);
+    const valBkCheck = getCell(row, colBkCheck);
+    const valSoBl = getCell(row, colSoBl);
+    const valGeneral = getCell(row, colBookingGeneral);
+
+    if (isValidBookingVal(valBkCheck)) {
+      booking = valBkCheck;
+    } else if (isValidBookingVal(valSoBl)) {
+      booking = valSoBl;
+    } else if (isValidBookingVal(valGeneral)) {
+      booking = valGeneral;
     } else {
-      const valBk = getCell(row, colBkFallback);
-      if (valBk) {
-        booking = valBk;
-      } else {
-        const valBl = getCell(row, colBlFallback);
-        if (valBl) {
-          booking = valBl;
-        }
-      }
+      booking = valBkCheck || valSoBl || valGeneral || "";
     }
     const soCont = getCell(row, colSoCont) || soEir;
     const size = getCell(row, colSize);
