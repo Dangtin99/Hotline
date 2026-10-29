@@ -1989,26 +1989,11 @@ function updateOrdersFromCheckData() {
     }
   });
 
-  const deletedCount = usedCheckKeys.size;
-
   // -------------------------------------------------------------------------
-  // BƯỚC 3: XÓA CÁC DÒNG CHECK ĐÃ SỬ DỤNG KHỎI BẢNG eir_cancellation_orders
+  // BƯỚC 3: GIỮ NGUYÊN TOÀN BỘ DÒNG CHECK ĐƠN TRONG BẢNG eir_cancellation_orders
+  // Không xóa các dòng check đã sử dụng để phục vụ tra cứu, nghiên cứu và đối soát toàn vẹn
   // -------------------------------------------------------------------------
-  if (deletedCount > 0) {
-    memoryVerificationOrders = memoryVerificationOrders.filter(o => !usedCheckKeys.has(o.rowKey));
-    persistVerificationStore();
-
-    if (sqliteEngine) {
-      try {
-        const stmtDel = sqliteEngine.prepare("DELETE FROM eir_cancellation_orders WHERE row_key = ?");
-        for (const k of usedCheckKeys) {
-          stmtDel.run(k);
-        }
-      } catch (err) {
-        console.warn("Lỗi khi xóa dòng eir_cancellation_orders trong SQLite:", err.message);
-      }
-    }
-  }
+  const deletedCount = 0;
 
   // -------------------------------------------------------------------------
   // BƯỚC 3.5: TỰ ĐỘNG GHI ĐÈ & XÓA BẢN GHI CŨ TRÙNG LẶP (DEDUPLICATE & PURGE)
@@ -2644,9 +2629,7 @@ async function updateOrdersFromCheckDataAsync() {
       if (res.updatedUnpaid > 0 || res.updatedCancelled > 0) {
         syncPromises.push(tursoClient.syncOrdersToTurso(memoryOrders));
       }
-      if (res.usedCheckKeys && res.usedCheckKeys.length > 0) {
-        syncPromises.push(tursoClient.deleteVerificationOrderRowsInTurso(res.usedCheckKeys));
-      }
+      // Không xóa dòng check đơn để lưu trữ đầy đủ 100% dữ liệu lịch sử đối soát
       if (res.deletedOrderKeys && res.deletedOrderKeys.length > 0) {
         syncPromises.push(tursoClient.deleteOrderRowsInTurso(res.deletedOrderKeys));
       }
