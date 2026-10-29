@@ -696,8 +696,8 @@ function parseVerificationFile(input) {
     return -1;
   };
 
-  // Hàm kiểm tra giá trị Booking hợp lệ (loại trừ rỗng, '-', 'null', 'undefined', '0', 'N/A')
-  const isValidBookingVal = (val) => {
+  // Hàm kiểm tra giá trị hợp lệ (loại trừ rỗng, '-', 'null', 'undefined', '0', 'N/A')
+  const isValidCleanVal = (val) => {
     if (val === null || val === undefined) return false;
     const s = String(val).trim();
     if (!s || s === "-" || s === "--" || s === "---" || s === "null" || s === "undefined" || s === "NaN" || s === "N/A" || s === "0") {
@@ -728,9 +728,17 @@ function parseVerificationFile(input) {
   // Ánh xạ trước toàn bộ vị trí cột để không chạy findIndex/regex trong từng dòng
   const colSoEir = findColIdx(["Số EIR", "STT"]);
   const colDepot = findColIdx(["Depot"]);
-  const colHangTau = findColIdx(["Hãng tàu check", "Hãng tàu"]);
-  const colSoCont = findColIdx(["Số cont"]);
-  const colSize = findColIdx(["Size Check", "Size"]);
+
+  // Hãng tàu: Tách riêng cột check và cột base để có cơ chế fallback
+  const colHangTauCheck = findColIdx(["Hãng tàu check", "Hãng tàu (check)", "Hang tau check"]);
+  const colHangTauBase = findColIdx(["Hãng tàu", "Hang tau", "Hãng Tàu", "Line"]);
+
+  const colSoCont = findColIdx(["Số cont", "Số container", "Container"]);
+
+  // Size cont: Tách riêng cột check và cột base để có cơ chế fallback
+  const colSizeCheck = findColIdx(["Size Check", "Size check", "Size (check)"]);
+  const colSizeBase = findColIdx(["Size", "Kích cỡ", "Kích thước"]);
+
   const colLoaiDon = findColIdx(["Loại đơn hàng"]);
   const colNgayTao = findColIdx(["Ngày tạo"]);
   const colThoiDiemTuChoi = findColIdx(["Thời điểm từ chối", "Thời điểm BC từ chối", "Thời điểm hoàn tiền"]);
@@ -761,7 +769,22 @@ function parseVerificationFile(input) {
 
     const soEir = getCell(row, colSoEir);
     const depot = getCell(row, colDepot);
-    const hangTau = getCell(row, colHangTau);
+
+    // =========================================================================
+    // NGUYÊN TẮC LẤY HÃNG TÀU:
+    // 1. Ưu tiên 1: Lấy từ cột "Hãng tàu check".
+    // 2. Ưu tiên 2: Nếu "Hãng tàu check" rỗng/null/dash -> Fallback sang cột "Hãng tàu" gốc.
+    // =========================================================================
+    let hangTau = "";
+    const valHangTauCheck = getCell(row, colHangTauCheck);
+    const valHangTauBase = getCell(row, colHangTauBase);
+    if (isValidCleanVal(valHangTauCheck)) {
+      hangTau = valHangTauCheck;
+    } else if (isValidCleanVal(valHangTauBase)) {
+      hangTau = valHangTauBase;
+    } else {
+      hangTau = valHangTauCheck || valHangTauBase || "";
+    }
 
     // =========================================================================
     // NGUYÊN TẮC LẤY CỘT BOOKING CỦA DỮ LIỆU CHECK ĐƠN (EIR CANCELLATION ORDERS):
@@ -774,17 +797,33 @@ function parseVerificationFile(input) {
     const valSoBl = getCell(row, colSoBl);
     const valGeneral = getCell(row, colBookingGeneral);
 
-    if (isValidBookingVal(valBkCheck)) {
+    if (isValidCleanVal(valBkCheck)) {
       booking = valBkCheck;
-    } else if (isValidBookingVal(valSoBl)) {
+    } else if (isValidCleanVal(valSoBl)) {
       booking = valSoBl;
-    } else if (isValidBookingVal(valGeneral)) {
+    } else if (isValidCleanVal(valGeneral)) {
       booking = valGeneral;
     } else {
       booking = valBkCheck || valSoBl || valGeneral || "";
     }
+
     const soCont = getCell(row, colSoCont) || soEir;
-    const size = getCell(row, colSize);
+
+    // =========================================================================
+    // NGUYÊN TẮC LẤY SIZE CONTAINER:
+    // 1. Ưu tiên 1: Lấy từ cột "Size Check".
+    // 2. Ưu tiên 2: Nếu "Size Check" rỗng/null/dash -> Fallback sang cột "Size" gốc.
+    // =========================================================================
+    let size = "";
+    const valSizeCheck = getCell(row, colSizeCheck);
+    const valSizeBase = getCell(row, colSizeBase);
+    if (isValidCleanVal(valSizeCheck)) {
+      size = valSizeCheck;
+    } else if (isValidCleanVal(valSizeBase)) {
+      size = valSizeBase;
+    } else {
+      size = valSizeCheck || valSizeBase || "";
+    }
     const loaiDon = getCell(row, colLoaiDon);
     const ngayTao = normalizeDate(getCell(row, colNgayTao));
     const thoiDiemTuChoi = normalizeDate(getCell(row, colThoiDiemTuChoi));
