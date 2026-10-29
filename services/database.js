@@ -1254,10 +1254,23 @@ function insertVerificationRecords(records, metadata = {}, shouldPersist = true)
         ON CONFLICT(row_key) DO UPDATE SET
           upload_id=excluded.upload_id,
           file_name=excluded.file_name,
+          hang_tau=excluded.hang_tau,
+          so_booking=excluded.so_booking,
+          so_container=excluded.so_container,
+          loai_container=excluded.loai_container,
+          loai_don_hang=excluded.loai_don_hang,
+          size_teus=excluded.size_teus,
+          depot=excluded.depot,
           trang_thai_don_hang=excluded.trang_thai_don_hang,
           ngay_duoc_duyet=excluded.ngay_duoc_duyet,
           so_xe=excluded.so_xe,
           nguoi_tao=excluded.nguoi_tao,
+          ten_tai_xe=excluded.ten_tai_xe,
+          sdt_tai_xe=excluded.sdt_tai_xe,
+          ten_nha_xe=excluded.ten_nha_xe,
+          ly_do_huy=excluded.ly_do_huy,
+          ly_do_tu_choi=excluded.ly_do_tu_choi,
+          ly_do_huy_check=excluded.ly_do_huy_check,
           updated_at=excluded.updated_at
       `);
       sqliteEngine.exec("BEGIN TRANSACTION;");

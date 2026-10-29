@@ -577,6 +577,21 @@ async function syncVerificationOrdersToSupabase(orders) {
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26
         )
         ON CONFLICT (row_key) DO UPDATE SET
+          hang_tau = EXCLUDED.hang_tau,
+          so_booking = EXCLUDED.so_booking,
+          so_container = EXCLUDED.so_container,
+          loai_container = EXCLUDED.loai_container,
+          loai_don_hang = EXCLUDED.loai_don_hang,
+          size_teus = EXCLUDED.size_teus,
+          depot = EXCLUDED.depot,
+          so_xe = EXCLUDED.so_xe,
+          nguoi_tao = EXCLUDED.nguoi_tao,
+          ten_tai_xe = EXCLUDED.ten_tai_xe,
+          sdt_tai_xe = EXCLUDED.sdt_tai_xe,
+          ten_nha_xe = EXCLUDED.ten_nha_xe,
+          ly_do_huy = EXCLUDED.ly_do_huy,
+          ly_do_tu_choi = EXCLUDED.ly_do_tu_choi,
+          ly_do_huy_check = EXCLUDED.ly_do_huy_check,
           trang_thai_don_hang = EXCLUDED.trang_thai_don_hang,
           ngay_duoc_duyet = EXCLUDED.ngay_duoc_duyet,
           updated_at = CURRENT_TIMESTAMP;
