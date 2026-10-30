@@ -2082,8 +2082,8 @@ function switchTab(tabName, updateUrl = true) {
       // Bật đồng hồ thời gian thực giờ Việt Nam (hh:mm:ss)
       startVietnamClock();
 
-      // Ẩn nút Cập Nhật Dữ Liệu & Lọc Đơn Trùng khi sang tab Chưa thanh toán
-      if (btnUpdateData) btnUpdateData.style.display = "none";
+      // Giữ nút Cập Nhật Dữ Liệu hiển thị trên tab Chưa thanh toán để tiện đối soát
+      if (btnUpdateData) btnUpdateData.style.display = "inline-block";
       if (btnDeduplicateData) btnDeduplicateData.style.display = "none";
     } else {
       tabAllOrders.classList.add("active");
