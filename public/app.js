@@ -413,19 +413,48 @@ function isAutoCancelledBy3h(r) {
 }
 
 function parseApprovalTimestamp(dateStr) {
-  if (!dateStr) return null;
+  if (!dateStr || dateStr === "-" || dateStr === "null" || dateStr === "undefined") return null;
   const str = String(dateStr).trim().replace("T", " ");
-  const parts = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
-  if (!parts) return null;
-  const y = parseInt(parts[1], 10);
-  const m = parseInt(parts[2], 10) - 1;
-  const d = parseInt(parts[3], 10);
-  const h = parseInt(parts[4] || "0", 10);
-  const min = parseInt(parts[5] || "0", 10);
-  const s = parseInt(parts[6] || "0", 10);
-  return Date.UTC(y, m, d, h - 7, min, s);
-}
 
+  const mYmd = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (mYmd) {
+    const y = parseInt(mYmd[1], 10);
+    const m = parseInt(mYmd[2], 10) - 1;
+    const d = parseInt(mYmd[3], 10);
+    const h = parseInt(mYmd[4] || "0", 10);
+    const min = parseInt(mYmd[5] || "0", 10);
+    const s = parseInt(mYmd[6] || "0", 10);
+    return Date.UTC(y, m, d, h - 7, min, s);
+  }
+
+  const mTimeDate = str.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s+(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (mTimeDate) {
+    const h = parseInt(mTimeDate[1], 10);
+    const min = parseInt(mTimeDate[2], 10);
+    const s = parseInt(mTimeDate[3] || "0", 10);
+    const d = parseInt(mTimeDate[4], 10);
+    const m = parseInt(mTimeDate[5], 10) - 1;
+    const y = parseInt(mTimeDate[6], 10);
+    return Date.UTC(y, m, d, h - 7, min, s);
+  }
+
+  const mDmy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (mDmy) {
+    const d = parseInt(mDmy[1], 10);
+    const m = parseInt(mDmy[2], 10) - 1;
+    const y = parseInt(mDmy[3], 10);
+    const h = parseInt(mDmy[4] || "0", 10);
+    const min = parseInt(mDmy[5] || "0", 10);
+    const s = parseInt(mDmy[6] || "0", 10);
+    return Date.UTC(y, m, d, h - 7, min, s);
+  }
+
+  const dObj = new Date(str);
+  if (!isNaN(dObj.getTime())) {
+    return dObj.getTime();
+  }
+  return null;
+}
 function extractHour(dateStr) {
   if (!dateStr) return null;
   const str = String(dateStr).trim();
@@ -650,7 +679,54 @@ function applyExpired3hCancellation(records) {
   return records;
 }
 
-function getWarning3hLevel(ngayDuocDuyet, isUnpaidOrExpired, trangThaiXuLy, isCancelled = false) {
+// Tách số EIR và số Container từ chuỗi dữ liệu gốc (Ví dụ: EIR33989627-TCKU1000412)
+function parseContainerAndEir(raw) {
+  if (!raw && raw !== 0) {
+    return { soContainer: "-", soEir: "-" };
+  }
+  const str = String(raw).trim();
+  if (!str) {
+    return { soContainer: "-", soEir: "-" };
+  }
+
+  const dashIndex = str.indexOf("-");
+  if (dashIndex !== -1) {
+    const eirPart = str.substring(0, dashIndex).trim();
+    const contPart = str.substring(dashIndex + 1).trim();
+    return {
+      soContainer: contPart || "-",
+      soEir: eirPart || "-"
+    };
+  }
+
+  if (str.toUpperCase().startsWith("EIR")) {
+    return {
+      soContainer: "-",
+      soEir: str
+    };
+  }
+
+  return {
+    soContainer: str,
+    soEir: "-"
+  };
+}
+
+// Kiểm tra xem đơn hàng đã được cấp / có số Container thực tế hay chưa
+function hasContainerNumber(recordOrCont) {
+  if (!recordOrCont && recordOrCont !== 0) return false;
+  const raw = typeof recordOrCont === "object" ? (recordOrCont.soContainer || recordOrCont.so_container) : recordOrCont;
+  if (!raw && raw !== 0) return false;
+  const parsed = parseContainerAndEir(raw);
+  if (!parsed || !parsed.soContainer) return false;
+  const cont = String(parsed.soContainer).trim();
+  if (!cont || cont === "-" || cont.toLowerCase() === "null" || cont.toLowerCase() === "undefined" || cont.toLowerCase() === "none") {
+    return false;
+  }
+  return true;
+}
+
+function getWarning3hLevel(ngayDuocDuyet, isUnpaidOrExpired, trangThaiXuLy, isCancelled = false, soContainer = null) {
   // Quy tắc mới: Với đơn hủy, khi có cập nhật bất kỳ trạng thái xử lý nào -> Cập nhật là "Đã xử lý"
   if (isCancelled && trangThaiXuLy && String(trangThaiXuLy).trim()) {
     return "processed";
@@ -658,6 +734,7 @@ function getWarning3hLevel(ngayDuocDuyet, isUnpaidOrExpired, trangThaiXuLy, isCa
   if (isProcessed3hStatus(trangThaiXuLy)) {
     return "processed";
   }
+
   if (!isUnpaidOrExpired || !ngayDuocDuyet) return null;
   const appTime = parseApprovalTimestamp(ngayDuocDuyet);
   if (!appTime) return null;
@@ -1184,7 +1261,7 @@ function matchesCommonDashboardFilters(r, lineVal, dirVal, hourVal, warning3hVal
 
   // 6. 3h Warning level
   if (warning3hVal) {
-    const level = getWarning3hLevel(r.ngayDuocDuyet, isUnpaidOrder(r) || r.isAutoCancelledBy3h, r.trangThaiXuLy, isCancelledOrder(r));
+    const level = getWarning3hLevel(r.ngayDuocDuyet, isUnpaidOrder(r) || r.isAutoCancelledBy3h, r.trangThaiXuLy, isCancelledOrder(r), r.soContainer);
     if (level !== warning3hVal) return false;
   }
 

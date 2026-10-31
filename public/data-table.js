@@ -385,17 +385,52 @@ function initStatusMultiSelect(statuses) {
 
 // Chuyển chuỗi Ngày Được Duyệt (giờ VN) sang UTC timestamp (ms) độc lập múi giờ
 function parseApprovalTimestamp(dateStr) {
-  if (!dateStr) return null;
+  if (!dateStr || dateStr === "-" || dateStr === "null" || dateStr === "undefined") return null;
   const str = String(dateStr).trim().replace("T", " ");
-  const parts = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
-  if (!parts) return null;
-  const y = parseInt(parts[1], 10);
-  const m = parseInt(parts[2], 10) - 1;
-  const d = parseInt(parts[3], 10);
-  const h = parseInt(parts[4] || "0", 10);
-  const min = parseInt(parts[5] || "0", 10);
-  const s = parseInt(parts[6] || "0", 10);
-  return Date.UTC(y, m, d, h - 7, min, s);
+
+  // 1. Format: YYYY-MM-DD HH:mm:ss hoặc YYYY/MM/DD
+  const mYmd = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (mYmd) {
+    const y = parseInt(mYmd[1], 10);
+    const m = parseInt(mYmd[2], 10) - 1;
+    const d = parseInt(mYmd[3], 10);
+    const h = parseInt(mYmd[4] || "0", 10);
+    const min = parseInt(mYmd[5] || "0", 10);
+    const s = parseInt(mYmd[6] || "0", 10);
+    return Date.UTC(y, m, d, h - 7, min, s);
+  }
+
+  // 2. Format: HH:mm:ss DD/MM/YYYY hoặc HH:mm DD/MM/YYYY (giờ trước ngày sau)
+  const mTimeDate = str.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s+(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (mTimeDate) {
+    const h = parseInt(mTimeDate[1], 10);
+    const min = parseInt(mTimeDate[2], 10);
+    const s = parseInt(mTimeDate[3] || "0", 10);
+    const d = parseInt(mTimeDate[4], 10);
+    const m = parseInt(mTimeDate[5], 10) - 1;
+    const y = parseInt(mTimeDate[6], 10);
+    return Date.UTC(y, m, d, h - 7, min, s);
+  }
+
+  // 3. Format: DD/MM/YYYY HH:mm:ss hoặc DD-MM-YYYY
+  const mDmy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (mDmy) {
+    const d = parseInt(mDmy[1], 10);
+    const m = parseInt(mDmy[2], 10) - 1;
+    const y = parseInt(mDmy[3], 10);
+    const h = parseInt(mDmy[4] || "0", 10);
+    const min = parseInt(mDmy[5] || "0", 10);
+    const s = parseInt(mDmy[6] || "0", 10);
+    return Date.UTC(y, m, d, h - 7, min, s);
+  }
+
+  // 4. Fallback Date parsing
+  const dObj = new Date(str);
+  if (!isNaN(dObj.getTime())) {
+    return dObj.getTime();
+  }
+
+  return null;
 }
 
 // Định dạng thời gian còn lại (ms) thành chuỗi HH:mm:ss
@@ -422,8 +457,22 @@ function applyExpired3hCancellation(records) {
   return records;
 }
 
+// Kiểm tra xem đơn hàng đã được cấp / có số Container thực tế hay chưa
+function hasContainerNumber(recordOrCont) {
+  if (!recordOrCont && recordOrCont !== 0) return false;
+  const raw = typeof recordOrCont === "object" ? (recordOrCont.soContainer || recordOrCont.so_container) : recordOrCont;
+  if (!raw && raw !== 0) return false;
+  const parsed = parseContainerAndEir(raw);
+  if (!parsed || !parsed.soContainer) return false;
+  const cont = String(parsed.soContainer).trim();
+  if (!cont || cont === "-" || cont.toLowerCase() === "null" || cont.toLowerCase() === "undefined" || cont.toLowerCase() === "none") {
+    return false;
+  }
+  return true;
+}
+
 // Phân loại cấp độ cảnh báo 3 giờ: 'safe' | 'yellow' | 'red' | 'expired' | 'processed' | null
-function getWarning3hLevel(ngayDuocDuyet, isUnpaidOrExpired, trangThaiXuLy, isCancelled = false) {
+function getWarning3hLevel(ngayDuocDuyet, isUnpaidOrExpired, trangThaiXuLy, isCancelled = false, soContainer = null) {
   // Quy tắc mới: Với đơn hủy, khi có cập nhật bất kỳ trạng thái xử lý nào -> Cập nhật là "Đã xử lý"
   if (isCancelled && trangThaiXuLy && String(trangThaiXuLy).trim()) {
     return "processed";
@@ -449,7 +498,7 @@ function getWarning3hLevel(ngayDuocDuyet, isUnpaidOrExpired, trangThaiXuLy, isCa
 }
 
 // Tạo HTML hiển thị huy hiệu đếm ngược cảnh báo 3 giờ
-function renderCountdownCell(ngayDuocDuyet, isUnpaidOrExpired, trangThaiXuLy, isCancelled = false) {
+function renderCountdownCell(ngayDuocDuyet, isUnpaidOrExpired, trangThaiXuLy, isCancelled = false, soContainer = null) {
   // Quy tắc mới: Với đơn hủy, khi thực hiện cập nhật trạng thái thì hạn hủy đơn (3h) hiển thị là ĐÃ XỬ LÝ
   if (isCancelled && trangThaiXuLy && String(trangThaiXuLy).trim()) {
     return `
@@ -606,6 +655,17 @@ function extractDateTime(dateStr) {
     const s = (mYmd[6] !== undefined ? mYmd[6] : "00").padStart(2, "0");
     return `${y}-${m}-${d} ${h}:${min}:${s}`;
   }
+  // Format HH:mm:ss DD/MM/YYYY hoặc HH:mm DD/MM/YYYY
+  const mTimeDate = str.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s+(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (mTimeDate) {
+    const h = mTimeDate[1].padStart(2, "0");
+    const min = mTimeDate[2].padStart(2, "0");
+    const s = (mTimeDate[3] || "00").padStart(2, "0");
+    const d = mTimeDate[4].padStart(2, "0");
+    const m = mTimeDate[5].padStart(2, "0");
+    const y = mTimeDate[6];
+    return `${y}-${m}-${d} ${h}:${min}:${s}`;
+  }
   // Format DD/MM/YYYY HH:mm:ss
   const mDmy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
   if (mDmy) {
@@ -680,6 +740,18 @@ function formatDateDisplay(val) {
       ? ` ${ymdMatch[4].padStart(2, "0")}:${ymdMatch[5].padStart(2, "0")}:${(ymdMatch[6] || "00").padStart(2, "0")}`
       : "";
     return `${d}/${m}/${y}${time}`;
+  }
+
+  // Định dạng HH:mm:ss DD/MM/YYYY hoặc HH:mm DD/MM/YYYY -> Chuẩn hóa về DD/MM/YYYY HH:mm:ss
+  const timeDateMatch = str.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s+(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (timeDateMatch) {
+    const h = timeDateMatch[1].padStart(2, "0");
+    const min = timeDateMatch[2].padStart(2, "0");
+    const s = (timeDateMatch[3] || "00").padStart(2, "0");
+    const d = timeDateMatch[4].padStart(2, "0");
+    const m = timeDateMatch[5].padStart(2, "0");
+    const y = timeDateMatch[6];
+    return `${d}/${m}/${y} ${h}:${min}:${s}`;
   }
 
   // Định dạng DD-MM-YYYY hoặc DD/MM/YYYY kèm giờ tùy chọn
@@ -2508,7 +2580,7 @@ function applyFilters() {
 
     // 6. Dropdown lọc Cảnh Báo Đếm Ngược 3 Giờ (Safe, Yellow, Red, Expired, Processed)
     if (warning3hVal) {
-      const level = getWarning3hLevel(r.ngayDuocDuyet, isUnpaidOrder(r) || r.isAutoCancelledBy3h, r.trangThaiXuLy, isCancelledOrder(r));
+      const level = getWarning3hLevel(r.ngayDuocDuyet, isUnpaidOrder(r) || r.isAutoCancelledBy3h, r.trangThaiXuLy, isCancelledOrder(r), r.soContainer);
       if (level !== warning3hVal) return false;
     }
 
@@ -2866,7 +2938,7 @@ function renderTable(records) {
     // Cột Đếm Ngược Hạn Hủy 3 Giờ
     const isUnpaidOrExpired = isUnpaidOrder(r) || r.isAutoCancelledBy3h;
     const isCancelled = isCancelledOrder(r);
-    const countdownHtml = renderCountdownCell(r.ngayDuocDuyet, isUnpaidOrExpired, r.trangThaiXuLy, isCancelled);
+    const countdownHtml = renderCountdownCell(r.ngayDuocDuyet, isUnpaidOrExpired, r.trangThaiXuLy, isCancelled, r.soContainer);
 
     // Tách số Container và số EIR (trước dấu '-' là EIR, sau dấu '-' là Container)
     const contEir = parseContainerAndEir(r.soContainer);
