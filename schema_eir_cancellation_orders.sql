@@ -170,3 +170,38 @@ INSERT INTO eir_cancellation_orders (
 -- FROM eir_cancellation_orders
 -- GROUP BY hang_tau
 -- ORDER BY tong_cong DESC;
+
+-- ==============================================================================
+-- 6. HÀM TỰ ĐỘNG DỌN DẸP DỮ LIỆU CŨ HƠN 3 NGÀY (DATA RETENTION PURGE PROCEDURE)
+-- ==============================================================================
+-- Tự động kích hoạt kiểm tra cột mốc dữ liệu 3 ngày gần nhất (tính từ 00:00:00 của ngày [Hiện tại - 2 ngày] theo giờ VN GMT+7)
+-- và xóa vĩnh viễn các bản ghi check đơn quá hạn trong eir_cancellation_orders.
+
+CREATE OR REPLACE FUNCTION purge_old_eir_verification_orders(days_to_keep INT DEFAULT 3)
+RETURNS TABLE (
+    deleted_count BIGINT,
+    cutoff_date TIMESTAMP,
+    remaining_count BIGINT
+) AS $$
+DECLARE
+    v_cutoff TIMESTAMP;
+    v_deleted BIGINT;
+    v_remaining BIGINT;
+BEGIN
+    -- Cột mốc 00:00:00 của [Ngày hiện tại - (days_to_keep - 1)] theo múi giờ Việt Nam (+07)
+    v_cutoff := (date_trunc('day', (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Ho_Chi_Minh')) - ((days_to_keep - 1) || ' days')::INTERVAL) AT TIME ZONE 'UTC';
+    
+    DELETE FROM eir_cancellation_orders
+    WHERE COALESCE(ngay_duoc_duyet, ngay_huy_don, created_at) < v_cutoff;
+    
+    GET DIAGNOSTICS v_deleted = ROW_COUNT;
+    
+    SELECT COUNT(*) INTO v_remaining FROM eir_cancellation_orders;
+    
+    RETURN QUERY SELECT v_deleted, v_cutoff, v_remaining;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Ghi chú thiết lập Trigger Cron tự động chạy lúc 00:00:00 giờ Việt Nam (17:00 UTC) trên Supabase / PostgreSQL:
+-- SELECT cron.schedule('midnight_purge_eir_verification', '0 17 * * *', 'SELECT purge_old_eir_verification_orders(3);');
+

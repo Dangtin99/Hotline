@@ -54,6 +54,8 @@ const {
   deleteVerificationRecordsByUploadIdAsync,
   clearAllVerificationRecords,
   clearAllVerificationRecordsAsync,
+  purgeOldVerificationRecords,
+  purgeOldVerificationRecordsAsync,
   getVerificationDatabaseStats,
   VERIFICATION_SQL_DUMP_PATH,
   updateOrdersFromCheckData,
@@ -1621,6 +1623,24 @@ app.delete("/api/verification/history", authRequired, async (req, res) => {
 });
 
 /**
+ * API: Dọn dẹp dữ liệu kiểm tra đơn cũ hơn N ngày (Mặc định 3 ngày gần nhất)
+ */
+app.post("/api/verification/purge", authRequired, async (req, res) => {
+  try {
+    const daysToKeep = parseInt((req.body && req.body.days) || req.query.days || 3, 10);
+    const result = await purgeOldVerificationRecordsAsync(daysToKeep);
+    return res.json({
+      status: "success",
+      message: `Đã dọn dẹp thành công ${result.deletedCount} bản ghi check đơn cũ hơn ${daysToKeep} ngày (trước ngày ${result.cutoffYmd}). Còn lại: ${result.remainingCount} dòng.`,
+      data: result
+    });
+  } catch (err) {
+    console.error("[API /api/verification/purge] Lỗi:", err.message);
+    return res.status(500).json({ status: "error", message: "Lỗi hệ thống khi dọn dẹp dữ liệu: " + err.message });
+  }
+});
+
+/**
  * API: Phân tích nhanh trực tiếp
  */
 app.post("/api/analyze", authRequired, upload.single("file"), (req, res) => {
@@ -1899,6 +1919,57 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
+/**
+ * Lập lịch Trigger tự động kiểm tra và xóa dữ liệu check đơn cũ hơn 3 ngày tại thời điểm 00:00:00 (giờ VN) mỗi ngày
+ */
+function scheduleMidnightVerificationPurge() {
+  const now = new Date();
+  const vnFormatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    hour12: false,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric"
+  });
+
+  try {
+    const parts = vnFormatter.formatToParts(now);
+    const getP = (type) => parseInt(parts.find(p => p.type === type).value, 10);
+    const curH = getP("hour");
+    const curMin = getP("minute");
+    const curS = getP("second");
+
+    // Tính số giây còn lại đến 24:00:00 hôm nay (00:00:00 ngày mai)
+    const secondsPassedToday = (curH * 3600) + (curMin * 60) + curS;
+    const secondsInDay = 86400;
+    let delaySeconds = secondsInDay - secondsPassedToday;
+    if (delaySeconds <= 0) delaySeconds = secondsInDay;
+
+    // Thêm 2 giây trễ an toàn để chắc chắn đồng hồ đã bước sang ngày mới
+    const delayMs = (delaySeconds + 2) * 1000;
+    const minutesLeft = Math.round(delaySeconds / 60);
+
+    console.log(`[AutoPurge] Đã lên lịch Trigger tự động xóa dữ liệu check đơn cũ (giữ 3 ngày) vào lúc 00:00:00 giờ VN (còn ~${minutesLeft} phút).`);
+
+    setTimeout(async () => {
+      try {
+        console.log("[AutoPurge] === KÍCH HOẠT TRIGGER 00:00:00: TỰ ĐỘNG DỌN DẸP DỮ LIỆU CHECK ĐƠN 3 NGÀY ===");
+        await purgeOldVerificationRecordsAsync(3);
+      } catch (err) {
+        console.error("[AutoPurge] Lỗi trong quá trình dọn dẹp dữ liệu định kỳ 00:00:00:", err.message);
+      } finally {
+        // Lên lịch đệ quy cho ngày tiếp theo
+        scheduleMidnightVerificationPurge();
+      }
+    }, delayMs);
+  } catch (err) {
+    console.error("[AutoPurge] Không thể thiết lập bộ lập lịch nửa đêm:", err.message);
+  }
+}
+
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`=====================================================`);
@@ -1907,6 +1978,12 @@ if (require.main === module) {
     console.log(`=====================================================`);
     // Kiểm tra và tự động sao lưu CSDL ra thư mục máy tính người dùng
     backupService.checkAndRunDailyAutoBackup();
+    // Khởi động Trigger tự động dọn dẹp dữ liệu check đơn 3 ngày lúc 00:00:00 hàng ngày
+    scheduleMidnightVerificationPurge();
+    // Thực hiện dọn dẹp 1 lần khi server vừa khởi động (chạy nền sau 5 giây)
+    setTimeout(() => {
+      purgeOldVerificationRecordsAsync(3).catch(e => console.warn("[Startup Purge]", e.message));
+    }, 5000);
   });
 }
 

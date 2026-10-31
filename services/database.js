@@ -1354,6 +1354,105 @@ function getVerificationDatabaseStats() {
 }
 
 /**
+ * Trích xuất ngày chuẩn YYYY-MM-DD phục vụ kiểm tra và dọn dẹp dữ liệu cũ
+ */
+function parseDateYmdForPurge(dateStr) {
+  if (!dateStr) return null;
+  const str = String(dateStr).trim().replace("T", " ");
+  // 1. Dạng HH:mm DD-MM-YYYY hoặc HH:mm:ss DD/MM/YYYY
+  const timeFirstMatch = str.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s+(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (timeFirstMatch) {
+    return timeFirstMatch[6] + "-" + String(timeFirstMatch[5]).padStart(2, "0") + "-" + String(timeFirstMatch[4]).padStart(2, "0");
+  }
+  // 2. Dạng YYYY-MM-DD
+  const isoMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (isoMatch) {
+    return isoMatch[1] + "-" + String(isoMatch[2]).padStart(2, "0") + "-" + String(isoMatch[3]).padStart(2, "0");
+  }
+  // 3. Dạng DD-MM-YYYY
+  const vnMatch = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (vnMatch) {
+    return vnMatch[3] + "-" + String(vnMatch[2]).padStart(2, "0") + "-" + String(vnMatch[1]).padStart(2, "0");
+  }
+  const parsed = Date.parse(str);
+  if (!isNaN(parsed)) {
+    const dt = new Date(parsed);
+    return dt.getUTCFullYear() + "-" + String(dt.getUTCMonth() + 1).padStart(2, "0") + "-" + String(dt.getUTCDate()).padStart(2, "0");
+  }
+  return null;
+}
+
+/**
+ * Tự động xóa các bản ghi kiểm tra đơn (eir_cancellation_orders / verification_orders)
+ * cũ hơn số ngày chỉ định (mặc định 3 ngày: hôm nay, hôm qua, hôm kia).
+ * Mốc thời gian được tính từ 00:00:00 của ngày [Hiện tại - 2 ngày] theo múi giờ Việt Nam.
+ */
+function purgeOldVerificationRecords(daysToKeep = 3) {
+  if (memoryVerificationOrders.length === 0) {
+    loadVerificationFromStore();
+  }
+  if (memoryVerificationOrders.length === 0) {
+    return {
+      success: true,
+      deletedCount: 0,
+      remainingCount: 0,
+      cutoffYmd: null,
+      purgedKeys: []
+    };
+  }
+
+  const todayYmd = getVietnamTodayYmd();
+  const todayDt = new Date(todayYmd + "T00:00:00Z");
+  const cutoffDt = new Date(todayDt.getTime() - ((daysToKeep - 1) * 24 * 3600 * 1000));
+  const cutoffYmd = cutoffDt.toISOString().substring(0, 10);
+
+  const keptOrders = [];
+  const purgedKeys = [];
+
+  for (const order of memoryVerificationOrders) {
+    const dateStr = order.ngayDuocDuyet || order.ngayHuyDon || order.createdAt;
+    const ymd = parseDateYmdForPurge(dateStr);
+    if (ymd && ymd < cutoffYmd) {
+      if (order.rowKey) purgedKeys.push(order.rowKey);
+    } else {
+      keptOrders.push(order);
+    }
+  }
+
+  const deletedCount = purgedKeys.length;
+  if (deletedCount > 0) {
+    memoryVerificationOrders = keptOrders;
+    persistVerificationStore();
+
+    if (sqliteEngine) {
+      try {
+        const batchSize = 400;
+        for (let i = 0; i < purgedKeys.length; i += batchSize) {
+          const chunk = purgedKeys.slice(i, i + batchSize);
+          const placeholders = chunk.map(() => "?").join(",");
+          sqliteEngine.prepare(`DELETE FROM eir_cancellation_orders WHERE row_key IN (${placeholders});`).run(...chunk);
+        }
+      } catch (e) {
+        console.warn("[SQLite] Lỗi khi dọn dẹp eir_cancellation_orders:", e.message);
+      }
+    }
+
+    try {
+      const { invalidateRebookingCache } = require("./rebookingAnalyzer");
+      invalidateRebookingCache();
+    } catch (e) {}
+  }
+
+  return {
+    success: true,
+    deletedCount,
+    remainingCount: memoryVerificationOrders.length,
+    cutoffYmd,
+    purgedKeys
+  };
+}
+
+/**
  * Chức năng cập nhật dữ liệu đối soát từ Bảng check đơn (eir_cancellation_orders)
  * sang Bảng dữ liệu chi tiết (cancellation_orders)
  *
@@ -2651,6 +2750,19 @@ async function clearAllVerificationRecordsAsync() {
   }
 }
 
+async function purgeOldVerificationRecordsAsync(daysToKeep = 3) {
+  const result = purgeOldVerificationRecords(daysToKeep);
+  if (result.purgedKeys && result.purgedKeys.length > 0 && tursoClient) {
+    try {
+      await tursoClient.deleteVerificationOrderRowsInTurso(result.purgedKeys);
+    } catch (e) {
+      console.warn("[Turso/Supabase] Lỗi khi đồng bộ dọn dẹp dữ liệu check đơn:", e.message);
+    }
+  }
+  console.log(`[AutoPurge] Hoàn tất dọn dẹp dữ liệu check đơn cũ: Đã xóa ${result.deletedCount} dòng (trước ngày ${result.cutoffYmd}). Còn lại: ${result.remainingCount} dòng.`);
+  return result;
+}
+
 async function updateOrdersFromCheckDataAsync() {
   if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
@@ -3076,6 +3188,8 @@ module.exports = {
   deleteVerificationRecordsByUploadIdAsync,
   clearAllVerificationRecords,
   clearAllVerificationRecordsAsync,
+  purgeOldVerificationRecords,
+  purgeOldVerificationRecordsAsync,
   getVerificationDatabaseStats,
   VERIFICATION_SQL_DUMP_PATH,
   updateOrdersFromCheckData,
