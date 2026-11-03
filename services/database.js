@@ -1384,10 +1384,10 @@ function parseDateYmdForPurge(dateStr) {
 
 /**
  * Tự động xóa các bản ghi kiểm tra đơn (eir_cancellation_orders / verification_orders)
- * cũ hơn số ngày chỉ định (mặc định 3 ngày: hôm nay, hôm qua, hôm kia).
- * Mốc thời gian được tính từ 00:00:00 của ngày [Hiện tại - 2 ngày] theo múi giờ Việt Nam.
+ * cũ hơn số ngày chỉ định (mặc định 5 ngày: hôm nay và 4 ngày trước).
+ * Mốc thời gian được tính từ 00:00:00 của ngày [Hiện tại - 4 ngày] theo múi giờ Việt Nam.
  */
-function purgeOldVerificationRecords(daysToKeep = 3) {
+function purgeOldVerificationRecords(daysToKeep = 5) {
   if (memoryVerificationOrders.length === 0) {
     loadVerificationFromStore();
   }
@@ -1699,11 +1699,11 @@ function updateOrdersFromCheckData() {
   const nowStr = new Date().toISOString().replace("T", " ").substring(0, 19);
 
   // -------------------------------------------------------------------------
-  // QUY TẮC GIỚI HẠN THỜI GIAN: Chỉ lấy tối đa dữ liệu trong từ [Ngày hiện tại - 2] đến nay
+  // QUY TẮC GIỚI HẠN THỜI GIAN: Chỉ lấy tối đa dữ liệu trong từ [Ngày hiện tại - 4] đến nay (5 ngày gần nhất)
   // -------------------------------------------------------------------------
   const todayYmd = getVietnamTodayYmd();
   const todayDt = new Date(todayYmd + "T00:00:00Z");
-  const minDateLimitDt = new Date(todayDt.getTime() - (2 * 24 * 3600 * 1000));
+  const minDateLimitDt = new Date(todayDt.getTime() - (4 * 24 * 3600 * 1000));
   const minDateLimitYmd = minDateLimitDt.toISOString().substring(0, 10); // YYYY-MM-DD
   const minDateLimitMs = minDateLimitDt.getTime();
 
@@ -1714,10 +1714,23 @@ function updateOrdersFromCheckData() {
     const p = extractDateParts(dStr);
     if (p) {
       const ymd = `${p.y}-${String(p.m).padStart(2, "0")}-${String(p.d).padStart(2, "0")}`;
-      if (ymd < minDateLimitYmd) return false;
+      let isRecent = ymd >= minDateLimitYmd;
+      // Hỗ trợ trường hợp ngày/tháng bị đảo ngược (ví dụ 02-11 bị đảo thành 11-02 do locale US khi xuất Excel)
+      if (!isRecent && p.m <= 12 && p.d <= 12) {
+        const ymdSwapped = `${p.y}-${String(p.d).padStart(2, "0")}-${String(p.m).padStart(2, "0")}`;
+        if (ymdSwapped >= minDateLimitYmd) isRecent = true;
+      }
+      if (!isRecent) return false;
     }
     const ms = parseDateMs(dStr);
-    if (ms !== null && ms < minDateLimitMs) return false;
+    if (ms !== null && ms < minDateLimitMs) {
+      if (p && p.m <= 12 && p.d <= 12) {
+        const msSwapped = Date.UTC(p.y, p.d - 1, p.m, p.h, p.min, p.s);
+        if (msSwapped < minDateLimitMs) return false;
+      } else {
+        return false;
+      }
+    }
     return true;
   };
 

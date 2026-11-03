@@ -171,6 +171,14 @@ async function initSupabaseSchema() {
       );
       ALTER TABLE cancellation_orders ADD COLUMN IF NOT EXISTS so_xe TEXT;
       ALTER TABLE cancellation_orders ADD COLUMN IF NOT EXISTS nguoi_tao TEXT;
+      ALTER TABLE cancellation_orders ALTER COLUMN row_key TYPE TEXT;
+      ALTER TABLE cancellation_orders ALTER COLUMN ten_nha_xe TYPE TEXT;
+      ALTER TABLE cancellation_orders ALTER COLUMN file_name TYPE TEXT;
+      ALTER TABLE cancellation_orders ALTER COLUMN ten_tai_xe TYPE TEXT;
+      ALTER TABLE cancellation_orders ALTER COLUMN so_container TYPE TEXT;
+      ALTER TABLE cancellation_orders ALTER COLUMN so_booking TYPE TEXT;
+      ALTER TABLE cancellation_orders ALTER COLUMN trang_thai_don_hang TYPE TEXT;
+      ALTER TABLE cancellation_orders ALTER COLUMN trang_thai_xu_ly TYPE TEXT;
       CREATE INDEX IF NOT EXISTS idx_sup_cancellation_depot ON cancellation_orders(depot);
       CREATE INDEX IF NOT EXISTS idx_sup_cancellation_hang_tau ON cancellation_orders(hang_tau);
       CREATE INDEX IF NOT EXISTS idx_sup_cancellation_date ON cancellation_orders(ngay_duoc_duyet, ngay_huy_don);

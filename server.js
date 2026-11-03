@@ -1627,7 +1627,7 @@ app.delete("/api/verification/history", authRequired, async (req, res) => {
  */
 app.post("/api/verification/purge", authRequired, async (req, res) => {
   try {
-    const daysToKeep = parseInt((req.body && req.body.days) || req.query.days || 3, 10);
+    const daysToKeep = parseInt((req.body && req.body.days) || req.query.days || 5, 10);
     const result = await purgeOldVerificationRecordsAsync(daysToKeep);
     return res.json({
       status: "success",
@@ -1952,12 +1952,12 @@ function scheduleMidnightVerificationPurge() {
     const delayMs = (delaySeconds + 2) * 1000;
     const minutesLeft = Math.round(delaySeconds / 60);
 
-    console.log(`[AutoPurge] Đã lên lịch Trigger tự động xóa dữ liệu check đơn cũ (giữ 3 ngày) vào lúc 00:00:00 giờ VN (còn ~${minutesLeft} phút).`);
+    console.log(`[AutoPurge] Đã lên lịch Trigger tự động xóa dữ liệu check đơn cũ (giữ 5 ngày) vào lúc 00:00:00 giờ VN (còn ~${minutesLeft} phút).`);
 
     setTimeout(async () => {
       try {
-        console.log("[AutoPurge] === KÍCH HOẠT TRIGGER 00:00:00: TỰ ĐỘNG DỌN DẸP DỮ LIỆU CHECK ĐƠN 3 NGÀY ===");
-        await purgeOldVerificationRecordsAsync(3);
+        console.log("[AutoPurge] === KÍCH HOẠT TRIGGER 00:00:00: TỰ ĐỘNG DỌN DẸP DỮ LIỆU CHECK ĐƠN 5 NGÀY ===");
+        await purgeOldVerificationRecordsAsync(5);
       } catch (err) {
         console.error("[AutoPurge] Lỗi trong quá trình dọn dẹp dữ liệu định kỳ 00:00:00:", err.message);
       } finally {
@@ -1978,11 +1978,11 @@ if (require.main === module) {
     console.log(`=====================================================`);
     // Kiểm tra và tự động sao lưu CSDL ra thư mục máy tính người dùng
     backupService.checkAndRunDailyAutoBackup();
-    // Khởi động Trigger tự động dọn dẹp dữ liệu check đơn 3 ngày lúc 00:00:00 hàng ngày
+    // Khởi động Trigger tự động dọn dẹp dữ liệu check đơn 5 ngày lúc 00:00:00 hàng ngày
     scheduleMidnightVerificationPurge();
     // Thực hiện dọn dẹp 1 lần khi server vừa khởi động (chạy nền sau 5 giây)
     setTimeout(() => {
-      purgeOldVerificationRecordsAsync(3).catch(e => console.warn("[Startup Purge]", e.message));
+      purgeOldVerificationRecordsAsync(5).catch(e => console.warn("[Startup Purge]", e.message));
     }, 5000);
   });
 }
