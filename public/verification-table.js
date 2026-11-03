@@ -242,6 +242,7 @@ function applyFilters() {
     if (term) {
       const match =
         (r.sttFile && String(r.sttFile).toLowerCase().includes(term)) ||
+        (r.rowKey && String(r.rowKey).toLowerCase().includes(term)) ||
         (r.soBooking && String(r.soBooking).toLowerCase().includes(term)) ||
         (r.soContainer && String(r.soContainer).toLowerCase().includes(term)) ||
         (r.nguoiTao && String(r.nguoiTao).toLowerCase().includes(term)) ||
