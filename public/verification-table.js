@@ -29,6 +29,7 @@ const filterDateFrom = document.getElementById("filterDateFrom");
 const filterDateTo = document.getElementById("filterDateTo");
 const btnClearDateFilter = document.getElementById("btnClearDateFilter");
 const btnResetFilter = document.getElementById("btnResetFilter");
+const btnRefreshVerificationData = document.getElementById("btnRefreshVerificationData");
 const btnExportCsv = document.getElementById("btnExportCsv");
 const btnDownloadSqlDump = document.getElementById("btnDownloadSqlDump");
 
@@ -61,6 +62,16 @@ document.addEventListener("DOMContentLoaded", () => {
   if (btnClearDateFilter) btnClearDateFilter.addEventListener("click", clearDateFilter);
 
   if (btnResetFilter) btnResetFilter.addEventListener("click", resetAllFilters);
+  if (btnRefreshVerificationData) {
+    btnRefreshVerificationData.addEventListener("click", () => {
+      btnRefreshVerificationData.disabled = true;
+      btnRefreshVerificationData.textContent = "Đang tải...";
+      loadVerificationDataset(true).finally(() => {
+        btnRefreshVerificationData.disabled = false;
+        btnRefreshVerificationData.textContent = "Làm Mới";
+      });
+    });
+  }
   if (btnExportCsv) btnExportCsv.addEventListener("click", exportToCsv);
   if (btnDownloadSqlDump) {
     btnDownloadSqlDump.addEventListener("click", () => {
@@ -101,8 +112,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Tải dữ liệu ban đầu
-  loadVerificationDataset();
+  // Tải dữ liệu ban đầu từ Cloud
+  loadVerificationDataset(true);
 });
 
 function showAlert(msg, isError = true) {
@@ -120,10 +131,11 @@ function clearAlert() {
   alertBox.textContent = "";
 }
 
-async function loadVerificationDataset() {
+async function loadVerificationDataset(forceRefresh = false) {
   clearAlert();
   try {
-    const res = await fetch("/api/verification/all-data");
+    const url = forceRefresh ? "/api/verification/all-data?refresh=1" : "/api/verification/all-data";
+    const res = await fetch(url);
     const json = await res.json();
     if (!res.ok || json.status !== "success") {
       throw new Error(json.message || "Không thể tải dữ liệu kiểm tra đơn.");

@@ -2662,26 +2662,38 @@ async function clearDatabaseAsync() {
   bumpOperationalVersion();
 }
 
-async function getAllVerificationRecordsAsync(forceRefresh = false) {
-  // 0. Tối ưu siêu tốc (In-Memory Cache): Trả về ngay nếu cache RAM đã có sẵn và không yêu cầu forceRefresh
-  if (!forceRefresh && Array.isArray(memoryVerificationOrders) && memoryVerificationOrders.length > 0) {
-    return memoryVerificationOrders;
-  }
+let isVerificationLoadedFromCloud = false;
+let lastVerificationCloudFetchTime = 0;
+const VERIFICATION_CACHE_TTL = 3 * 60 * 1000; // 3 phút TTL
 
-  // 1. Nếu Turso Cloud / Supabase khả dụng -> Nguồn Chân Lý duy nhất
-  if (tursoClient && tursoClient.isTursoAvailable()) {
-    try {
-      const tursoRows = await tursoClient.getAllVerificationOrdersFromTurso();
-      if (Array.isArray(tursoRows)) {
-        memoryVerificationOrders = tursoRows;
-        return memoryVerificationOrders;
+async function getAllVerificationRecordsAsync(forceRefresh = false) {
+  const isCloudAvail = Boolean(tursoClient && tursoClient.isTursoAvailable());
+
+  // 1. Nếu Cloud Database khả dụng -> Cloud là Nguồn Chân Lý duy nhất (Source of Truth)
+  if (isCloudAvail) {
+    const isCacheExpired = (Date.now() - lastVerificationCloudFetchTime) > VERIFICATION_CACHE_TTL;
+    const shouldFetchCloud = forceRefresh || !isVerificationLoadedFromCloud || isCacheExpired || memoryVerificationOrders.length === 0;
+
+    if (shouldFetchCloud) {
+      try {
+        const cloudRows = await tursoClient.getAllVerificationOrdersFromTurso();
+        if (Array.isArray(cloudRows)) {
+          memoryVerificationOrders = cloudRows;
+          isVerificationLoadedFromCloud = true;
+          lastVerificationCloudFetchTime = Date.now();
+          return memoryVerificationOrders;
+        }
+      } catch (e) {
+        console.warn("[Cloud] Không thể đọc verification từ Cloud, fallback RAM/local:", e.message);
       }
-    } catch (e) {
-      console.warn("[Turso/Supabase] Không thể đọc verification từ Cloud:", e.message);
+    }
+
+    if (Array.isArray(memoryVerificationOrders) && memoryVerificationOrders.length > 0) {
+      return memoryVerificationOrders;
     }
   }
 
-  // 2. Fallback offline / local
+  // 2. Fallback offline / local khi không có Cloud
   if (memoryVerificationOrders.length === 0) {
     loadVerificationFromStore();
   }
@@ -2710,6 +2722,8 @@ async function insertVerificationRecordsAsync(records, metadata = {}) {
       try {
         const recordsToSync = (res.processedRecords && res.processedRecords.length > 0) ? res.processedRecords : records;
         await tursoClient.syncVerificationOrdersToTurso(recordsToSync);
+        isVerificationLoadedFromCloud = true;
+        lastVerificationCloudFetchTime = Date.now();
       } catch (e) {
         console.error("[Cloud] Lỗi đồng bộ verification orders lên CSDL:", e.message);
         throw new Error(`Lỗi đồng bộ dữ liệu check đơn lên CSDL: ${e.message}`);
@@ -2729,6 +2743,8 @@ async function insertVerificationRecordsAsync(records, metadata = {}) {
 
 async function deleteVerificationRecordsByUploadIdAsync(uploadId) {
   deleteVerificationRecordsByUploadId(uploadId);
+  isVerificationLoadedFromCloud = false;
+  lastVerificationCloudFetchTime = 0;
   if (tursoClient) {
     try {
       await tursoClient.deleteVerificationOrdersByUploadIdInTurso(uploadId);
@@ -2738,6 +2754,8 @@ async function deleteVerificationRecordsByUploadIdAsync(uploadId) {
 
 async function clearAllVerificationRecordsAsync() {
   clearAllVerificationRecords();
+  isVerificationLoadedFromCloud = false;
+  lastVerificationCloudFetchTime = 0;
   if (tursoClient) {
     try {
       await tursoClient.clearAllVerificationOrdersInTurso();
