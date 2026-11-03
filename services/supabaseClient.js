@@ -439,8 +439,41 @@ async function syncOrdersToSupabase(orders) {
   try {
     await client.query("BEGIN;");
 
+    // Lọc loại bỏ trùng lặp rowKey nội bộ trong cùng đợt nạp (giữ bản ghi mới nhất)
+    // để tránh lỗi PostgreSQL: "ON CONFLICT DO UPDATE command cannot affect row a second time"
+    const uniqueMap = new Map();
     for (const o of orders) {
       const rowKey = o.rowKey || `${o.depot || "DEPOT"}#${o.stt || o.sttFile || "NO_STT"}#${o.soBooking || "NO_BOOKING"}#${o.ngayHuyDon || ""}`;
+      uniqueMap.set(rowKey, { ...o, rowKey });
+    }
+    const uniqueOrders = Array.from(uniqueMap.values());
+
+    const BATCH_SIZE = 150;
+    for (let i = 0; i < uniqueOrders.length; i += BATCH_SIZE) {
+      const chunk = uniqueOrders.slice(i, i + BATCH_SIZE);
+      const valuePlaceholders = [];
+      const vals = [];
+      let paramIdx = 1;
+
+      for (const o of chunk) {
+        const rowPlaceholders = [];
+        for (let c = 0; c < 27; c++) {
+          rowPlaceholders.push(`$${paramIdx++}`);
+        }
+        valuePlaceholders.push(`(${rowPlaceholders.join(", ")})`);
+
+        vals.push(
+          o.rowKey, o.uploadId || "UP-SYNC", o.fileName || "", o.stt || o.sttFile || "",
+          o.depot || "", o.hangTau || "", o.ngayHuyDon || "", o.ngayDuocDuyet || "",
+          o.soBooking || "", o.soContainer || "", o.trangThaiDonHang || "", o.trangThaiKichHoat || "",
+          o.thoiGianKichHoat || "", o.lyDoHuy || "", o.loaiContainer || "", o.loaiDonHang || "",
+          Number(o.sizeTeus) || 0, o.tenTaiXe || "", o.sdtTaiXe || "", o.tenNhaXe || "",
+          o.sdtNhaXe || "", o.lyDoTuChoi || "", o.trangThaiXuLy || "", o.giaiTrinh || "",
+          o.giaiTrinhChiTiet || null, o.originalTrangThaiDonHang || o.originalTrangThai || "",
+          o.isAutoCancelledBy3h || o.is_auto_cancelled_3h ? 1 : 0
+        );
+      }
+
       const sql = `
         INSERT INTO cancellation_orders (
           row_key, upload_id, file_name, stt, depot, hang_tau, ngay_huy_don, ngay_duoc_duyet,
@@ -448,9 +481,7 @@ async function syncOrdersToSupabase(orders) {
           ly_do_huy, loai_container, loai_don_hang, size_teus, ten_tai_xe, sdt_tai_xe,
           ten_nha_xe, sdt_nha_xe, ly_do_tu_choi, trang_thai_xu_ly, giai_trinh, giai_trinh_chi_tiet,
           original_trang_thai, is_auto_cancelled_3h
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27
-        )
+        ) VALUES ${valuePlaceholders.join(", ")}
         ON CONFLICT (row_key) DO UPDATE SET
           trang_thai_don_hang = EXCLUDED.trang_thai_don_hang,
           ngay_duoc_duyet = EXCLUDED.ngay_duoc_duyet,
@@ -460,19 +491,8 @@ async function syncOrdersToSupabase(orders) {
           updated_at = CURRENT_TIMESTAMP;
       `;
 
-      const vals = [
-        rowKey, o.uploadId || "UP-SYNC", o.fileName || "", o.stt || o.sttFile || "",
-        o.depot || "", o.hangTau || "", o.ngayHuyDon || "", o.ngayDuocDuyet || "",
-        o.soBooking || "", o.soContainer || "", o.trangThaiDonHang || "", o.trangThaiKichHoat || "",
-        o.thoiGianKichHoat || "", o.lyDoHuy || "", o.loaiContainer || "", o.loaiDonHang || "",
-        Number(o.sizeTeus) || 0, o.tenTaiXe || "", o.sdtTaiXe || "", o.tenNhaXe || "",
-        o.sdtNhaXe || "", o.lyDoTuChoi || "", o.trangThaiXuLy || "", o.giaiTrinh || "",
-        o.giaiTrinhChiTiet || null, o.originalTrangThaiDonHang || o.originalTrangThai || "",
-        o.isAutoCancelledBy3h || o.is_auto_cancelled_3h ? 1 : 0
-      ];
-
       await client.query(sql, vals);
-      synced++;
+      synced += chunk.length;
     }
 
     await client.query("COMMIT;");
@@ -565,17 +585,47 @@ async function syncVerificationOrdersToSupabase(orders) {
   try {
     await client.query("BEGIN;");
 
+    // Lọc loại bỏ trùng lặp rowKey nội bộ trong cùng đợt nạp (giữ bản ghi mới nhất)
+    // để tránh lỗi PostgreSQL: "ON CONFLICT DO UPDATE command cannot affect row a second time"
+    const uniqueMap = new Map();
     for (const o of orders) {
       const rowKey = o.rowKey || `${o.depot || "DEPOT"}#${o.sttFile || o.stt || "NO_STT"}#${o.soBooking || "NO_BOOKING"}#${o.ngayHuyDon || ""}`;
+      uniqueMap.set(rowKey, { ...o, rowKey });
+    }
+    const uniqueOrders = Array.from(uniqueMap.values());
+
+    const BATCH_SIZE = 150;
+    for (let i = 0; i < uniqueOrders.length; i += BATCH_SIZE) {
+      const chunk = uniqueOrders.slice(i, i + BATCH_SIZE);
+      const valuePlaceholders = [];
+      const vals = [];
+      let paramIdx = 1;
+
+      for (const o of chunk) {
+        const rowPlaceholders = [];
+        for (let c = 0; c < 26; c++) {
+          rowPlaceholders.push(`$${paramIdx++}`);
+        }
+        valuePlaceholders.push(`(${rowPlaceholders.join(", ")})`);
+
+        vals.push(
+          o.rowKey, o.uploadId || "VER-SYNC", o.fileName || "", o.sttFile || o.stt || "",
+          o.depot || "", o.hangTau || "", o.ngayHuyDon || "", o.ngayDuocDuyet || "",
+          o.soBooking || "", o.soContainer || "", o.loaiContainer || "", o.loaiDonHang || "",
+          Number(o.sizeTeus) || 0, o.trangThaiDonHang || "", o.trangThaiKichHoat || "",
+          o.thoiGianKichHoat || "", o.lyDoHuy || "", o.lyDoTuChoi || "", o.lyDoHuyCheck || "",
+          o.tenTaiXe || "", o.sdtTaiXe || "", o.tenNhaXe || "", o.sdtNhaXe || "",
+          o.fileNguon || "", o.nguoiTao || "", o.soXe || ""
+        );
+      }
+
       const sql = `
         INSERT INTO eir_cancellation_orders (
           row_key, upload_id, file_name, stt_file, depot, hang_tau, ngay_huy_don, ngay_duoc_duyet,
           so_booking, so_container, loai_container, loai_don_hang, size_teus, trang_thai_don_hang,
           trang_thai_kich_hoat, thoi_gian_kich_hoat, ly_do_huy, ly_do_tu_choi, ly_do_huy_check,
           ten_tai_xe, sdt_tai_xe, ten_nha_xe, sdt_nha_xe, file_nguon, nguoi_tao, so_xe
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26
-        )
+        ) VALUES ${valuePlaceholders.join(", ")}
         ON CONFLICT (row_key) DO UPDATE SET
           hang_tau = EXCLUDED.hang_tau,
           so_booking = EXCLUDED.so_booking,
@@ -597,18 +647,8 @@ async function syncVerificationOrdersToSupabase(orders) {
           updated_at = CURRENT_TIMESTAMP;
       `;
 
-      const vals = [
-        rowKey, o.uploadId || "VER-SYNC", o.fileName || "", o.sttFile || o.stt || "",
-        o.depot || "", o.hangTau || "", o.ngayHuyDon || "", o.ngayDuocDuyet || "",
-        o.soBooking || "", o.soContainer || "", o.loaiContainer || "", o.loaiDonHang || "",
-        Number(o.sizeTeus) || 0, o.trangThaiDonHang || "", o.trangThaiKichHoat || "",
-        o.thoiGianKichHoat || "", o.lyDoHuy || "", o.lyDoTuChoi || "", o.lyDoHuyCheck || "",
-        o.tenTaiXe || "", o.sdtTaiXe || "", o.tenNhaXe || "", o.sdtNhaXe || "",
-        o.fileNguon || "", o.nguoiTao || "", o.soXe || ""
-      ];
-
       await client.query(sql, vals);
-      synced++;
+      synced += chunk.length;
     }
 
     await client.query("COMMIT;");

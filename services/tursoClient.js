@@ -415,7 +415,7 @@ async function syncOrdersToTurso(orders) {
     if (checkWriteBlockedError(schemaErr)) return { synced: 0, total: orders.length };
   }
 
-  const batchSize = 400;
+  const batchSize = 100;
   let synced = 0;
 
   const chunks = [];
@@ -686,7 +686,7 @@ async function syncVerificationOrdersToTurso(orders) {
     if (checkWriteBlockedError(schemaErr)) return { synced: 0, total: orders.length };
   }
 
-  const batchSize = 400;
+  const batchSize = 100;
   let synced = 0;
 
   const chunks = [];
@@ -770,7 +770,7 @@ async function deleteVerificationOrderRowsInTurso(rowKeys) {
   const client = getTursoClient();
   if (!client) return;
   try {
-    const batchSize = 400;
+    const batchSize = 100;
     for (let i = 0; i < rowKeys.length; i += batchSize) {
       const chunk = rowKeys.slice(i, i + batchSize);
       const placeholders = chunk.map(() => "?").join(",");
@@ -792,7 +792,7 @@ async function deleteOrderRowsInTurso(rowKeys) {
   const client = getTursoClient();
   if (!client) return;
   try {
-    const batchSize = 400;
+    const batchSize = 100;
     for (let i = 0; i < rowKeys.length; i += batchSize) {
       const chunk = rowKeys.slice(i, i + batchSize);
       const placeholders = chunk.map(() => "?").join(",");

@@ -2717,7 +2717,8 @@ async function insertVerificationRecordsAsync(records, metadata = {}) {
         const recordsToSync = (res.processedRecords && res.processedRecords.length > 0) ? res.processedRecords : records;
         await tursoClient.syncVerificationOrdersToTurso(recordsToSync);
       } catch (e) {
-        console.error("[Turso] Lỗi đồng bộ verification orders lên Turso:", e.message);
+        console.error("[Cloud] Lỗi đồng bộ verification orders lên CSDL:", e.message);
+        throw new Error(`Lỗi đồng bộ dữ liệu check đơn lên CSDL: ${e.message}`);
       }
     }
 
