@@ -2556,13 +2556,16 @@ async function getAllRecordsAsync(forceRefresh = false) {
 
         return memoryOrders.map((o, idx) => {
           const op = opMap[o.rowKey];
+          const opStatus = op ? (op.cskhStatus || op.trangThaiXuLy || "") : "";
+          const opExp = op ? (op.explanation || op.giaiTrinh || "") : "";
+          const opExpDetail = op ? (op.explanationDetail || op.giaiTrinhChiTiet || null) : null;
           return {
             ...o,
             stt: String(idx + 1),
             isPending: op ? op.isPending : Boolean(o.isPending),
-            trangThaiXuLy: (op && op.cskhStatus !== undefined && op.cskhStatus !== null) ? op.cskhStatus : (o.trangThaiXuLy || ""),
-            giaiTrinh: (op && op.explanation !== undefined && op.explanation !== null) ? op.explanation : (o.giaiTrinh || ""),
-            giaiTrinhChiTiet: (op && op.explanationDetail !== undefined) ? (op.explanationDetail || null) : (o.giaiTrinhChiTiet || null)
+            trangThaiXuLy: opStatus || o.trangThaiXuLy || "",
+            giaiTrinh: opExp || o.giaiTrinh || "",
+            giaiTrinhChiTiet: opExpDetail !== null ? opExpDetail : (o.giaiTrinhChiTiet || null)
           };
         });
       }
@@ -2792,6 +2795,29 @@ async function updateOrdersFromCheckDataAsync() {
 
   const res = updateOrdersFromCheckData();
 
+  if (res.deletedOrderKeys && res.deletedOrderKeys.length > 0) {
+    const delSet = new Set(res.deletedOrderKeys);
+    memoryOrders = memoryOrders.filter(o => !delSet.has(o.rowKey));
+  }
+
+  if (res.modifiedOrders && res.modifiedOrders.length > 0) {
+    if (!memoryOpMap) memoryOpMap = {};
+    res.modifiedOrders.forEach(o => {
+      if (o.trangThaiXuLy) {
+        memoryOpMap[o.rowKey] = {
+          rowKey: o.rowKey,
+          cskhStatus: o.trangThaiXuLy,
+          trangThaiXuLy: o.trangThaiXuLy,
+          explanation: o.giaiTrinh || "",
+          giaiTrinh: o.giaiTrinh || "",
+          explanationDetail: o.giaiTrinhChiTiet || null,
+          giaiTrinhChiTiet: o.giaiTrinhChiTiet || null,
+          isPending: Boolean(o.isPending)
+        };
+      }
+    });
+  }
+
   if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       const syncPromises = [];
@@ -2812,6 +2838,8 @@ async function updateOrdersFromCheckDataAsync() {
     }
   }
 
+  lastOrdersCachedVersion = null;
+  lastOpMapCachedVersion = null;
   bumpOperationalVersion();
   return res;
 }

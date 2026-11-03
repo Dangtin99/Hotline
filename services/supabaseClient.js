@@ -169,6 +169,8 @@ async function initSupabaseSchema() {
         created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
+      ALTER TABLE cancellation_orders ADD COLUMN IF NOT EXISTS so_xe TEXT;
+      ALTER TABLE cancellation_orders ADD COLUMN IF NOT EXISTS nguoi_tao TEXT;
       CREATE INDEX IF NOT EXISTS idx_sup_cancellation_depot ON cancellation_orders(depot);
       CREATE INDEX IF NOT EXISTS idx_sup_cancellation_hang_tau ON cancellation_orders(hang_tau);
       CREATE INDEX IF NOT EXISTS idx_sup_cancellation_date ON cancellation_orders(ngay_duoc_duyet, ngay_huy_don);
@@ -281,6 +283,8 @@ function mapSupabaseOrderRow(r) {
     sdtTaiXe: r.sdt_tai_xe,
     tenNhaXe: r.ten_nha_xe,
     sdtNhaXe: r.sdt_nha_xe,
+    soXe: r.so_xe || "",
+    nguoiTao: r.nguoi_tao || "",
     lyDoTuChoi: r.ly_do_tu_choi,
     trangThaiXuLy: r.trang_thai_xu_ly,
     giaiTrinh: r.giai_trinh,
@@ -457,7 +461,7 @@ async function syncOrdersToSupabase(orders) {
 
       for (const o of chunk) {
         const rowPlaceholders = [];
-        for (let c = 0; c < 27; c++) {
+        for (let c = 0; c < 29; c++) {
           rowPlaceholders.push(`$${paramIdx++}`);
         }
         valuePlaceholders.push(`(${rowPlaceholders.join(", ")})`);
@@ -470,7 +474,8 @@ async function syncOrdersToSupabase(orders) {
           Number(o.sizeTeus) || 0, o.tenTaiXe || "", o.sdtTaiXe || "", o.tenNhaXe || "",
           o.sdtNhaXe || "", o.lyDoTuChoi || "", o.trangThaiXuLy || "", o.giaiTrinh || "",
           o.giaiTrinhChiTiet || null, o.originalTrangThaiDonHang || o.originalTrangThai || "",
-          o.isAutoCancelledBy3h || o.is_auto_cancelled_3h ? 1 : 0
+          o.isAutoCancelledBy3h || o.is_auto_cancelled_3h ? 1 : 0,
+          o.soXe || "", o.nguoiTao || ""
         );
       }
 
@@ -480,14 +485,33 @@ async function syncOrdersToSupabase(orders) {
           so_booking, so_container, trang_thai_don_hang, trang_thai_kich_hoat, thoi_gian_kich_hoat,
           ly_do_huy, loai_container, loai_don_hang, size_teus, ten_tai_xe, sdt_tai_xe,
           ten_nha_xe, sdt_nha_xe, ly_do_tu_choi, trang_thai_xu_ly, giai_trinh, giai_trinh_chi_tiet,
-          original_trang_thai, is_auto_cancelled_3h
+          original_trang_thai, is_auto_cancelled_3h, so_xe, nguoi_tao
         ) VALUES ${valuePlaceholders.join(", ")}
         ON CONFLICT (row_key) DO UPDATE SET
-          trang_thai_don_hang = EXCLUDED.trang_thai_don_hang,
+          so_container = EXCLUDED.so_container,
+          so_booking = EXCLUDED.so_booking,
+          depot = EXCLUDED.depot,
+          hang_tau = EXCLUDED.hang_tau,
+          ngay_huy_don = EXCLUDED.ngay_huy_don,
           ngay_duoc_duyet = EXCLUDED.ngay_duoc_duyet,
+          trang_thai_don_hang = EXCLUDED.trang_thai_don_hang,
+          trang_thai_kich_hoat = EXCLUDED.trang_thai_kich_hoat,
+          thoi_gian_kich_hoat = EXCLUDED.thoi_gian_kich_hoat,
+          loai_container = EXCLUDED.loai_container,
+          loai_don_hang = EXCLUDED.loai_don_hang,
+          size_teus = EXCLUDED.size_teus,
+          ten_tai_xe = EXCLUDED.ten_tai_xe,
+          sdt_tai_xe = EXCLUDED.sdt_tai_xe,
+          ten_nha_xe = EXCLUDED.ten_nha_xe,
+          sdt_nha_xe = EXCLUDED.sdt_nha_xe,
+          so_xe = COALESCE(NULLIF(EXCLUDED.so_xe, ''), cancellation_orders.so_xe),
+          nguoi_tao = COALESCE(NULLIF(EXCLUDED.nguoi_tao, ''), cancellation_orders.nguoi_tao),
+          ly_do_huy = EXCLUDED.ly_do_huy,
+          ly_do_tu_choi = EXCLUDED.ly_do_tu_choi,
           trang_thai_xu_ly = COALESCE(NULLIF(EXCLUDED.trang_thai_xu_ly, ''), cancellation_orders.trang_thai_xu_ly),
           giai_trinh = COALESCE(NULLIF(EXCLUDED.giai_trinh, ''), cancellation_orders.giai_trinh),
           giai_trinh_chi_tiet = COALESCE(NULLIF(EXCLUDED.giai_trinh_chi_tiet, ''), cancellation_orders.giai_trinh_chi_tiet),
+          is_auto_cancelled_3h = EXCLUDED.is_auto_cancelled_3h,
           updated_at = CURRENT_TIMESTAMP;
       `;
 
@@ -950,8 +974,12 @@ async function getAllOperationalStatesFromSupabase() {
         res.rows.forEach(r => {
           if (r.row_key) {
             map[r.row_key] = {
+              rowKey: r.row_key,
+              cskhStatus: r.cskh_status || "",
               trangThaiXuLy: r.cskh_status || "",
+              explanation: r.explanation || "",
               giaiTrinh: r.explanation || "",
+              explanationDetail: r.explanation_detail || null,
               giaiTrinhChiTiet: r.explanation_detail || null,
               isPending: Number(r.is_pending) === 1,
               updatedAt: r.updated_at || ""
