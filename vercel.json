@@ -1,5 +1,11 @@
 {
   "version": 2,
+  "crons": [
+    {
+      "path": "/api/cron/edepot-sync",
+      "schedule": "0 * * * *"
+    }
+  ],
   "builds": [
     {
       "src": "api/index.js",

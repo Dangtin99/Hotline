@@ -20,6 +20,7 @@ function cleanString(val) {
 
 /**
  * Chuẩn hóa ngày tháng sang định dạng YYYY-MM-DD HH:mm:ss
+ * Tự động nhận diện định dạng Mỹ (MM/DD/YYYY) vs Việt Nam (DD/MM/YYYY) và định dạng giờ trước ngày (HH:mm DD-MM-YYYY)
  */
 function normalizeDate(val) {
   const str = cleanString(val);
@@ -32,16 +33,53 @@ function normalizeDate(val) {
   }
 
   const s = str.replace(/\//g, "-").trim();
-  // Khớp định dạng DD-MM-YYYY HH:mm:ss hoặc DD-MM-YYYY
+
+  // Khớp định dạng HH:mm:ss DD-MM-YYYY hoặc HH:mm DD-MM-YYYY (ví dụ: "11:18 19-10-2026")
+  const hhmmddmmyyyy = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s+(\d{1,2})-(\d{1,2})-(\d{4})/);
+  if (hhmmddmmyyyy) {
+    const time = ` ${hhmmddmmyyyy[1].padStart(2, "0")}:${hhmmddmmyyyy[2].padStart(2, "0")}:${(hhmmddmmyyyy[3] || "00").padStart(2, "0")}`;
+    let p1 = parseInt(hhmmddmmyyyy[4], 10);
+    let p2 = parseInt(hhmmddmmyyyy[5], 10);
+    const year = hhmmddmmyyyy[6];
+    let day = p1;
+    let month = p2;
+    if (p1 <= 12 && p2 > 12) {
+      day = p2;
+      month = p1;
+    }
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}${time}`;
+  }
+
+  // Khớp định dạng DD-MM-YYYY HH:mm:ss hoặc MM-DD-YYYY HH:mm:ss
   const ddmmyyyy = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
   if (ddmmyyyy) {
-    const day = ddmmyyyy[1].padStart(2, "0");
-    const month = ddmmyyyy[2].padStart(2, "0");
-    const year = ddmmyyyy[3];
+    let p1 = parseInt(ddmmyyyy[1], 10);
+    let p2 = parseInt(ddmmyyyy[2], 10);
+    const year = parseInt(ddmmyyyy[3], 10);
     const time = ddmmyyyy[4] !== undefined 
       ? ` ${ddmmyyyy[4].padStart(2, "0")}:${ddmmyyyy[5].padStart(2, "0")}:${(ddmmyyyy[6] || "00").padStart(2, "0")}`
       : "";
-    return `${year}-${month}-${day}${time}`;
+    
+    let day = p1;
+    let month = p2;
+
+    // Trường hợp 1: p1 <= 12 và p2 > 12 -> Rõ ràng là MM-DD-YYYY (kiểu Mỹ)
+    if (p1 <= 12 && p2 > 12) {
+      month = p1;
+      day = p2;
+    } 
+    // Trường hợp 2: Cả 2 đều <= 12, tự động phát hiện đảo ngược nếu rơi vào tháng tương lai
+    else if (p1 <= 12 && p2 <= 12) {
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth() + 1; // 1-12
+      if (year === currentYear && p2 > currentMonth && p1 <= currentMonth) {
+        month = p1;
+        day = p2;
+      }
+    }
+
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}${time}`;
   }
 
   // Khớp định dạng YYYY-MM-DD HH:mm:ss

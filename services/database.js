@@ -2683,24 +2683,41 @@ let lastVerificationCloudFetchTime = 0;
 const VERIFICATION_CACHE_TTL = 3 * 60 * 1000; // 3 phút TTL
 
 async function getAllVerificationRecordsAsync(forceRefresh = false) {
-  const isCloudAvail = Boolean(tursoClient && tursoClient.isTursoAvailable());
+  const isSupabaseAvail = Boolean(supabaseClient && supabaseClient.isSupabaseAvailable());
+  const isTursoAvail = Boolean(tursoClient && tursoClient.isTursoAvailable());
 
-  // 1. Nếu Cloud Database khả dụng -> Cloud là Nguồn Chân Lý duy nhất (Source of Truth)
-  if (isCloudAvail) {
+  // 1. Nếu Cloud Database (Supabase hoặc Turso) khả dụng -> Cloud là Nguồn Chân Lý duy nhất (Source of Truth)
+  if (isSupabaseAvail || isTursoAvail) {
     const isCacheExpired = (Date.now() - lastVerificationCloudFetchTime) > VERIFICATION_CACHE_TTL;
     const shouldFetchCloud = forceRefresh || !isVerificationLoadedFromCloud || isCacheExpired || memoryVerificationOrders.length === 0;
 
     if (shouldFetchCloud) {
-      try {
-        const cloudRows = await tursoClient.getAllVerificationOrdersFromTurso();
-        if (Array.isArray(cloudRows)) {
-          memoryVerificationOrders = cloudRows;
-          isVerificationLoadedFromCloud = true;
-          lastVerificationCloudFetchTime = Date.now();
-          return memoryVerificationOrders;
+      if (isSupabaseAvail) {
+        try {
+          const supabaseRows = await supabaseClient.getAllVerificationOrdersFromSupabase();
+          if (Array.isArray(supabaseRows) && supabaseRows.length > 0) {
+            memoryVerificationOrders = supabaseRows;
+            isVerificationLoadedFromCloud = true;
+            lastVerificationCloudFetchTime = Date.now();
+            return memoryVerificationOrders;
+          }
+        } catch (e) {
+          console.warn("[Supabase] Không thể đọc verification từ Supabase, fallback Turso/local:", e.message);
         }
-      } catch (e) {
-        console.warn("[Cloud] Không thể đọc verification từ Cloud, fallback RAM/local:", e.message);
+      }
+
+      if (isTursoAvail) {
+        try {
+          const cloudRows = await tursoClient.getAllVerificationOrdersFromTurso();
+          if (Array.isArray(cloudRows) && cloudRows.length > 0) {
+            memoryVerificationOrders = cloudRows;
+            isVerificationLoadedFromCloud = true;
+            lastVerificationCloudFetchTime = Date.now();
+            return memoryVerificationOrders;
+          }
+        } catch (e) {
+          console.warn("[Cloud] Không thể đọc verification từ Cloud, fallback RAM/local:", e.message);
+        }
       }
     }
 
@@ -2719,7 +2736,14 @@ async function getAllVerificationRecordsAsync(forceRefresh = false) {
 async function insertVerificationRecordsAsync(records, metadata = {}) {
   return enqueueDbWrite(async () => {
     if (memoryVerificationOrders.length === 0) {
-      if (tursoClient && tursoClient.isTursoAvailable()) {
+      if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+        try {
+          const sbRows = await supabaseClient.getAllVerificationOrdersFromSupabase();
+          if (Array.isArray(sbRows) && sbRows.length > 0) {
+            memoryVerificationOrders = sbRows;
+          }
+        } catch (e) {}
+      } else if (tursoClient && tursoClient.isTursoAvailable()) {
         try {
           const tursoRows = await tursoClient.getAllVerificationOrdersFromTurso();
           if (Array.isArray(tursoRows) && tursoRows.length > 0) {
@@ -2734,15 +2758,27 @@ async function insertVerificationRecordsAsync(records, metadata = {}) {
 
     const res = insertVerificationRecords(records, metadata, false);
 
+    const recordsToSync = (res.processedRecords && res.processedRecords.length > 0) ? res.processedRecords : records;
+
+    // Ưu tiên sync lên Supabase
+    if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+      try {
+        await supabaseClient.syncVerificationOrdersToSupabase(recordsToSync);
+        isVerificationLoadedFromCloud = true;
+        lastVerificationCloudFetchTime = Date.now();
+      } catch (e) {
+        console.error("[Supabase] Lỗi đồng bộ verification orders lên Supabase:", e.message);
+      }
+    }
+
+    // Đồng bộ tiếp lên Turso nếu có
     if (tursoClient && tursoClient.isTursoAvailable()) {
       try {
-        const recordsToSync = (res.processedRecords && res.processedRecords.length > 0) ? res.processedRecords : records;
         await tursoClient.syncVerificationOrdersToTurso(recordsToSync);
         isVerificationLoadedFromCloud = true;
         lastVerificationCloudFetchTime = Date.now();
       } catch (e) {
-        console.error("[Cloud] Lỗi đồng bộ verification orders lên CSDL:", e.message);
-        throw new Error(`Lỗi đồng bộ dữ liệu check đơn lên CSDL: ${e.message}`);
+        console.warn("[Turso] Lỗi đồng bộ verification orders lên Turso:", e.message);
       }
     }
 
@@ -2761,6 +2797,11 @@ async function deleteVerificationRecordsByUploadIdAsync(uploadId) {
   deleteVerificationRecordsByUploadId(uploadId);
   isVerificationLoadedFromCloud = false;
   lastVerificationCloudFetchTime = 0;
+  if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+    try {
+      await supabaseClient.deleteVerificationOrdersByUploadIdInSupabase(uploadId);
+    } catch (e) {}
+  }
   if (tursoClient) {
     try {
       await tursoClient.deleteVerificationOrdersByUploadIdInTurso(uploadId);
@@ -2772,6 +2813,11 @@ async function clearAllVerificationRecordsAsync() {
   clearAllVerificationRecords();
   isVerificationLoadedFromCloud = false;
   lastVerificationCloudFetchTime = 0;
+  if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+    try {
+      await supabaseClient.clearAllVerificationOrdersInSupabase();
+    } catch (e) {}
+  }
   if (tursoClient) {
     try {
       await tursoClient.clearAllVerificationOrdersInTurso();
@@ -2781,11 +2827,20 @@ async function clearAllVerificationRecordsAsync() {
 
 async function purgeOldVerificationRecordsAsync(daysToKeep = 3) {
   const result = purgeOldVerificationRecords(daysToKeep);
-  if (result.purgedKeys && result.purgedKeys.length > 0 && tursoClient) {
-    try {
-      await tursoClient.deleteVerificationOrderRowsInTurso(result.purgedKeys);
-    } catch (e) {
-      console.warn("[Turso/Supabase] Lỗi khi đồng bộ dọn dẹp dữ liệu check đơn:", e.message);
+  if (result.purgedKeys && result.purgedKeys.length > 0) {
+    if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+      try {
+        await supabaseClient.deleteVerificationOrderRowsInSupabase(result.purgedKeys);
+      } catch (e) {
+        console.warn("[Supabase] Lỗi khi dọn dẹp dữ liệu check đơn:", e.message);
+      }
+    }
+    if (tursoClient) {
+      try {
+        await tursoClient.deleteVerificationOrderRowsInTurso(result.purgedKeys);
+      } catch (e) {
+        console.warn("[Turso] Lỗi khi dọn dẹp dữ liệu check đơn:", e.message);
+      }
     }
   }
   console.log(`[AutoPurge] Hoàn tất dọn dẹp dữ liệu check đơn cũ: Đã xóa ${result.deletedCount} dòng (trước ngày ${result.cutoffYmd}). Còn lại: ${result.remainingCount} dòng.`);

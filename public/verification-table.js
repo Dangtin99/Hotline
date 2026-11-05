@@ -27,6 +27,36 @@ const filterStatus = document.getElementById("filterStatus");
 const filterActivation = document.getElementById("filterActivation");
 const filterDateFrom = document.getElementById("filterDateFrom");
 const filterDateTo = document.getElementById("filterDateTo");
+const overlayDateFrom = document.getElementById("overlayDateFrom");
+const overlayDateTo = document.getElementById("overlayDateTo");
+const boxDateFrom = document.getElementById("boxDateFrom");
+const boxDateTo = document.getElementById("boxDateTo");
+const btnClearDateFrom = document.getElementById("btnClearDateFrom");
+const btnClearDateTo = document.getElementById("btnClearDateTo");
+
+function updateDateOverlay(input, overlay, box, btnClear) {
+  if (!input || !overlay) return;
+  const val = input.value;
+  if (!val) {
+    overlay.textContent = "dd/mm/yyyy";
+    if (box) box.classList.remove("has-value");
+    if (btnClear) btnClear.style.display = "none";
+    return;
+  }
+  const parts = val.split("-");
+  if (parts.length === 3) {
+    overlay.textContent = `${parts[2]}/${parts[1]}/${parts[0]}`;
+  } else {
+    overlay.textContent = val;
+  }
+  if (box) box.classList.add("has-value");
+  if (btnClear) btnClear.style.display = "block";
+}
+
+function updateAllDateOverlays() {
+  updateDateOverlay(filterDateFrom, overlayDateFrom, boxDateFrom, btnClearDateFrom);
+  updateDateOverlay(filterDateTo, overlayDateTo, boxDateTo, btnClearDateTo);
+}
 const btnClearDateFilter = document.getElementById("btnClearDateFilter");
 const btnResetFilter = document.getElementById("btnResetFilter");
 const btnRefreshVerificationData = document.getElementById("btnRefreshVerificationData");
@@ -57,8 +87,43 @@ document.addEventListener("DOMContentLoaded", () => {
   if (filterStatus) filterStatus.addEventListener("change", () => { currentPage = 1; applyFilters(); });
   if (filterActivation) filterActivation.addEventListener("change", () => { currentPage = 1; applyFilters(); });
 
-  if (filterDateFrom) filterDateFrom.addEventListener("change", onDateFilterChange);
-  if (filterDateTo) filterDateTo.addEventListener("change", onDateFilterChange);
+  if (filterDateFrom) {
+    filterDateFrom.addEventListener("change", onDateFilterChange);
+    filterDateFrom.addEventListener("input", onDateFilterChange);
+    filterDateFrom.addEventListener("click", () => {
+      if (typeof filterDateFrom.showPicker === "function") {
+        try { filterDateFrom.showPicker(); } catch (e) {}
+      }
+    });
+  }
+  if (filterDateTo) {
+    filterDateTo.addEventListener("change", onDateFilterChange);
+    filterDateTo.addEventListener("input", onDateFilterChange);
+    filterDateTo.addEventListener("click", () => {
+      if (typeof filterDateTo.showPicker === "function") {
+        try { filterDateTo.showPicker(); } catch (e) {}
+      }
+    });
+  }
+  if (btnClearDateFrom) {
+    btnClearDateFrom.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (filterDateFrom) {
+        filterDateFrom.value = "";
+        filterDateFrom.dispatchEvent(new Event("change"));
+      }
+    });
+  }
+  if (btnClearDateTo) {
+    btnClearDateTo.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (filterDateTo) {
+        filterDateTo.value = "";
+        filterDateTo.dispatchEvent(new Event("change"));
+      }
+    });
+  }
+  updateAllDateOverlays();
   if (btnClearDateFilter) btnClearDateFilter.addEventListener("click", clearDateFilter);
 
   if (btnResetFilter) btnResetFilter.addEventListener("click", resetAllFilters);
@@ -210,11 +275,7 @@ function updateKpis(records) {
 }
 
 function onDateFilterChange() {
-  const from = filterDateFrom?.value;
-  const to = filterDateTo?.value;
-  if (btnClearDateFilter) {
-    btnClearDateFilter.style.display = (from || to) ? "inline-block" : "none";
-  }
+  updateAllDateOverlays();
   currentPage = 1;
   applyFilters();
 }
@@ -222,6 +283,7 @@ function onDateFilterChange() {
 function clearDateFilter() {
   if (filterDateFrom) filterDateFrom.value = "";
   if (filterDateTo) filterDateTo.value = "";
+  updateAllDateOverlays();
   if (btnClearDateFilter) btnClearDateFilter.style.display = "none";
   currentPage = 1;
   applyFilters();
@@ -284,11 +346,13 @@ function applyFilters() {
     // 6. Activation
     if (activation && r.trangThaiKichHoat !== activation) return false;
 
-    // 7. Date range (Lọc theo ngày cập nhật cuối trong bảng)
+    // 7. Date range (Lọc theo ngày cập nhật cuối trong bảng theo chuẩn dd/mm/yyyy)
     if (fromDate || toDate) {
       const dateVal = getRecordLatestDateYMD(r);
-      if (fromDate && dateVal && dateVal < fromDate) return false;
-      if (toDate && dateVal && dateVal > toDate) return false;
+      const fromYmd = parseDateToYMD(fromDate);
+      const toYmd = parseDateToYMD(toDate);
+      if (fromYmd && dateVal && dateVal < fromYmd) return false;
+      if (toYmd && dateVal && dateVal > toYmd) return false;
     }
 
     return true;
@@ -356,8 +420,8 @@ function renderTable() {
         <td><code>${escapeHtml(r.sttFile || "-")}</code></td>
         <td class="text-center"><span class="badge badge-info" style="font-weight:700;">${escapeHtml(r.depot || "-")}</span></td>
         <td class="text-center"><strong>${escapeHtml(r.hangTau || "-")}</strong></td>
-        <td>${escapeHtml(formatDateDisplay(r.ngayHuyDon))}</td>
-        <td>${escapeHtml(formatDateDisplay(r.ngayDuocDuyet))}</td>
+        <td title="${escapeHtml(formatDateDisplay(r.ngayHuyDon, true))}">${escapeHtml(formatDateDisplay(r.ngayHuyDon, false))}</td>
+        <td title="${escapeHtml(formatDateDisplay(r.ngayDuocDuyet, true))}">${escapeHtml(formatDateDisplay(r.ngayDuocDuyet, false))}</td>
         <td><code>${escapeHtml(r.soBooking || "-")}</code></td>
         <td><strong>${escapeHtml(r.soContainer || "-")}</strong></td>
         <td>${escapeHtml(r.loaiContainer || "-")}</td>
@@ -365,7 +429,7 @@ function renderTable() {
         <td class="text-center font-semibold">${Number(r.sizeTeus || 0).toFixed(1)}</td>
         <td>${statusBadge}</td>
         <td class="text-center">${actBadge}</td>
-        <td>${escapeHtml(formatDateDisplay(r.thoiGianKichHoat))}</td>
+        <td title="${escapeHtml(formatDateDisplay(r.thoiGianKichHoat, true))}">${escapeHtml(formatDateDisplay(r.thoiGianKichHoat, false))}</td>
         <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.lyDoHuy || "")}">${escapeHtml(r.lyDoHuy || "-")}</td>
         <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.lyDoTuChoi || "")}">${escapeHtml(r.lyDoTuChoi || "-")}</td>
         <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.lyDoHuyCheck || "")}">${escapeHtml(r.lyDoHuyCheck || "-")}</td>
@@ -447,11 +511,11 @@ window.viewOrderDetail = function(key) {
       </div>
       <div class="detail-item">
         <label>Ngày Phát Sinh</label>
-        <div>${escapeHtml(formatDateDisplay(item.ngayHuyDon))}</div>
+        <div>${escapeHtml(formatDateDisplay(item.ngayHuyDon, true))}</div>
       </div>
       <div class="detail-item">
         <label>Ngày Giờ Được Duyệt</label>
-        <div>${escapeHtml(formatDateDisplay(item.ngayDuocDuyet))}</div>
+        <div>${escapeHtml(formatDateDisplay(item.ngayDuocDuyet, true))}</div>
       </div>
       <div class="detail-item">
         <label>Trạng Thái Đơn Hàng</label>
@@ -527,16 +591,36 @@ function parseDateToYMD(val) {
   const str = String(val).trim();
   if (!str) return "";
 
-  // 1. Dạng YYYY-MM-DD hoặc YYYY/MM/DD
+  // 1. Dạng US kèm AM/PM (ví dụ: 11/4/2026 1:59:44 PM)
+  if (/\b(?:AM|PM)\b/i.test(str)) {
+    const usDate = new Date(str);
+    if (!isNaN(usDate.getTime())) {
+      const y = usDate.getFullYear();
+      const m = String(usDate.getMonth() + 1).padStart(2, "0");
+      const d = String(usDate.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    }
+  }
+
+  // 2. Dạng YYYY-MM-DD hoặc YYYY/MM/DD
   const ymdMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
   if (ymdMatch) {
     return `${ymdMatch[1]}-${ymdMatch[2].padStart(2, "0")}-${ymdMatch[3].padStart(2, "0")}`;
   }
 
-  // 2. Dạng HH:mm DD-MM-YYYY hoặc DD-MM-YYYY / DD/MM/YYYY
+  // 3. Dạng HH:mm DD-MM-YYYY hoặc DD-MM-YYYY / DD/MM/YYYY
   const dmyMatch = str.match(/^(?:(?:\d{1,2}):(?:\d{2})(?::(?:\d{2}))?\s+)?(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
   if (dmyMatch) {
     return `${dmyMatch[3]}-${dmyMatch[2].padStart(2, "0")}-${dmyMatch[1].padStart(2, "0")}`;
+  }
+
+  // 4. Fallback chung
+  const fallbackDate = new Date(str);
+  if (!isNaN(fallbackDate.getTime())) {
+    const y = fallbackDate.getFullYear();
+    const m = String(fallbackDate.getMonth() + 1).padStart(2, "0");
+    const d = String(fallbackDate.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
   }
 
   return "";
@@ -557,29 +641,67 @@ function getRecordLatestDateYMD(r) {
   return dates[dates.length - 1]; // Lấy ngày mới nhất (YYYY-MM-DD lớn nhất)
 }
 
-function formatDateDisplay(val) {
+function formatDateDisplay(val, includeTime = false) {
   if (!val || val === "-" || val === "null" || val === "undefined") return "-";
   const str = String(val).trim();
   if (!str) return "-";
 
+  // 1. Dạng US kèm AM/PM (ví dụ: 11/4/2026 1:59:44 PM)
+  if (/\b(?:AM|PM)\b/i.test(str)) {
+    const usDate = new Date(str);
+    if (!isNaN(usDate.getTime())) {
+      const d = String(usDate.getDate()).padStart(2, "0");
+      const m = String(usDate.getMonth() + 1).padStart(2, "0");
+      const y = usDate.getFullYear();
+      const time = includeTime
+        ? ` ${String(usDate.getHours()).padStart(2, "0")}:${String(usDate.getMinutes()).padStart(2, "0")}:${String(usDate.getSeconds()).padStart(2, "0")}`
+        : "";
+      return `${d}/${m}/${y}${time}`;
+    }
+  }
+
+  // 1.5. Dạng HH:mm:ss DD-MM-YYYY hoặc HH:mm DD-MM-YYYY (ví dụ: 11:18 19-10-2026)
+  const hhmmMatch = str.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s+(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (hhmmMatch) {
+    const d = hhmmMatch[4].padStart(2, "0");
+    const m = hhmmMatch[5].padStart(2, "0");
+    const y = hhmmMatch[6];
+    const time = includeTime ? ` ${hhmmMatch[1].padStart(2, "0")}:${hhmmMatch[2].padStart(2, "0")}:${(hhmmMatch[3] || "00").padStart(2, "0")}` : "";
+    return `${d}/${m}/${y}${time}`;
+  }
+
+  // 2. Dạng YYYY-MM-DD hoặc YYYY/MM/DD kèm giờ tùy chọn
   const ymdMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
   if (ymdMatch) {
     const y = ymdMatch[1];
     const m = ymdMatch[2].padStart(2, "0");
     const d = ymdMatch[3].padStart(2, "0");
-    const time = ymdMatch[4] !== undefined
+    const time = (includeTime && ymdMatch[4] !== undefined)
       ? ` ${ymdMatch[4].padStart(2, "0")}:${ymdMatch[5].padStart(2, "0")}:${(ymdMatch[6] || "00").padStart(2, "0")}`
       : "";
     return `${d}/${m}/${y}${time}`;
   }
 
+  // 3. Dạng DD-MM-YYYY hoặc DD/MM/YYYY kèm giờ tùy chọn
   const dmyMatch = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
   if (dmyMatch) {
     const d = dmyMatch[1].padStart(2, "0");
     const m = dmyMatch[2].padStart(2, "0");
     const y = dmyMatch[3];
-    const time = dmyMatch[4] !== undefined
+    const time = (includeTime && dmyMatch[4] !== undefined)
       ? ` ${dmyMatch[4].padStart(2, "0")}:${dmyMatch[5].padStart(2, "0")}:${(dmyMatch[6] || "00").padStart(2, "0")}`
+      : "";
+    return `${d}/${m}/${y}${time}`;
+  }
+
+  // 4. Fallback chung
+  const fallbackDate = new Date(str);
+  if (!isNaN(fallbackDate.getTime())) {
+    const d = String(fallbackDate.getDate()).padStart(2, "0");
+    const m = String(fallbackDate.getMonth() + 1).padStart(2, "0");
+    const y = fallbackDate.getFullYear();
+    const time = includeTime
+      ? ` ${String(fallbackDate.getHours()).padStart(2, "0")}:${String(fallbackDate.getMinutes()).padStart(2, "0")}:${String(fallbackDate.getSeconds()).padStart(2, "0")}`
       : "";
     return `${d}/${m}/${y}${time}`;
   }

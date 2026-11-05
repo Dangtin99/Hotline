@@ -96,6 +96,8 @@ const {
   parseDepots,
   revokeToken    // Fix #13
 } = require("./services/authService");
+const edepotSyncService = require("./services/edepotSyncService");
+const edepotCronHandler = require("./api/cron/edepot-sync");
 
 /**
  * Hàm lọc danh sách bản ghi theo phân quyền Depot trực thuộc của User
@@ -1638,6 +1640,34 @@ app.post("/api/verification/purge", authRequired, async (req, res) => {
     console.error("[API /api/verification/purge] Lỗi:", err.message);
     return res.status(500).json({ status: "error", message: "Lỗi hệ thống khi dọn dẹp dữ liệu: " + err.message });
   }
+});
+
+/**
+ * API: Vercel Cron Endpoint đồng bộ eDepot hàng giờ
+ */
+app.all("/api/cron/edepot-sync", edepotCronHandler);
+
+/**
+ * API: Admin kích hoạt đồng bộ eDepot thủ công
+ */
+app.post("/api/admin/edepot-sync", adminRequired, async (req, res) => {
+  try {
+    const options = {};
+    if ((req.body && req.body.minutes) || (req.query && req.query.minutes)) {
+      options.minutesBack = parseInt(req.body.minutes || req.query.minutes, 10);
+    }
+    const result = await edepotSyncService.syncOrdersWindow(options);
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * API: Lấy nhật ký đồng bộ eDepot gần nhất
+ */
+app.get("/api/admin/edepot-sync-logs", adminRequired, (req, res) => {
+  return res.json({ logs: edepotSyncService.getSyncLogs() });
 });
 
 /**
