@@ -55,13 +55,15 @@ jobs:
           EXIT_CODE=${PIPESTATUS[0]}
           exit $EXIT_CODE
 
-      - name: Save Log to Git Branch
-        if: always()
+      - name: Report Error in Annotations
+        if: failure()
         run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git checkout -B run-log
-          cp sync_output.log latest_run.log
-          git add latest_run.log
-          git commit -m "chore: save run log [skip ci]" || true
-          git push origin run-log --force
+          ERROR_TEXT=$(cat sync_output.log | tr '\r\n' ' ')
+          echo "::error title=SyncLog::$ERROR_TEXT"
+
+      - name: Upload Log Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sync-log
+          path: sync_output.log
