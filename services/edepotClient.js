@@ -314,7 +314,28 @@ async function fetchOrders({ fromDate, toDate, page = 1, pageSize = 500 }) {
   };
 }
 
+/**
+ * Trích xuất toàn bộ đơn hàng trong khung thời gian, tự động chuyển trang (pagination) cho đến hết
+ */
+async function fetchAllOrders({ fromDate, toDate, pageSize = 1000 }) {
+  let allOrders = [];
+  let page = 1;
+  while (true) {
+    const { orders } = await fetchOrders({ fromDate, toDate, page, pageSize });
+    if (!orders || orders.length === 0) break;
+    allOrders.push(...orders);
+    if (orders.length < pageSize) break;
+    page++;
+    if (page > 50) break; // Giới hạn an toàn tối đa 50,000 bản ghi
+  }
+  return {
+    orders: allOrders,
+    total: allOrders.length
+  };
+}
+
 module.exports = {
   authenticate,
-  fetchOrders
+  fetchOrders,
+  fetchAllOrders
 };

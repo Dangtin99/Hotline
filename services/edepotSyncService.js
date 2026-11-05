@@ -81,11 +81,10 @@ async function syncOrdersWindow(options = {}) {
   };
 
   try {
-    // 1. Lấy dữ liệu trực tiếp từ eDepot API qua OAuth PKCE
-    const { orders } = await edepotClient.fetchOrders({
+    // 1. Lấy dữ liệu trực tiếp từ eDepot API qua OAuth PKCE (tự động phân trang lấy toàn bộ)
+    const { orders } = await edepotClient.fetchAllOrders({
       fromDate,
       toDate,
-      page: 1,
       pageSize: 1000
     });
 
