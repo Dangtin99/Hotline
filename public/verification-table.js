@@ -420,8 +420,8 @@ function renderTable() {
         <td><code>${escapeHtml(r.sttFile || "-")}</code></td>
         <td class="text-center"><span class="badge badge-info" style="font-weight:700;">${escapeHtml(r.depot || "-")}</span></td>
         <td class="text-center"><strong>${escapeHtml(r.hangTau || "-")}</strong></td>
-        <td title="${escapeHtml(formatDateDisplay(r.ngayHuyDon, true))}">${escapeHtml(formatDateDisplay(r.ngayHuyDon, false))}</td>
-        <td title="${escapeHtml(formatDateDisplay(r.ngayDuocDuyet, true))}">${escapeHtml(formatDateDisplay(r.ngayDuocDuyet, false))}</td>
+        <td title="${escapeHtml(formatDateDisplay(r.ngayHuyDon, true))}">${escapeHtml(formatDateDisplay(r.ngayHuyDon, true))}</td>
+        <td title="${escapeHtml(formatDateDisplay(r.ngayDuocDuyet, true))}">${escapeHtml(formatDateDisplay(r.ngayDuocDuyet, true))}</td>
         <td><code>${escapeHtml(r.soBooking || "-")}</code></td>
         <td><strong>${escapeHtml(r.soContainer || "-")}</strong></td>
         <td>${escapeHtml(r.loaiContainer || "-")}</td>
@@ -429,7 +429,7 @@ function renderTable() {
         <td class="text-center font-semibold">${Number(r.sizeTeus || 0).toFixed(1)}</td>
         <td>${statusBadge}</td>
         <td class="text-center">${actBadge}</td>
-        <td title="${escapeHtml(formatDateDisplay(r.thoiGianKichHoat, true))}">${escapeHtml(formatDateDisplay(r.thoiGianKichHoat, false))}</td>
+        <td title="${escapeHtml(formatDateDisplay(r.thoiGianKichHoat, true))}">${escapeHtml(formatDateDisplay(r.thoiGianKichHoat, true))}</td>
         <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.lyDoHuy || "")}">${escapeHtml(r.lyDoHuy || "-")}</td>
         <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.lyDoTuChoi || "")}">${escapeHtml(r.lyDoTuChoi || "-")}</td>
         <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.lyDoHuyCheck || "")}">${escapeHtml(r.lyDoHuyCheck || "-")}</td>
