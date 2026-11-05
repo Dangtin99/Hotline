@@ -116,7 +116,7 @@ async function syncOrdersWindow(options = {}) {
       insertedCount: orders.length,
       updatedCount: 0,
       totalAccumulated: orders.length,
-      uploadedBy: 'Vercel Cron (Auto)',
+      uploadedBy: 'GitHub Actions (Auto)',
       uploadedAt: nowVn.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })
     };
 
