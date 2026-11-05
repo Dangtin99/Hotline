@@ -37,7 +37,13 @@ async function main() {
   console.log('SUPABASE_PASSWORD provided:', Boolean(process.env.SUPABASE_PASSWORD));
   console.log('=====================================================');
 
-  const username = process.env.EDEPOT_USERNAME;
+  const rawUser = process.env.EDEPOT_USERNAME;
+  const rawPass = process.env.EDEPOT_PASSWORD;
+  const username = rawUser ? rawUser.trim() : '';
+  const passLen = rawPass ? rawPass.trim().length : 0;
+
+  console.log(`Thông tin xác thực eDepot: user="${username.slice(0, 2)}***" (len: ${username.length}), pass_len=${passLen}`);
+
   if (!username) {
     console.error('❌ Thiếu biến môi trường EDEPOT_USERNAME. Vui lòng cấu hình trong GitHub Secrets hoặc .env.');
     process.exit(1);

@@ -49,8 +49,8 @@ async function authenticate(forceRefresh = false) {
     return { apiToken: cachedSession.apiToken, username: cachedSession.username };
   }
 
-  const username = process.env.EDEPOT_USERNAME || '4824';
-  const password = process.env.EDEPOT_PASSWORD || 'Dangtin992004!';
+  const username = String(process.env.EDEPOT_USERNAME || '4824').trim();
+  const password = String(process.env.EDEPOT_PASSWORD || 'Dangtin992004!').trim();
 
   // 1. Sinh khóa PKCE
   const verifier = base64URLEncode(crypto.randomBytes(32));
