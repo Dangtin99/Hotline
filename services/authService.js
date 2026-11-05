@@ -38,6 +38,11 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+let supabaseClient = null;
+try {
+  supabaseClient = require("./supabaseClient");
+} catch (e) {}
+
 let tursoClient = null;
 try {
   tursoClient = require("./tursoClient");
@@ -309,7 +314,11 @@ function seedDefaultUsers() {
         }
       }
 
-      if (tursoClient && tursoClient.isTursoAvailable()) {
+      if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+        supabaseClient.syncUserToSupabase(newUser).catch(err => {
+          console.warn("[Supabase] Lỗi đồng bộ new user lên Supabase:", err.message);
+        });
+      } else if (tursoClient && tursoClient.isTursoAvailable()) {
         tursoClient.syncUserToTurso(newUser).catch(err => {
           console.warn("[Turso] Lỗi đồng bộ new user lên Turso:", err.message);
         });
@@ -444,8 +453,12 @@ function syncUserToStorage(user) {
     console.error("Lỗi đồng bộ users.json:", err.message);
   }
 
-  // 4. Đồng bộ vĩnh viễn lên Turso Cloud
-  if (tursoClient && tursoClient.isTursoAvailable()) {
+  // 4. Đồng bộ vĩnh viễn lên Supabase Cloud (Primary) hoặc Turso (Fallback)
+  if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+    supabaseClient.syncUserToSupabase(user).catch(err => {
+      console.warn("[Supabase] Lỗi đồng bộ user lên Supabase:", err.message);
+    });
+  } else if (tursoClient && tursoClient.isTursoAvailable()) {
     tursoClient.syncUserToTurso(user).catch(err => {
       console.warn("[Turso] Lỗi đồng bộ user lên Turso:", err.message);
     });
@@ -455,7 +468,7 @@ function syncUserToStorage(user) {
   invalidateUsersCache();
 }
 
-// Khởi tạo các tài khoản mẫu và kéo quyền mới nhất từ Turso Cloud
+// Khởi tạo các tài khoản mẫu và kéo quyền mới nhất từ Supabase Cloud (Primary) hoặc Turso Cloud
 (function initUsers() {
   const users = loadUsers();
   const userUsernames = users.map(u => u.username.toLowerCase());
@@ -465,8 +478,18 @@ function syncUserToStorage(user) {
     seedDefaultUsers();
   }
 
-  // Khởi tạo bảng users và đồng bộ từ Turso Cloud ngầm
-  if (tursoClient && tursoClient.isTursoAvailable()) {
+  // Khởi tạo bảng users và đồng bộ từ Supabase Cloud ngầm
+  if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+    (async () => {
+      try {
+        await supabaseClient.initSupabaseUsersTable();
+        const supaUsers = await supabaseClient.getAllUsersFromSupabase();
+        if (Array.isArray(supaUsers) && supaUsers.length > 0) {
+          memoryUsersCache = supaUsers;
+        }
+      } catch (e) {}
+    })();
+  } else if (tursoClient && tursoClient.isTursoAvailable()) {
     (async () => {
       try {
         await tursoClient.initTursoUsersTable();

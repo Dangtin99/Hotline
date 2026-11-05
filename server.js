@@ -82,6 +82,10 @@ const {
   vacuumDatabase
 } = require("./services/database");
 const backupService = require("./services/backupService");
+let supabaseClient = null;
+try {
+  supabaseClient = require("./services/supabaseClient");
+} catch (e) {}
 const tursoClient = require("./services/tursoClient");
 const rebookingAnalyzer = require("./services/rebookingAnalyzer");
 const {
@@ -129,8 +133,18 @@ if (!fs.existsSync(DATA_DIR)) {
   } catch (e) {}
 }
 
-// Hàm hỗ trợ đọc / ghi lịch sử đơn duyệt (Turso Cloud là Nguồn Chân Lý duy nhất cho môi trường Web & Vercel)
+// Hàm hỗ trợ đọc / ghi lịch sử đơn duyệt (Ưu tiên Supabase Cloud làm Primary)
 async function loadHistoryAsync() {
+  if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+    try {
+      const items = await supabaseClient.getUploadHistoryFromSupabase();
+      if (Array.isArray(items) && items.length > 0) {
+        return items;
+      }
+    } catch (e) {
+      console.warn("[Supabase] Lỗi đọc upload_history từ Supabase, fallback:", e.message);
+    }
+  }
   if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       const items = await tursoClient.getUploadHistoryFromTurso();
@@ -168,15 +182,21 @@ async function saveHistoryAsync(historyItem) {
     console.warn("[History] Không lưu được local (có thể filesystem read-only):", e.message);
   }
 
-  // 2. Lưu Turso Cloud (nguồn lưu trữ bền vững)
+  // 2. Lưu Supabase Cloud (nguồn lưu trữ bền vững Primary)
+  if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+    try {
+      await supabaseClient.saveUploadHistoryItemToSupabase(historyItem);
+    } catch (e) {
+      console.error("[Supabase] Lỗi lưu lịch sử đăng tải lên Supabase:", e.message);
+    }
+  }
+
+  // 3. Lưu Turso Cloud (Fallback dự phòng)
   if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       await tursoClient.saveUploadHistoryItemToTurso(historyItem);
     } catch (e) {
       console.error("[Turso] Lỗi lưu lịch sử đăng tải lên Turso:", e.message);
-      if (!localSaved) {
-        console.error("[CRITICAL] Không thể lưu upload history vào bất kỳ kho lưu trữ nào!");
-      }
     }
   }
 }
@@ -191,8 +211,18 @@ function saveHistory(historyList) {
   }
 }
 
-// Hàm hỗ trợ đọc / ghi lịch sử kiểm tra đơn (Turso Cloud là Nguồn Chân Lý duy nhất cho môi trường Web & Vercel)
+// Hàm hỗ trợ đọc / ghi lịch sử kiểm tra đơn (Ưu tiên Supabase Cloud làm Primary)
 async function loadVerificationHistoryAsync() {
+  if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+    try {
+      const items = await supabaseClient.getVerificationHistoryFromSupabase();
+      if (Array.isArray(items) && items.length > 0) {
+        return items;
+      }
+    } catch (e) {
+      console.warn("[Supabase] Lỗi đọc verification_history từ Supabase, fallback:", e.message);
+    }
+  }
   if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       const items = await tursoClient.getVerificationHistoryFromTurso();
@@ -219,6 +249,13 @@ function loadVerificationHistory() {
 }
 
 async function saveVerificationHistoryAsync(historyItem) {
+  if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+    try {
+      await supabaseClient.saveVerificationHistoryItemToSupabase(historyItem);
+    } catch (e) {
+      console.error("[Supabase] Lỗi lưu lịch sử check đơn lên Supabase:", e.message);
+    }
+  }
   if (tursoClient) {
     try {
       await tursoClient.saveVerificationHistoryItemToTurso(historyItem);
@@ -1085,10 +1122,29 @@ app.get("/api/orders/paged", authRequired, async (req, res) => {
 });
 
 /**
- * API: Kiểm tra trạng thái liên kết Turso Cloud SQLite
+ * API: Kiểm tra trạng thái liên kết Cloud Database (Ưu tiên Supabase Cloud Primary)
  */
 app.get("/api/turso/status", authRequired, async (req, res) => {
   try {
+    if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+      const conn = await supabaseClient.testConnection();
+      const stats = getDatabaseStats();
+      const rowCount = await supabaseClient.getSupabaseRowCount();
+
+      return res.json({
+        status: "success",
+        connected: conn.success,
+        provider: "supabase",
+        dbName: "Cloud Supabase (PostgreSQL)",
+        version: "PostgreSQL 17",
+        serverTime: conn.time,
+        tursoRowCount: rowCount,
+        rowCount: rowCount,
+        localTotalCount: stats.totalRecords,
+        error: conn.message
+      });
+    }
+
     const turso = require("./services/tursoClient");
     const [conn, rowCount] = await Promise.all([
       turso.testConnection(),
@@ -1099,9 +1155,12 @@ app.get("/api/turso/status", authRequired, async (req, res) => {
     return res.json({
       status: "success",
       connected: conn.success,
+      provider: "turso",
+      dbName: "Turso Cloud SQLite",
       version: conn.version,
       serverTime: conn.time,
       tursoRowCount: rowCount,
+      rowCount: rowCount,
       localTotalCount: stats.totalRecords,
       error: conn.message
     });
@@ -1111,12 +1170,22 @@ app.get("/api/turso/status", authRequired, async (req, res) => {
 });
 
 /**
- * API: Kích hoạt đồng bộ hóa toàn bộ dữ liệu SQL lên Turso Cloud SQLite
+ * API: Kích hoạt đồng bộ hóa toàn bộ dữ liệu SQL lên Cloud Database (Ưu tiên Supabase Cloud)
  */
 app.post("/api/turso/sync", authRequired, async (req, res) => {
   try {
-    const turso = require("./services/tursoClient");
     const allRecords = await getAllRecordsAsync();
+    if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+      const result = await supabaseClient.syncOrdersToSupabase(allRecords);
+      return res.json({
+        status: "success",
+        message: `Đã đồng bộ thành công ${result.synced}/${result.total} đơn hàng lên Cloud Supabase!`,
+        syncedCount: result.synced,
+        totalCount: result.total
+      });
+    }
+
+    const turso = require("./services/tursoClient");
     const result = await turso.syncOrdersToTurso(allRecords);
 
     return res.json({
@@ -1126,7 +1195,7 @@ app.post("/api/turso/sync", authRequired, async (req, res) => {
       totalCount: result.total
     });
   } catch (err) {
-    console.error("Lỗi đồng bộ Turso:", err);
+    console.error("Lỗi đồng bộ Cloud:", err);
     return res.status(500).json({ status: "error", message: err.message });
   }
 });
@@ -1320,7 +1389,10 @@ app.delete("/api/history/:id", authRequired, async (req, res) => {
     if (history.length === beforeCount) {
       return res.status(404).json({ status: "error", message: "Bản ghi không tồn tại hoặc đã bị xóa." });
     }
-    saveHistory(history);
+    await saveHistoryAsync(history);
+    if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+      await supabaseClient.deleteUploadHistoryItemFromSupabase(req.params.id);
+    }
     if (tursoClient) {
       await tursoClient.deleteUploadHistoryItemFromTurso(req.params.id);
     }
@@ -1336,7 +1408,10 @@ app.delete("/api/history/:id", authRequired, async (req, res) => {
  */
 app.delete("/api/history", authRequired, async (req, res) => {
   try {
-    saveHistory([]);
+    await saveHistoryAsync([]);
+    if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+      await supabaseClient.clearUploadHistoryInSupabase();
+    }
     if (tursoClient) {
       await tursoClient.clearUploadHistoryInTurso();
     }
@@ -1596,7 +1671,10 @@ app.delete("/api/verification/history/:id", authRequired, async (req, res) => {
     if (history.length === beforeCount) {
       return res.status(404).json({ status: "error", message: "Bản ghi không tồn tại hoặc đã bị xóa." });
     }
-    saveVerificationHistory(history);
+    await saveVerificationHistoryAsync(history);
+    if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+      await supabaseClient.deleteVerificationHistoryItemFromSupabase(req.params.id);
+    }
     if (tursoClient) {
       await tursoClient.deleteVerificationHistoryItemFromTurso(req.params.id);
     }
@@ -1613,7 +1691,10 @@ app.delete("/api/verification/history/:id", authRequired, async (req, res) => {
  */
 app.delete("/api/verification/history", authRequired, async (req, res) => {
   try {
-    saveVerificationHistory([]);
+    await saveVerificationHistoryAsync([]);
+    if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+      await supabaseClient.clearVerificationHistoryInSupabase();
+    }
     if (tursoClient) {
       await tursoClient.clearAllVerificationOrdersInTurso();
     }

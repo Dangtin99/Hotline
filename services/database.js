@@ -691,6 +691,9 @@ function updateOrderNote(rowKey, noteData = {}) {
         stmtOp.run(rowKey, statusVal, expVal, expDetailVal, nowStr, hasStatus ? 1 : 0, hasExp ? 1 : 0, hasExpDetail ? 1 : 0);
       } catch (e) {}
     }
+    if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+      supabaseClient.updateOrderNoteInSupabase(rowKey, noteData).catch(() => {});
+    }
     if (tursoClient) {
       tursoClient.updateOrderNoteInTurso(rowKey, noteData).catch(() => {});
     }
@@ -748,7 +751,10 @@ function updateOrderNote(rowKey, noteData = {}) {
   // Tối ưu I/O: lưu file JSON nhưng không chạy nối chuỗi SQL Dump 300KB
   persistStore({ generateDump: false, syncFullToTurso: false });
 
-  // Đồng bộ riêng bản ghi này lên Turso
+  // Đồng bộ riêng bản ghi này lên Supabase và Turso
+  if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+    supabaseClient.updateOrderNoteInSupabase(rowKey, noteData).catch(() => {});
+  }
   if (tursoClient) {
     tursoClient.updateOrderNoteInTurso(rowKey, noteData).catch(() => {});
   }
@@ -786,6 +792,9 @@ function setOrderPending(rowKey, isPending = true) {
       } catch (e) {}
     }
 
+    if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+      supabaseClient.syncPendingStateToSupabase(item.rowKey, isPending).catch(() => {});
+    }
     if (tursoClient) {
       tursoClient.syncPendingStateToTurso(item.rowKey, isPending).catch(() => {});
     }
@@ -910,17 +919,28 @@ function syncOperationalUpdatesToMemoryAndLocalSql(updates = {}) {
 }
 
 /**
- * Lấy toàn bộ trạng thái tác nghiệp đa máy chủ từ Turso Cloud (với fallback SQLite/Memory)
+ * Lấy toàn bộ trạng thái tác nghiệp đa máy chủ từ Cloud Supabase (với fallback Turso/SQLite/Memory)
  */
 async function getOperationalUpdatesAsync(since) {
   let updates = null;
-  if (tursoClient && tursoClient.isTursoAvailable()) {
+  if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
     try {
-      updates = await tursoClient.getOperationalUpdatesFromTurso(since);
+      updates = await supabaseClient.getOperationalUpdatesFromSupabase(since);
       if (updates && typeof updates === "object") {
         syncOperationalUpdatesToMemoryAndLocalSql(updates);
       }
     } catch (e) {}
+  }
+
+  if (!updates || Object.keys(updates).length === 0) {
+    if (tursoClient && tursoClient.isTursoAvailable()) {
+      try {
+        updates = await tursoClient.getOperationalUpdatesFromTurso(since);
+        if (updates && typeof updates === "object") {
+          syncOperationalUpdatesToMemoryAndLocalSql(updates);
+        }
+      } catch (e) {}
+    }
   }
 
   if (!updates || Object.keys(updates).length === 0) {
@@ -2547,33 +2567,63 @@ function insertManualOrder(orderData) {
  */
 
 async function getAllRecordsAsync(forceRefresh = false) {
-  // 1. Nếu Turso Cloud khả dụng -> Turso là Nguồn Chân Lý duy nhất (Source of Truth) trên Vercel & Web
-  if (tursoClient && tursoClient.isTursoAvailable()) {
+  const isSupabaseAvail = Boolean(supabaseClient && supabaseClient.isSupabaseAvailable());
+  const isTursoAvail = Boolean(tursoClient && tursoClient.isTursoAvailable());
+
+  // 1. Nếu Cloud Database khả dụng -> Cloud là Nguồn Chân Lý duy nhất (Source of Truth) trên Vercel & Web
+  if (isSupabaseAvail || isTursoAvail) {
     try {
       const currentVer = await getOperationalVersionAsync();
       const hasValidCache = !forceRefresh && memoryOrders.length > 0 && lastOrdersCachedVersion === currentVer;
 
       if (!hasValidCache) {
-        const [tursoRows, tursoOps] = await Promise.all([
-          tursoClient.getAllOrdersFromTurso(),
-          tursoClient.getAllOperationalStatesFromTurso()
-        ]);
-        if (Array.isArray(tursoRows)) {
-          memoryOrders = tursoRows;
+        let cloudRows = null;
+        let cloudOps = null;
+
+        // Ưu tiên 1: Supabase Cloud
+        if (isSupabaseAvail) {
+          try {
+            [cloudRows, cloudOps] = await Promise.all([
+              supabaseClient.getAllOrdersFromSupabase(),
+              supabaseClient.getAllOperationalStatesFromSupabase()
+            ]);
+          } catch (sbErr) {
+            console.warn("[Supabase] Lỗi tải đơn hàng từ Supabase:", sbErr.message);
+          }
+        }
+
+        // Dự phòng 2: Turso Cloud
+        if ((!Array.isArray(cloudRows) || cloudRows.length === 0) && isTursoAvail) {
+          try {
+            [cloudRows, cloudOps] = await Promise.all([
+              tursoClient.getAllOrdersFromTurso(),
+              tursoClient.getAllOperationalStatesFromTurso()
+            ]);
+          } catch (tErr) {
+            console.warn("[Turso] Lỗi tải đơn hàng từ Turso:", tErr.message);
+          }
+        }
+
+        if (Array.isArray(cloudRows) && cloudRows.length > 0) {
+          memoryOrders = cloudRows;
           applyExpired3hCancellation(memoryOrders);
           lastOrdersCachedVersion = currentVer;
         }
-        if (tursoOps) {
-          memoryOpMap = tursoOps;
+        if (cloudOps) {
+          memoryOpMap = cloudOps;
           lastOpMapCachedVersion = currentVer;
         }
       }
 
       if (Array.isArray(memoryOrders) && memoryOrders.length > 0) {
-        // Lấy trạng thái tác nghiệp từ bảng order_operational_state nếu chưa có
+        // Lấy trạng thái tác nghiệp nếu chưa có
         if (lastOpMapCachedVersion !== currentVer || !memoryOpMap || Object.keys(memoryOpMap).length === 0) {
           try {
-            memoryOpMap = await tursoClient.getAllOperationalStatesFromTurso() || {};
+            if (isSupabaseAvail) {
+              memoryOpMap = await supabaseClient.getAllOperationalStatesFromSupabase() || {};
+            } else if (isTursoAvail) {
+              memoryOpMap = await tursoClient.getAllOperationalStatesFromTurso() || {};
+            }
             lastOpMapCachedVersion = currentVer;
           } catch (opErr) {
             memoryOpMap = memoryOpMap || {};
@@ -2597,11 +2647,11 @@ async function getAllRecordsAsync(forceRefresh = false) {
         });
       }
     } catch (e) {
-      console.warn("[Turso] Không thể đọc từ Turso, sử dụng memory store fallback:", e.message);
+      console.warn("[Cloud] Không thể đọc từ Cloud Database, sử dụng memory store fallback:", e.message);
     }
   }
 
-  // 2. Fallback offline / local khi không có kết nối Turso
+  // 2. Fallback offline / local khi không có kết nối Cloud
   if (memoryOrders.length === 0) {
     loadAllFromStore();
   }
@@ -2610,9 +2660,16 @@ async function getAllRecordsAsync(forceRefresh = false) {
 
 async function insertRecordsAsync(records, metadata = {}) {
   return enqueueDbWrite(async () => {
-    // 1. Chỉ nạp dữ liệu từ Turso Cloud/Local nếu memory chưa được khởi tạo
+    // 1. Chỉ nạp dữ liệu từ Cloud/Local nếu memory chưa được khởi tạo
     if (memoryOrders.length === 0) {
-      if (tursoClient && tursoClient.isTursoAvailable()) {
+      if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+        try {
+          const existingSb = await supabaseClient.getAllOrdersFromSupabase();
+          if (Array.isArray(existingSb) && existingSb.length > 0) {
+            memoryOrders = existingSb;
+          }
+        } catch (e) {}
+      } else if (tursoClient && tursoClient.isTursoAvailable()) {
         try {
           const existingTurso = await tursoClient.getAllOrdersFromTurso();
           if (Array.isArray(existingTurso) && existingTurso.length > 0) {
@@ -2630,14 +2687,22 @@ async function insertRecordsAsync(records, metadata = {}) {
     // 2. Thêm trực tiếp vào local store & memory
     const res = insertRecords(records, metadata, false);
 
-    // 3. Đồng bộ hóa Delta (chỉ các đơn mới hoặc cập nhật từ file vừa nạp) lên Turso Cloud
+    // 3. Đồng bộ hóa Delta lên Cloud (Ưu tiên 1: Supabase, Dự phòng: Turso)
+    const recordsToSync = (res.processedRecords && res.processedRecords.length > 0) ? res.processedRecords : records;
+
+    if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+      try {
+        await supabaseClient.syncOrdersToSupabase(recordsToSync);
+      } catch (e) {
+        console.error("[Supabase] Lỗi đồng bộ orders lên Supabase:", e.message);
+      }
+    }
+
     if (tursoClient && tursoClient.isTursoAvailable()) {
       try {
-        const recordsToSync = (res.processedRecords && res.processedRecords.length > 0) ? res.processedRecords : records;
         await tursoClient.syncOrdersToTurso(recordsToSync);
       } catch (e) {
-        console.error("[Cloud] Lỗi đồng bộ orders:", e.message);
-        throw new Error(`Lỗi đồng bộ lên CSDL đám mây: ${e.message}`);
+        console.warn("[Turso] Lỗi đồng bộ orders lên Turso:", e.message);
       }
     }
 
@@ -2663,6 +2728,11 @@ async function updateOrderNoteAsync(rowKey, noteData = {}) {
     currentExpDetail: existing.giaiTrinhChiTiet || null
   };
   const res = updateOrderNote(rowKey, noteData);
+  if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+    try {
+      await supabaseClient.updateOrderNoteInSupabase(rowKey, enrichedNoteData);
+    } catch (e) {}
+  }
   if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       await tursoClient.updateOrderNoteInTurso(rowKey, enrichedNoteData);
@@ -2674,6 +2744,11 @@ async function updateOrderNoteAsync(rowKey, noteData = {}) {
 
 async function deleteRecordsByUploadIdAsync(uploadId) {
   deleteRecordsByUploadId(uploadId);
+  if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+    try {
+      await supabaseClient.deleteOrdersByUploadIdInSupabase(uploadId);
+    } catch (e) {}
+  }
   if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       await tursoClient.deleteOrdersByUploadIdInTurso(uploadId);
@@ -2684,6 +2759,11 @@ async function deleteRecordsByUploadIdAsync(uploadId) {
 
 async function clearDatabaseAsync() {
   clearDatabase();
+  if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+    try {
+      await supabaseClient.clearAllOrdersInSupabase();
+    } catch (e) {}
+  }
   if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       await tursoClient.clearAllOrdersInTurso();
@@ -2999,7 +3079,12 @@ async function deduplicateOrdersByEirAsync() {
 }
 
 async function insertManualOrderAsync(orderData) {
-  if (tursoClient && tursoClient.isTursoAvailable()) {
+  if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+    try {
+      const orders = await supabaseClient.getAllOrdersFromSupabase();
+      if (Array.isArray(orders) && orders.length > 0) memoryOrders = orders;
+    } catch (e) {}
+  } else if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       const orders = await tursoClient.getAllOrdersFromTurso();
       if (Array.isArray(orders) && orders.length > 0) memoryOrders = orders;
@@ -3008,6 +3093,11 @@ async function insertManualOrderAsync(orderData) {
 
   const res = insertManualOrder(orderData);
 
+  if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+    try {
+      await supabaseClient.syncOrdersToSupabase(memoryOrders);
+    } catch (e) {}
+  }
   if (tursoClient) {
     try {
       await tursoClient.syncOrdersToTurso(memoryOrders);
@@ -3127,6 +3217,12 @@ function computeComparisonDateRange(fromStr, toStr) {
 
 async function getLatestDateAsync(dateType = "ngayHuy") {
   const dateColumn = dateType === "ngayDuyet" ? "ngay_duoc_duyet" : "ngay_huy_don";
+  if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+    try {
+      const d = await supabaseClient.getLatestDateFromSupabase(dateColumn);
+      if (d) return d;
+    } catch (e) {}
+  }
   if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       const d = await tursoClient.getLatestDateFromTurso(dateColumn);
@@ -3177,7 +3273,18 @@ async function getDashboardDataAsync(params = {}) {
   let rawOrders = [];
   let opMap = {};
 
-  if (tursoClient && tursoClient.isTursoAvailable()) {
+  if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+    try {
+      const [supaOrders, supaOps] = await Promise.all([
+        supabaseClient.getOrdersByDateRangeFromSupabase(dateColumn, fullStart, fullEnd),
+        supabaseClient.getAllOperationalStatesFromSupabase()
+      ]);
+      rawOrders = supaOrders || [];
+      opMap = supaOps || {};
+    } catch (e) {
+      console.warn("[Supabase] Lỗi query date range, fallback:", e.message);
+    }
+  } else if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       const [tursoOrders, tursoOps] = await Promise.all([
         tursoClient.getOrdersByDateRangeFromTurso(dateColumn, fullStart, fullEnd),

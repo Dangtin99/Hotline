@@ -900,6 +900,17 @@ async function deleteVerificationHistoryItemFromSupabase(id) {
   }
 }
 
+async function clearVerificationHistoryInSupabase() {
+  const p = getPool();
+  if (!p) return;
+  const client = await p.connect();
+  try {
+    await client.query("DELETE FROM verification_upload_history;");
+  } finally {
+    client.release();
+  }
+}
+
 /**
  * Quản trị trạng thái vận hành, ghi chú & Pending
  */
@@ -1097,6 +1108,140 @@ async function getOperationalVersionFromSupabase() {
   }
 }
 
+/**
+ * Khởi tạo bảng users trên Supabase
+ */
+async function initSupabaseUsersTable() {
+  const p = getPool();
+  if (!p) return;
+  try {
+    const client = await p.connect();
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id SERIAL PRIMARY KEY,
+          full_name TEXT NOT NULL,
+          username TEXT UNIQUE NOT NULL,
+          password_hash TEXT NOT NULL,
+          salt TEXT NOT NULL,
+          role TEXT NOT NULL DEFAULT 'user',
+          assigned_depots TEXT NOT NULL DEFAULT 'ALL',
+          allowed_screens TEXT NOT NULL DEFAULT 'dashboard,data_table',
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+      `);
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error("[Supabase] Lỗi initSupabaseUsersTable:", err.message);
+  }
+}
+
+/**
+ * Lấy danh sách toàn bộ người dùng từ Supabase
+ */
+async function getAllUsersFromSupabase() {
+  const p = getPool();
+  if (!p) return null;
+  try {
+    await initSupabaseUsersTable();
+    const client = await p.connect();
+    try {
+      const res = await client.query("SELECT * FROM users ORDER BY id ASC;");
+      return res.rows.map(r => ({
+        id: r.id,
+        fullName: r.full_name,
+        username: r.username,
+        passwordHash: r.password_hash,
+        salt: r.salt,
+        role: r.role,
+        assignedDepots: r.assigned_depots,
+        allowedScreens: r.allowed_screens,
+        isActive: Boolean(r.is_active),
+        createdAt: r.created_at,
+        updatedAt: r.updated_at
+      }));
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error("[Supabase] Lỗi getAllUsersFromSupabase:", err.message);
+    return null;
+  }
+}
+
+/**
+ * Đồng bộ hoặc cập nhật một tài khoản người dùng lên Supabase
+ */
+async function syncUserToSupabase(user) {
+  const p = getPool();
+  if (!p || !user || !user.username) return;
+  try {
+    await initSupabaseUsersTable();
+    const client = await p.connect();
+    try {
+      const sql = `
+        INSERT INTO users (
+          full_name, username, password_hash, salt, role,
+          assigned_depots, allowed_screens, is_active, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        ON CONFLICT (username) DO UPDATE SET
+          full_name = EXCLUDED.full_name,
+          password_hash = COALESCE(NULLIF(EXCLUDED.password_hash, ''), users.password_hash),
+          salt = COALESCE(NULLIF(EXCLUDED.salt, ''), users.salt),
+          role = EXCLUDED.role,
+          assigned_depots = EXCLUDED.assigned_depots,
+          allowed_screens = EXCLUDED.allowed_screens,
+          is_active = EXCLUDED.is_active,
+          updated_at = EXCLUDED.updated_at;
+      `;
+      const pHash = user.passwordHash || user.password_hash || '';
+      const pSalt = user.salt || '';
+      const depots = Array.isArray(user.assignedDepots) ? user.assignedDepots.join(',') : (user.assignedDepots || user.assigned_depots || 'ALL');
+      const screens = Array.isArray(user.allowedScreens) ? user.allowedScreens.join(',') : (user.allowedScreens || user.allowed_screens || 'dashboard,data_table');
+
+      const values = [
+        user.fullName || user.full_name || user.username,
+        user.username,
+        pHash,
+        pSalt,
+        user.role || 'user',
+        depots,
+        screens,
+        user.isActive !== false ? 1 : 0,
+        user.createdAt || user.created_at || new Date().toISOString(),
+        user.updatedAt || user.updated_at || new Date().toISOString()
+      ];
+      await client.query(sql, values);
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error("[Supabase] Lỗi syncUserToSupabase:", err.message);
+  }
+}
+
+/**
+ * Xóa tài khoản người dùng khỏi Supabase
+ */
+async function deleteUserFromSupabase(username) {
+  const p = getPool();
+  if (!p || !username) return;
+  try {
+    const client = await p.connect();
+    try {
+      await client.query("DELETE FROM users WHERE username = $1;", [username]);
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error("[Supabase] Lỗi deleteUserFromSupabase:", err.message);
+  }
+}
+
 module.exports = {
   isSupabaseAvailable,
   testConnection,
@@ -1121,11 +1266,16 @@ module.exports = {
   getVerificationHistoryFromSupabase,
   saveVerificationHistoryItemToSupabase,
   deleteVerificationHistoryItemFromSupabase,
+  clearVerificationHistoryInSupabase,
   getSupabaseRowCount,
   updateOrderNoteInSupabase,
   syncPendingStateToSupabase,
   getAllOperationalStatesFromSupabase,
   getOperationalUpdatesFromSupabase,
   bumpOperationalVersionInSupabase,
-  getOperationalVersionFromSupabase
+  getOperationalVersionFromSupabase,
+  initSupabaseUsersTable,
+  getAllUsersFromSupabase,
+  syncUserToSupabase,
+  deleteUserFromSupabase
 };

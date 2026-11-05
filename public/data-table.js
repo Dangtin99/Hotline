@@ -2046,36 +2046,37 @@ function applyOperationalUpdatesToUI(updates) {
   }
 }
 
-// Kiểm tra trạng thái liên kết Turso Cloud SQLite
+// Kiểm tra trạng thái liên kết Cloud Database (Ưu tiên Supabase Cloud)
 async function checkTursoStatus() {
   if (!tursoStatusBadge) return;
   try {
     const res = await fetch("/api/turso/status");
     const data = await res.json();
     if (data.status === "success" && data.connected) {
+      const dbLabel = data.dbName || "CSDL Supabase Cloud";
       tursoStatusBadge.style.background = "#ecfdf5";
       tursoStatusBadge.style.color = "#047857";
       tursoStatusBadge.style.borderColor = "#a7f3d0";
-      tursoStatusBadge.innerHTML = `CSDL Turso: Đã kết nối (${data.tursoRowCount ?? data.localTotalCount ?? 0} dòng)`;
-      tursoStatusBadge.title = `Host: Turso Cloud SQLite (libSQL)\nPhiên bản: ${data.version || "3.47"}\nĐã lưu: ${data.tursoRowCount || 0} dòng\nNhấp để đồng bộ lại`;
+      tursoStatusBadge.innerHTML = `${dbLabel}: Đã kết nối (${data.rowCount ?? data.tursoRowCount ?? data.localTotalCount ?? 0} dòng)`;
+      tursoStatusBadge.title = `Nền tảng: ${data.dbName || "Cloud Supabase (PostgreSQL)"}\nPhiên bản: ${data.version || "PostgreSQL 17"}\nĐã lưu: ${data.rowCount || data.tursoRowCount || 0} dòng\nNhấp để đồng bộ lại`;
     } else {
       tursoStatusBadge.style.background = "#fffbeb";
       tursoStatusBadge.style.color = "#b45309";
       tursoStatusBadge.style.borderColor = "#fde68a";
-      tursoStatusBadge.innerHTML = `CSDL Turso: Chưa kết nối`;
-      tursoStatusBadge.title = data.error || "Không thể kết nối đến Turso Cloud";
+      tursoStatusBadge.innerHTML = `CSDL Cloud: Chưa kết nối`;
+      tursoStatusBadge.title = data.error || "Không thể kết nối đến Cloud Database";
     }
   } catch (e) {
-    tursoStatusBadge.textContent = "CSDL Turso: Ngoại tuyến";
+    tursoStatusBadge.textContent = "CSDL Cloud: Ngoại tuyến";
   }
 }
 
-// Đồng bộ thủ công lên Turso Cloud
+// Đồng bộ thủ công lên Cloud Database
 async function triggerTursoSync() {
   if (!tursoStatusBadge && !btnSyncTurso) return;
   const targetElem = btnSyncTurso || tursoStatusBadge;
   const originalText = targetElem.textContent;
-  targetElem.textContent = "Đang đồng bộ Turso...";
+  targetElem.textContent = "Đang đồng bộ Cloud...";
   try {
     const res = await fetch("/api/turso/sync", { method: "POST" });
     const data = await res.json();
@@ -2086,7 +2087,7 @@ async function triggerTursoSync() {
       throw new Error(data.message || "Lỗi khi đồng bộ.");
     }
   } catch (err) {
-    showAlert(`Lỗi khi đồng bộ lên Turso: ${err.message}`, true);
+    showAlert(`Lỗi khi đồng bộ lên Cloud: ${err.message}`, true);
   } finally {
     targetElem.textContent = originalText;
     checkTursoStatus();
