@@ -98,6 +98,7 @@ const {
 } = require("./services/authService");
 const edepotSyncService = require("./services/edepotSyncService");
 const edepotCronHandler = require("./api/cron/edepot-sync");
+const updateOrdersCronHandler = require("./api/cron/update-orders");
 
 /**
  * Hàm lọc danh sách bản ghi theo phân quyền Depot trực thuộc của User
@@ -1646,6 +1647,7 @@ app.post("/api/verification/purge", authRequired, async (req, res) => {
  * API: Vercel Cron Endpoint đồng bộ eDepot hàng giờ
  */
 app.all("/api/cron/edepot-sync", edepotCronHandler);
+app.all("/api/cron/update-orders", updateOrdersCronHandler);
 
 /**
  * API: Admin kích hoạt đồng bộ eDepot thủ công
