@@ -1,0 +1,37 @@
+name: Auto Reconcile & Update Orders to Supabase
+
+on:
+  schedule:
+    # Kích hoạt vào phút thứ 30 của mỗi giờ (Ví dụ: 10:30, 11:30, 12:30, 13:30...)
+    - cron: '30 * * * *'
+  workflow_dispatch: # Cho phép chạy thủ công bất cứ lúc nào
+
+jobs:
+  reconcile-orders:
+    name: Reconcile Orders
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Node Dependencies
+        run: npm ci || npm install --omit=dev
+
+      - name: Execute Auto Reconcile
+        env:
+          SUPABASE_HOST: ${{ secrets.SUPABASE_HOST }}
+          SUPABASE_PORT: ${{ secrets.SUPABASE_PORT }}
+          SUPABASE_DATABASE: ${{ secrets.SUPABASE_DATABASE }}
+          SUPABASE_USER: ${{ secrets.SUPABASE_USER }}
+          SUPABASE_PASSWORD: ${{ secrets.SUPABASE_PASSWORD }}
+        run: node scripts/cron-update-orders.js

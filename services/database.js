@@ -267,7 +267,9 @@ function bumpOperationalVersion() {
     } catch (e) {}
   }
 
-  if (tursoClient && tursoClient.isTursoAvailable()) {
+  if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+    supabaseClient.bumpOperationalVersionInSupabase().catch(() => {});
+  } else if (tursoClient && tursoClient.isTursoAvailable()) {
     tursoClient.bumpOperationalVersionInTurso().catch(() => {});
   }
 
@@ -285,7 +287,19 @@ async function getOperationalVersionAsync() {
     return operationalVersion;
   }
 
-  if (tursoClient && tursoClient.isTursoAvailable()) {
+  if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+    try {
+      const remoteVer = await supabaseClient.getOperationalVersionFromSupabase();
+      if (remoteVer) {
+        const num = Number(remoteVer);
+        if (!isNaN(num) && num > 0) {
+          operationalVersion = Math.max(operationalVersion, num);
+          lastVersionFetchTime = now;
+          return operationalVersion;
+        }
+      }
+    } catch (e) {}
+  } else if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       const remoteVer = await tursoClient.getOperationalVersionFromTurso();
       if (remoteVer) {
