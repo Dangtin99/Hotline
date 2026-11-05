@@ -1,0 +1,37 @@
+name: eDepot Hourly Sync to Supabase
+
+on:
+  schedule:
+    # Tự động kích hoạt vào phút thứ 00 của mỗi giờ (24/7)
+    - cron: '0 * * * *'
+  workflow_dispatch: # Cho phép nhấn nút "Run workflow" trên giao diện GitHub để chạy thủ công bất cứ lúc nào
+
+jobs:
+  sync-edepot:
+    name: Sync eDepot to Supabase
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Node Dependencies
+        run: npm ci || npm install --omit=dev
+
+      - name: Execute Hourly Sync
+        env:
+          EDEPOT_USERNAME: ${{ secrets.EDEPOT_USERNAME }}
+          EDEPOT_PASSWORD: ${{ secrets.EDEPOT_PASSWORD }}
+          SUPABASE_HOST: ${{ secrets.SUPABASE_HOST }}
+          SUPABASE_PORT: ${{ secrets.SUPABASE_PORT }}
+          SUPABASE_DATABASE: ${{ secrets.SUPABASE_DATABASE }}
+          SUPABASE_USER: ${{ secrets.SUPABASE_USER }}
+          SUPABASE_PASSWORD: ${{ secrets.SUPABASE_PASSWORD }}
+        run: node scripts/cron-sync-edepot.js
