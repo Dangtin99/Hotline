@@ -29,6 +29,12 @@ async function main() {
   console.log('=====================================================');
   console.log('🤖 GPG LOGISTICS - EDEPOT HOURLY SYNC TO SUPABASE');
   console.log(`⏱️ Thời gian bắt đầu: ${new Date().toISOString()}`);
+  console.log('Node Version:', process.version);
+  console.log('EDEPOT_USERNAME provided:', Boolean(process.env.EDEPOT_USERNAME));
+  console.log('EDEPOT_PASSWORD provided:', Boolean(process.env.EDEPOT_PASSWORD));
+  console.log('SUPABASE_HOST provided:', Boolean(process.env.SUPABASE_HOST));
+  console.log('SUPABASE_USER provided:', Boolean(process.env.SUPABASE_USER));
+  console.log('SUPABASE_PASSWORD provided:', Boolean(process.env.SUPABASE_PASSWORD));
   console.log('=====================================================');
 
   const username = process.env.EDEPOT_USERNAME;
@@ -65,7 +71,7 @@ async function main() {
       process.exit(1);
     }
   } catch (err) {
-    console.error(`💥 LỖI KHÔNG MONG MUỐN: ${err.message}`);
+    console.error(`💥 LỖI KHÔNG MONG MUỐN:`, err.stack || err.message || err);
     process.exit(1);
   }
 }

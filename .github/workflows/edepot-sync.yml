@@ -48,4 +48,11 @@ jobs:
           SUPABASE_PASSWORD: ${{ secrets.SUPABASE_PASSWORD }}
           CUSTOM_FROM: ${{ inputs.customFrom }}
           CUSTOM_TO: ${{ inputs.customTo }}
-        run: node scripts/cron-sync-edepot.js
+        run: |
+          node scripts/cron-sync-edepot.js 2>&1 | tee sync_output.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          echo "### Kết quả đồng bộ eDepot -> Supabase" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat sync_output.log >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          exit $EXIT_CODE
