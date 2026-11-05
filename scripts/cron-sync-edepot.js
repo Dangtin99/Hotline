@@ -38,8 +38,20 @@ async function main() {
   }
 
   try {
-    // Chạy đồng bộ cho khung giờ tròn gần nhất
-    const result = await edepotSyncService.syncOrdersWindow();
+    const customFrom = process.env.CUSTOM_FROM || process.env.INPUT_CUSTOMFROM || process.argv[2];
+    const customTo = process.env.CUSTOM_TO || process.env.INPUT_CUSTOMTO || process.argv[3];
+
+    const syncOptions = {};
+    if (customFrom && customTo) {
+      syncOptions.customFrom = customFrom.trim();
+      syncOptions.customTo = customTo.trim();
+      console.log(`🎯 Chạy đồng bộ theo khung giờ chỉ định: [${syncOptions.customFrom}] -> [${syncOptions.customTo}]`);
+    } else {
+      console.log('⏰ Chạy đồng bộ tự động theo khung giờ tròn gần nhất...');
+    }
+
+    // Chạy đồng bộ cho khung giờ
+    const result = await edepotSyncService.syncOrdersWindow(syncOptions);
     
     if (result.success) {
       console.log('✅ ĐỒNG BỘ THÀNH CÔNG!');

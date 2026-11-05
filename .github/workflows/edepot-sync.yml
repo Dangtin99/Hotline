@@ -4,7 +4,19 @@ on:
   schedule:
     # Kích hoạt vào phút thứ 05 của mỗi giờ (ví dụ: 11:05, 12:05) để tránh nghẽn queue tại phút 00 của GitHub
     - cron: '5 * * * *'
-  workflow_dispatch: # Cho phép nhấn nút "Run workflow" trên giao diện GitHub để chạy thủ công bất cứ lúc nào
+  workflow_dispatch: # Cho phép nhấn nút "Run workflow" trên giao diện GitHub
+    inputs:
+      customFrom:
+        description: 'Ngày giờ bắt đầu (YYYY-MM-DD HH:mm:ss)'
+        required: false
+        default: ''
+      customTo:
+        description: 'Ngày giờ kết thúc (YYYY-MM-DD HH:mm:ss)'
+        required: false
+        default: ''
+  push:
+    paths:
+      - '.trigger-sync'
 
 jobs:
   sync-edepot:
@@ -34,4 +46,6 @@ jobs:
           SUPABASE_DATABASE: ${{ secrets.SUPABASE_DATABASE }}
           SUPABASE_USER: ${{ secrets.SUPABASE_USER }}
           SUPABASE_PASSWORD: ${{ secrets.SUPABASE_PASSWORD }}
+          CUSTOM_FROM: ${{ inputs.customFrom }}
+          CUSTOM_TO: ${{ inputs.customTo }}
         run: node scripts/cron-sync-edepot.js
