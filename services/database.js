@@ -2848,7 +2848,18 @@ async function purgeOldVerificationRecordsAsync(daysToKeep = 3) {
 }
 
 async function updateOrdersFromCheckDataAsync() {
-  if (tursoClient && tursoClient.isTursoAvailable()) {
+  if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+    try {
+      const [orders, verOrders] = await Promise.all([
+        supabaseClient.getAllOrdersFromSupabase(),
+        supabaseClient.getAllVerificationOrdersFromSupabase()
+      ]);
+      if (Array.isArray(orders) && orders.length > 0) memoryOrders = orders;
+      if (Array.isArray(verOrders) && verOrders.length > 0) memoryVerificationOrders = verOrders;
+    } catch (e) {
+      console.warn("[Supabase] Lỗi tải dữ liệu đối soát:", e.message);
+    }
+  } else if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       const [orders, verOrders] = await Promise.all([
         tursoClient.getAllOrdersFromTurso(),
@@ -2886,6 +2897,25 @@ async function updateOrdersFromCheckDataAsync() {
     });
   }
 
+  if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+    try {
+      const syncPromises = [];
+      if (res.modifiedOrders && res.modifiedOrders.length > 0) {
+        syncPromises.push(supabaseClient.syncOrdersToSupabase(res.modifiedOrders));
+      } else if (res.updatedUnpaid > 0 || res.updatedCancelled > 0) {
+        syncPromises.push(supabaseClient.syncOrdersToSupabase(memoryOrders));
+      }
+      if (res.deletedOrderKeys && res.deletedOrderKeys.length > 0) {
+        syncPromises.push(supabaseClient.deleteOrderRowsInSupabase(res.deletedOrderKeys));
+      }
+      if (syncPromises.length > 0) {
+        await Promise.all(syncPromises);
+      }
+    } catch (e) {
+      console.error("[Supabase] Lỗi đồng bộ sau đối soát:", e.message);
+    }
+  }
+
   if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       const syncPromises = [];
@@ -2913,7 +2943,12 @@ async function updateOrdersFromCheckDataAsync() {
 }
 
 async function deduplicateOrdersByEirAsync() {
-  if (tursoClient && tursoClient.isTursoAvailable()) {
+  if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+    try {
+      const orders = await supabaseClient.getAllOrdersFromSupabase();
+      if (Array.isArray(orders) && orders.length > 0) memoryOrders = orders;
+    } catch (e) {}
+  } else if (tursoClient && tursoClient.isTursoAvailable()) {
     try {
       const orders = await tursoClient.getAllOrdersFromTurso();
       if (Array.isArray(orders) && orders.length > 0) memoryOrders = orders;
@@ -2921,6 +2956,16 @@ async function deduplicateOrdersByEirAsync() {
   }
 
   const res = deduplicateOrdersByEir();
+
+  if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
+    try {
+      if (res.deletedKeys && res.deletedKeys.length > 0) {
+        await supabaseClient.deleteOrderRowsInSupabase(res.deletedKeys);
+      }
+    } catch (e) {
+      console.error("[Supabase] Lỗi đồng bộ sau lọc trùng:", e.message);
+    }
+  }
 
   if (tursoClient) {
     try {
