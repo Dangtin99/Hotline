@@ -2,8 +2,8 @@ name: eDepot Hourly Sync to Supabase
 
 on:
   schedule:
-    # Tự động kích hoạt vào phút thứ 00 của mỗi giờ (24/7)
-    - cron: '0 * * * *'
+    # Kích hoạt vào phút thứ 05 của mỗi giờ (ví dụ: 11:05, 12:05) để tránh nghẽn queue tại phút 00 của GitHub
+    - cron: '5 * * * *'
   workflow_dispatch: # Cho phép nhấn nút "Run workflow" trên giao diện GitHub để chạy thủ công bất cứ lúc nào
 
 jobs:
