@@ -392,8 +392,8 @@ function persistStore(options = {}) {
     // Trên Vercel Serverless filesystem là read-only, dữ liệu lưu vĩnh viễn trên Turso Cloud
   }
 
-  // Đồng bộ ngầm lên Turso Cloud (fire-and-forget)
-  if (tursoClient && options.syncFullToTurso !== false) {
+  // Đồng bộ ngầm lên Turso Cloud (fire-and-forget) - chỉ chạy khi Supabase KHÔNG khả dụng và không bị cấm bởi options
+  if (tursoClient && options.syncFullToTurso !== false && (!supabaseClient || !supabaseClient.isSupabaseAvailable())) {
     tursoClient.syncOrdersToTurso(memoryOrders).catch(err => {
       console.warn("[Turso] Dong bo len Turso that bai:", err.message);
     });
@@ -476,7 +476,7 @@ function migrateFromUploadHistory() {
       totalMigrated += records.length;
     });
 
-    persistStore();
+    persistStore({ generateDump: false, syncFullToTurso: false });
     console.log(`Đã tích lũy thành công ${memoryOrders.length} bản ghi đơn hàng vào cơ sở dữ liệu SQL từ các file trong lịch sử!`);
   } catch (err) {
     console.error("Lỗi khi migrate dữ liệu từ lịch sử cũ:", err.message);
@@ -592,7 +592,7 @@ function insertRecords(records, metadata = {}, shouldPersist = true) {
   }
 
   if (shouldPersist) {
-    persistStore();
+    persistStore({ generateDump: false, syncFullToTurso: false });
 
     // Đồng bộ hóa ngầm lên Supabase Cloud
     if (supabaseClient) {
@@ -1791,8 +1791,13 @@ function updateOrdersFromCheckData() {
     if (!order.soXe || !order.nguoiTao) {
       if (orderInfo.eir && checkEirMap.has(orderInfo.eir)) {
         const c = checkEirMap.get(orderInfo.eir);
-        if (!order.soXe && c.soXe) order.soXe = c.soXe;
-        if (!order.nguoiTao && c.nguoiTao) order.nguoiTao = c.nguoiTao;
+        let enriched = false;
+        if (!order.soXe && c.soXe) { order.soXe = c.soXe; enriched = true; }
+        if (!order.nguoiTao && c.nguoiTao) { order.nguoiTao = c.nguoiTao; enriched = true; }
+        if (enriched) {
+          order.updatedAt = nowStr;
+          modifiedOrdersMap.set(order.rowKey, order);
+        }
       }
     }
     order._truck = cleanTruck(order.soXe);
@@ -1880,9 +1885,29 @@ function updateOrdersFromCheckData() {
 
     if (check) {
       const checkStatusNorm = clean(check.trangThaiDonHang);
-      if (orderStatusNorm !== checkStatusNorm || (!orderInfo.cont && check.soContainer)) {
+      const checkInfo = parseCheckEirAndCont(check);
+
+      const hasStatusChange = orderStatusNorm !== checkStatusNorm;
+      const hasNewCont = !orderInfo.cont && Boolean(checkInfo.cont);
+      const hasNewTruck = Boolean(check.soXe) && (!order.soXe || cleanTruck(order.soXe) !== cleanTruck(check.soXe));
+      const hasNewCreator = Boolean(check.nguoiTao) && (!order.nguoiTao || clean(order.nguoiTao) !== clean(check.nguoiTao));
+      const hasNewDriver = (Boolean(check.tenTaiXe) && !order.tenTaiXe) || (Boolean(check.sdtTaiXe) && !order.sdtTaiXe);
+      const hasNewTruckingCompany = (Boolean(check.tenNhaXe) && !order.tenNhaXe) || (Boolean(check.sdtNhaXe) && !order.sdtNhaXe);
+      const hasNewActivation = Boolean(check.trangThaiKichHoat) && (!order.trangThaiKichHoat || order.trangThaiKichHoat !== check.trangThaiKichHoat);
+      const hasNewActivationTime = Boolean(check.thoiGianKichHoat) && !order.thoiGianKichHoat;
+      const hasNewApprovalDate = Boolean(check.ngayDuocDuyet) && (!order.ngayDuocDuyet || order.ngayDuocDuyet !== check.ngayDuocDuyet);
+      const hasNewLine = Boolean(check.hangTau) && (!order.hangTau || order.hangTau !== check.hangTau);
+      const hasNewDepot = Boolean(check.depot) && (!order.depot || order.depot !== check.depot);
+      const hasNewReason = (Boolean(check.lyDoHuy) && !order.lyDoHuy) || (Boolean(check.lyDoTuChoi) && !order.lyDoTuChoi) || (Boolean(check.lyDoHuyCheck) && !order.lyDoHuyCheck);
+      const hasNewTeus = (check.sizeTeus !== undefined && check.sizeTeus !== null) && (!order.sizeTeus || Number(order.sizeTeus) !== Number(check.sizeTeus));
+
+      const hasAnyUpdate = hasStatusChange || hasNewCont || hasNewTruck || hasNewCreator ||
+                           hasNewDriver || hasNewTruckingCompany || hasNewActivation ||
+                           hasNewActivationTime || hasNewApprovalDate || hasNewLine ||
+                           hasNewDepot || hasNewReason || hasNewTeus;
+
+      if (hasAnyUpdate) {
         usedCheckKeys.add(check.rowKey);
-        const checkInfo = parseCheckEirAndCont(check);
 
         if (checkInfo.eir) {
           order.soContainer = checkInfo.cont ? `${checkInfo.eir}-${checkInfo.cont}` : `${checkInfo.eir}-`;
@@ -2197,7 +2222,7 @@ function updateOrdersFromCheckData() {
   // BƯỚC 4: LƯU TRỮ VÀ ĐỒNG BỘ CHO BẢNG cancellation_orders
   // -------------------------------------------------------------------------
   if (updatedUnpaid > 0 || updatedCancelled > 0) {
-    persistStore();
+    persistStore({ generateDump: false, syncFullToTurso: false });
 
     const modifiedOrders = Array.from(modifiedOrdersMap.values());
     if (sqliteEngine && modifiedOrders.length > 0) {
@@ -2228,9 +2253,8 @@ function updateOrdersFromCheckData() {
       }
     }
 
-    if (supabaseClient) {
-      syncAllToSupabase().catch(() => {});
-    }
+    // Lưu ý: Không kích hoạt syncAllToSupabase() đồng thời ở đây để tránh gây timeout khóa giao dịch PostgreSQL pooler.
+    // Việc đồng bộ lên Supabase được thực hiện chuẩn xác cho modifiedOrders trong updateOrdersFromCheckDataAsync().
   }
 
   return {
@@ -2469,7 +2493,7 @@ function deduplicateOrdersByEir() {
       }
     }
 
-    persistStore();
+    persistStore({ generateDump: false, syncFullToTurso: false });
 
     if (supabaseClient) {
       supabaseClient.syncOrdersToSupabase(memoryOrders).catch(() => {});
@@ -3018,37 +3042,25 @@ async function updateOrdersFromCheckDataAsync() {
 
   if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
     try {
-      const syncPromises = [];
-      if (res.modifiedOrders && res.modifiedOrders.length > 0) {
-        syncPromises.push(supabaseClient.syncOrdersToSupabase(res.modifiedOrders));
-      } else if (res.updatedUnpaid > 0 || res.updatedCancelled > 0) {
-        syncPromises.push(supabaseClient.syncOrdersToSupabase(memoryOrders));
-      }
       if (res.deletedOrderKeys && res.deletedOrderKeys.length > 0) {
-        syncPromises.push(supabaseClient.deleteOrderRowsInSupabase(res.deletedOrderKeys));
+        await supabaseClient.deleteOrderRowsInSupabase(res.deletedOrderKeys);
       }
-      if (syncPromises.length > 0) {
-        await Promise.all(syncPromises);
+      if (res.modifiedOrders && res.modifiedOrders.length > 0) {
+        await supabaseClient.syncOrdersToSupabase(res.modifiedOrders);
       }
     } catch (e) {
       console.error("[Supabase] Lỗi đồng bộ sau đối soát:", e.message);
     }
   }
 
-  if (tursoClient && tursoClient.isTursoAvailable()) {
+  // Khi Supabase đã khả dụng (Primary Cloud DB), không gọi Turso để tránh lặp lại request đồng bộ 2 lần
+  if (tursoClient && tursoClient.isTursoAvailable() && (!supabaseClient || !supabaseClient.isSupabaseAvailable())) {
     try {
-      const syncPromises = [];
-      if (res.modifiedOrders && res.modifiedOrders.length > 0) {
-        syncPromises.push(tursoClient.syncOrdersToTurso(res.modifiedOrders));
-      } else if (res.updatedUnpaid > 0 || res.updatedCancelled > 0) {
-        syncPromises.push(tursoClient.syncOrdersToTurso(memoryOrders));
-      }
-      // Không xóa dòng check đơn để lưu trữ đầy đủ 100% dữ liệu lịch sử đối soát
       if (res.deletedOrderKeys && res.deletedOrderKeys.length > 0) {
-        syncPromises.push(tursoClient.deleteOrderRowsInTurso(res.deletedOrderKeys));
+        await tursoClient.deleteOrderRowsInTurso(res.deletedOrderKeys);
       }
-      if (syncPromises.length > 0) {
-        await Promise.all(syncPromises);
+      if (res.modifiedOrders && res.modifiedOrders.length > 0) {
+        await tursoClient.syncOrdersToTurso(res.modifiedOrders);
       }
     } catch (e) {
       console.error("[Turso] Lỗi đồng bộ sau đối soát:", e.message);
