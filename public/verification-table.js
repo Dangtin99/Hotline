@@ -206,7 +206,28 @@ async function loadVerificationDataset(forceRefresh = false) {
       throw new Error(json.message || "Không thể tải dữ liệu kiểm tra đơn.");
     }
 
-    allRecords = Array.isArray(json.records) ? json.records : [];
+    const rawList = Array.isArray(json.records) ? json.records : [];
+    // Cơ chế phòng thủ Client-side: Lọc trùng theo số EIR đảm bảo UI luôn hiển thị bản ghi duy nhất chuẩn xác
+    const dedupMap = new Map();
+    for (const r of rawList) {
+      const eir = (r.sttFile || r.stt || "").trim().toUpperCase();
+      if (eir) {
+        if (!dedupMap.has(eir)) {
+          dedupMap.set(eir, r);
+        } else {
+          const ex = dedupMap.get(eir);
+          const exScore = (ex.fileName ? 2 : 0) + (ex.trangThaiDonHang && ex.trangThaiDonHang !== "Chưa xác định" ? 1 : 0);
+          const curScore = (r.fileName ? 2 : 0) + (r.trangThaiDonHang && r.trangThaiDonHang !== "Chưa xác định" ? 1 : 0);
+          if (curScore > exScore || (curScore === exScore && (Number(r.id) || 0) >= (Number(ex.id) || 0))) {
+            dedupMap.set(eir, r);
+          }
+        }
+      } else {
+        const key = r.rowKey || `${r.depot}#${r.soContainer}#${r.soBooking}#${r.ngayHuyDon}`;
+        if (!dedupMap.has(key)) dedupMap.set(key, r);
+      }
+    }
+    allRecords = Array.from(dedupMap.values());
     const stats = json.stats || {};
 
     if (totalRowsBadge) {

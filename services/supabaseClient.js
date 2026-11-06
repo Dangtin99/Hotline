@@ -621,7 +621,9 @@ async function syncVerificationOrdersToSupabase(orders) {
     // để tránh lỗi PostgreSQL: "ON CONFLICT DO UPDATE command cannot affect row a second time"
     const uniqueMap = new Map();
     for (const o of orders) {
-      const rowKey = o.rowKey || `${o.depot || "DEPOT"}#${o.sttFile || o.stt || "NO_STT"}#${o.soBooking || "NO_BOOKING"}#${o.ngayHuyDon || ""}`;
+      const eir = (o.sttFile || o.stt || "").trim().toUpperCase();
+      const depot = (o.depot || "DEPOT").trim().toUpperCase();
+      const rowKey = eir ? `${depot}#EIR_${eir}` : (o.rowKey || `${depot}#${(o.soContainer || "NO_CONT").trim().toUpperCase()}#${(o.soBooking || "NO_BOOKING").trim().toUpperCase()}#${(o.ngayHuyDon || "").trim()}`);
       uniqueMap.set(rowKey, { ...o, rowKey });
     }
     const uniqueOrders = Array.from(uniqueMap.values());
@@ -1242,7 +1244,56 @@ async function deleteUserFromSupabase(username) {
   }
 }
 
+async function deduplicateVerificationOrdersInSupabase() {
+  const p = getPool();
+  if (!p) return { success: false, message: "Pool chưa khởi tạo" };
+  const client = await p.connect();
+  try {
+    await client.query("BEGIN;");
+    const delRes = await client.query(`
+      WITH ranked AS (
+        SELECT id,
+          ROW_NUMBER() OVER (
+            PARTITION BY UPPER(TRIM(stt_file))
+            ORDER BY 
+              CASE WHEN depot IS NOT NULL AND depot != '' AND depot != 'N/A' THEN 1 ELSE 2 END ASC,
+              CASE WHEN file_name IS NOT NULL AND file_name != '' THEN 1 ELSE 2 END ASC,
+              CASE WHEN trang_thai_don_hang NOT IN ('Chưa xác định', '') THEN 1 ELSE 2 END ASC,
+              CASE WHEN trang_thai_kich_hoat = 'Đã kích hoạt' THEN 1 ELSE 2 END ASC,
+              id DESC
+          ) as rn
+        FROM eir_cancellation_orders
+        WHERE stt_file ILIKE 'EIR%'
+      )
+      DELETE FROM eir_cancellation_orders
+      WHERE id IN (
+        SELECT id FROM ranked WHERE rn > 1
+      );
+    `);
+
+    const updateRes = await client.query(`
+      UPDATE eir_cancellation_orders
+      SET row_key = COALESCE(NULLIF(TRIM(depot), ''), 'DEPOT') || '#EIR_' || UPPER(TRIM(stt_file))
+      WHERE stt_file ILIKE 'EIR%';
+    `);
+
+    await client.query("COMMIT;");
+    return {
+      success: true,
+      deletedCount: delRes.rowCount,
+      standardizedCount: updateRes.rowCount
+    };
+  } catch (err) {
+    await client.query("ROLLBACK;");
+    console.error("[Supabase] Lỗi khi deduplicateVerificationOrdersInSupabase:", err.message);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 module.exports = {
+  getPool,
   isSupabaseAvailable,
   testConnection,
   initSupabaseSchema,
@@ -1259,6 +1310,7 @@ module.exports = {
   deleteVerificationOrderRowsInSupabase,
   deleteVerificationOrdersByUploadIdInSupabase,
   clearAllVerificationOrdersInSupabase,
+  deduplicateVerificationOrdersInSupabase,
   getUploadHistoryFromSupabase,
   saveUploadHistoryItemToSupabase,
   deleteUploadHistoryItemFromSupabase,

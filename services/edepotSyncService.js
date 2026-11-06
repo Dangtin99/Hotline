@@ -120,24 +120,32 @@ async function syncOrdersWindow(options = {}) {
       uploadedAt: nowVn.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })
     };
 
-    // Gắn uploadId vào từng đơn
-    orders.forEach(o => { o.uploadId = uploadId; });
+    // Gắn uploadId và fileName vào từng đơn
+    orders.forEach(o => {
+      o.uploadId = uploadId;
+      o.fileName = fileName;
+    });
 
-    // 3. Nạp vào Local Store & SQLite
+    // 3. Nạp vào Local Store, SQLite & Tự động đồng bộ lên Supabase/Turso Cloud qua insertVerificationRecordsAsync
+    let isDbSynced = false;
     if (typeof db.insertVerificationRecordsAsync === 'function') {
       try {
         await db.insertVerificationRecordsAsync(orders, metadata);
         logEntry.ordersSynced = orders.length;
+        isDbSynced = true;
       } catch (dbErr) {
         console.warn('[eDepot Sync] Lỗi khi lưu vào local database:', dbErr.message);
       }
     }
 
-    // 4. Đồng bộ lên Supabase Cloud Database (nếu có cấu hình)
+    // 4. Lưu lịch sử upload và đồng bộ dự phòng lên Supabase Cloud Database (nếu Bước 3 chưa sync được)
     if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
       try {
-        const supaResult = await supabaseClient.syncVerificationOrdersToSupabase(orders, uploadId);
-        console.log('[eDepot Sync] Đã đồng bộ lên Supabase:', supaResult);
+        if (!isDbSynced) {
+          const supaResult = await supabaseClient.syncVerificationOrdersToSupabase(orders);
+          console.log('[eDepot Sync] Đồng bộ dự phòng lên Supabase:', supaResult);
+          logEntry.ordersSynced = supaResult && supaResult.synced ? supaResult.synced : orders.length;
+        }
         await supabaseClient.saveVerificationHistoryItemToSupabase(metadata);
       } catch (supaErr) {
         console.warn('[eDepot Sync] Lỗi khi lưu Supabase:', supaErr.message);
@@ -151,6 +159,13 @@ async function syncOrdersWindow(options = {}) {
         const updateRes = await db.updateOrdersFromCheckDataAsync();
         logEntry.reconciliationUpdated = updateRes && updateRes.updatedCount ? updateRes.updatedCount : 0;
         console.log(`[eDepot Sync] Rebooking reconciliation hoàn tất: Cập nhật ${logEntry.reconciliationUpdated} đơn.`);
+      }
+      // Tự động quét dọn và chuẩn hóa đơn trùng lặp sau mỗi lần nạp
+      if (supabaseClient && typeof supabaseClient.deduplicateVerificationOrdersInSupabase === 'function') {
+        const dedupRes = await supabaseClient.deduplicateVerificationOrdersInSupabase();
+        if (dedupRes && dedupRes.deletedCount > 0) {
+          console.log(`[eDepot Sync] Đã tự động dọn sạch ${dedupRes.deletedCount} bản ghi trùng lặp.`);
+        }
       }
     } catch (recErr) {
       console.warn('[eDepot Sync] Lỗi khi chạy đối soát rebooking:', recErr.message);

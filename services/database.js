@@ -1105,15 +1105,16 @@ loadAllFromStore();
 let memoryVerificationOrders = [];
 
 function generateVerificationKey(r) {
-  const eir = (r.sttFile || "").trim().toUpperCase();
+  if (r.rowKey) return r.rowKey;
+  const eir = (r.sttFile || r.stt || "").trim().toUpperCase();
   const cont = (r.soContainer || "").trim().toUpperCase();
   const book = (r.soBooking || "").trim().toUpperCase();
   const date = (r.ngayHuyDon || "").trim();
-  const depot = (r.depot || "").trim().toUpperCase();
+  const depot = (r.depot || "DEPOT").trim().toUpperCase();
   const hangTau = (r.hangTau || "").trim().toUpperCase();
   const lyDo = (r.lyDoHuy || "").trim().substring(0, 30);
 
-  if (eir) return `${depot}#EIR_${eir}#${date}`;
+  if (eir) return `${depot}#EIR_${eir}`;
   if (cont || book) return `${depot}#${cont}#${book}#${date}`;
 
   // Fix #9: Fallback có tính xác định (deterministic) dựa trên mã băm MD5 thay vì random
@@ -1340,7 +1341,7 @@ function insertVerificationRecords(records, metadata = {}, shouldPersist = true)
 
 function getAllVerificationRecords() {
   loadVerificationFromStore();
-  return memoryVerificationOrders;
+  return typeof deduplicateVerificationList === "function" ? deduplicateVerificationList(memoryVerificationOrders) : memoryVerificationOrders;
 }
 
 function getVerificationRecordsByUploadId(uploadId) {
@@ -2772,6 +2773,30 @@ async function clearDatabaseAsync() {
   bumpOperationalVersion();
 }
 
+function deduplicateVerificationList(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return [];
+  const map = new Map();
+  for (const r of rows) {
+    const eir = (r.sttFile || r.stt || "").trim().toUpperCase();
+    if (eir) {
+      if (!map.has(eir)) {
+        map.set(eir, r);
+      } else {
+        const existing = map.get(eir);
+        const existingScore = (existing.fileName ? 2 : 0) + (existing.trangThaiDonHang && existing.trangThaiDonHang !== "Chưa xác định" ? 1 : 0);
+        const currentScore = (r.fileName ? 2 : 0) + (r.trangThaiDonHang && r.trangThaiDonHang !== "Chưa xác định" ? 1 : 0);
+        if (currentScore > existingScore || (currentScore === existingScore && (Number(r.id) || 0) >= (Number(existing.id) || 0))) {
+          map.set(eir, r);
+        }
+      }
+    } else {
+      const key = r.rowKey || `${r.depot}#${r.soContainer}#${r.soBooking}#${r.ngayHuyDon}`;
+      if (!map.has(key)) map.set(key, r);
+    }
+  }
+  return Array.from(map.values());
+}
+
 let isVerificationLoadedFromCloud = false;
 let lastVerificationCloudFetchTime = 0;
 const VERIFICATION_CACHE_TTL = 3 * 60 * 1000; // 3 phút TTL
@@ -2790,7 +2815,7 @@ async function getAllVerificationRecordsAsync(forceRefresh = false) {
         try {
           const supabaseRows = await supabaseClient.getAllVerificationOrdersFromSupabase();
           if (Array.isArray(supabaseRows) && supabaseRows.length > 0) {
-            memoryVerificationOrders = supabaseRows;
+            memoryVerificationOrders = deduplicateVerificationList(supabaseRows);
             isVerificationLoadedFromCloud = true;
             lastVerificationCloudFetchTime = Date.now();
             return memoryVerificationOrders;
@@ -2804,7 +2829,7 @@ async function getAllVerificationRecordsAsync(forceRefresh = false) {
         try {
           const cloudRows = await tursoClient.getAllVerificationOrdersFromTurso();
           if (Array.isArray(cloudRows) && cloudRows.length > 0) {
-            memoryVerificationOrders = cloudRows;
+            memoryVerificationOrders = deduplicateVerificationList(cloudRows);
             isVerificationLoadedFromCloud = true;
             lastVerificationCloudFetchTime = Date.now();
             return memoryVerificationOrders;
