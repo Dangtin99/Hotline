@@ -26,7 +26,7 @@ module.exports = async (req, res) => {
 
   // 3. Thực thi đồng bộ
   try {
-    const options = {};
+    const options = { triggerSource: 'Cron Job (Auto)' };
     if (req.query && req.query.minutes) {
       options.minutesBack = parseInt(req.query.minutes, 10);
     }

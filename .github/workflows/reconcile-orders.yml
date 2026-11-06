@@ -1,10 +1,9 @@
-name: Auto Reconcile & Update Orders to Supabase
+name: Auto Reconcile & Update Orders to Supabase (Manual Dispatch Only)
 
 on:
-  schedule:
-    # Kích hoạt vào phút thứ 30 của mỗi giờ (Ví dụ: 10:30, 11:30, 12:30, 13:30...)
-    - cron: '30 * * * *'
-  workflow_dispatch: # Cho phép chạy thủ công bất cứ lúc nào
+  # Đã tắt lịch tự động chạy schedule trên GitHub Actions theo yêu cầu.
+  # Toàn bộ việc đối soát định kỳ giờ đây do Cron Job phụ trách độc quyền (/api/cron/update-orders).
+  workflow_dispatch: # Cho phép chạy thủ công khi cần
 
 jobs:
   reconcile-orders:

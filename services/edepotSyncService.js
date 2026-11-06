@@ -116,7 +116,7 @@ async function syncOrdersWindow(options = {}) {
       insertedCount: orders.length,
       updatedCount: 0,
       totalAccumulated: orders.length,
-      uploadedBy: 'GitHub Actions (Auto)',
+      uploadedBy: options.triggerSource || (process.env.GITHUB_ACTIONS ? 'GitHub Actions (Manual)' : 'Cron Job (Auto)'),
       uploadedAt: nowVn.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })
     };
 

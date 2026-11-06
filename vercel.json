@@ -19,5 +19,15 @@
       "src": "/(.*)",
       "dest": "/public/$1"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/edepot-sync",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/update-orders",
+      "schedule": "30 * * * *"
+    }
   ]
 }
