@@ -66,6 +66,8 @@ const vnClockWidget = document.getElementById("vnClockWidget");
 const vnClockDisplay = document.getElementById("vnClockDisplay");
 let vnClockInterval = null;
 const btnUpdateData = document.getElementById("btnUpdateData");
+const btnUpdateUnpaidData = document.getElementById("btnUpdateUnpaidData");
+const btnUpdateCancelledData = document.getElementById("btnUpdateCancelledData");
 const btnDeduplicateData = document.getElementById("btnDeduplicateData");
 const btnAddManualRow = document.getElementById("btnAddManualRow");
 const thColPending = document.getElementById("thColPending");
@@ -1357,55 +1359,90 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
 
-  // Lắng nghe sự kiện click nút Cập Nhật Dữ Liệu (Tab Tất Cả Đơn)
-  if (btnUpdateData) {
-    btnUpdateData.onclick = async () => {
-      const confirmRun = confirm("Bạn có chắc chắn muốn thực hiện Cập Nhật Dữ Liệu đối soát từ Bảng Check Đơn không?\n\n- Phạm vi cập nhật: Chỉ lấy tối đa dữ liệu trong vòng 3 ngày gần nhất (từ Ngày hiện tại - 2 đến nay).\n- Đơn chưa thanh toán: Đối soát và thay thế dữ liệu khi trùng số Booking, trùng số Container và trùng số EIR.\n- Đơn đã hủy: Đối soát tuần tự 4 vòng (V1: cùng Cont; V2: đơn OUT chưa có Cont cùng xe tìm cont mới; V3: đổi Booking cùng xe; V4: đơn OUT cùng xe trong 24h).\n- Các dòng check đơn đã thay thế sẽ tự động được xóa khỏi bảng check đơn.");
-      if (!confirmRun) return;
+  // Hàm xử lý gọi API cập nhật đối soát theo mode (unpaid / cancelled / all)
+  const executeUpdateOrders = async (btn, mode, confirmMsg, defaultSuccessMsg) => {
+    const confirmRun = confirm(confirmMsg);
+    if (!confirmRun) return;
 
-      const originalText = btnUpdateData.textContent;
-      btnUpdateData.disabled = true;
-      btnUpdateData.textContent = "Đang cập nhật...";
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Đang cập nhật...";
 
-      try {
-        const resp = await fetch("/api/orders/update-from-check", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" }
-        });
-        const data = await resp.json();
+    try {
+      const resp = await fetch("/api/orders/update-from-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode })
+      });
+      const data = await resp.json();
 
-        if (resp.ok && data.status === "success") {
-          const msg = data.message || `Cập nhật thành công ${data.updatedUnpaid || 0} đơn Chưa thanh toán và ${data.updatedCancelled || 0} đơn Đã hủy. Đã xóa ${data.deletedCheckRows || 0} dòng check đơn.`;
-          showAlert(msg, false);
+      if (resp.ok && data.status === "success") {
+        const msg = data.message || defaultSuccessMsg;
+        showAlert(msg, false);
 
-          // Đồng bộ trạng thái mới vào localStorage
-          if (data.updatedRecords && Array.isArray(data.updatedRecords) && data.updatedRecords.length > 0) {
-            const notes = getSavedNotes();
-            data.updatedRecords.forEach(rec => {
-              if (rec.rowKey && rec.trangThaiXuLy) {
-                if (!notes[rec.rowKey]) notes[rec.rowKey] = {};
-                notes[rec.rowKey].status = rec.trangThaiXuLy;
-              }
-              const altKey = `${rec.stt}_${rec.soBooking || ''}_${rec.soContainer || ''}`;
-              if (altKey && rec.trangThaiXuLy) {
-                if (!notes[altKey]) notes[altKey] = {};
-                notes[altKey].status = rec.trangThaiXuLy;
-              }
-            });
-            saveNotes(notes);
-          }
-
-          // Nạp lại toàn bộ dữ liệu bảng để hiển thị dữ liệu mới nhất trên cả 3 view
-          await loadDataset(true);
-        } else {
-          showAlert(data.message || "Lỗi khi thực hiện cập nhật dữ liệu.", true);
+        // Đồng bộ trạng thái mới vào localStorage
+        if (data.updatedRecords && Array.isArray(data.updatedRecords) && data.updatedRecords.length > 0) {
+          const notes = getSavedNotes();
+          data.updatedRecords.forEach(rec => {
+            if (rec.rowKey && rec.trangThaiXuLy) {
+              if (!notes[rec.rowKey]) notes[rec.rowKey] = {};
+              notes[rec.rowKey].status = rec.trangThaiXuLy;
+            }
+            const altKey = `${rec.stt}_${rec.soBooking || ''}_${rec.soContainer || ''}`;
+            if (altKey && rec.trangThaiXuLy) {
+              if (!notes[altKey]) notes[altKey] = {};
+              notes[altKey].status = rec.trangThaiXuLy;
+            }
+          });
+          saveNotes(notes);
         }
-      } catch (err) {
-        showAlert(`Lỗi kết nối máy chủ: ${err.message}`, true);
-      } finally {
-        btnUpdateData.disabled = false;
-        btnUpdateData.textContent = originalText;
+
+        // Nạp lại toàn bộ dữ liệu bảng để hiển thị dữ liệu mới nhất trên cả 3 view
+        await loadDataset(true);
+      } else {
+        showAlert(data.message || "Lỗi khi thực hiện cập nhật dữ liệu.", true);
       }
+    } catch (err) {
+      showAlert(`Lỗi kết nối máy chủ: ${err.message}`, true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+  };
+
+  // 1. Lắng nghe click nút Cập Nhật Đơn Chưa Thanh Toán (Tab Chưa Thanh Toán)
+  if (btnUpdateUnpaidData) {
+    btnUpdateUnpaidData.onclick = () => {
+      executeUpdateOrders(
+        btnUpdateUnpaidData,
+        "unpaid",
+        "Bạn có chắc chắn muốn thực hiện Cập Nhật Dữ Liệu Đơn Chưa Thanh Toán từ Bảng Check Đơn không?\n\n- Hệ thống sẽ chỉ xét các đơn hàng có trạng thái Chưa thanh toán.\n- So sánh số EIR của đơn hàng với số EIR trong bảng Check Đơn để cập nhật thông tin mới nhất (Số xe, Người tạo, Tài xế, Nhà xe, Trạng thái kích hoạt, Trạng thái thanh toán, v.v.).",
+        "Cập nhật thành công dữ liệu đơn chưa thanh toán."
+      );
+    };
+  }
+
+  // 2. Lắng nghe click nút Cập Nhật Dữ Liệu Đơn Hủy (Tab Đơn Hủy)
+  if (btnUpdateCancelledData) {
+    btnUpdateCancelledData.onclick = () => {
+      executeUpdateOrders(
+        btnUpdateCancelledData,
+        "cancelled",
+        "Bạn có chắc chắn muốn thực hiện Cập Nhật Dữ Liệu Đơn Hủy từ Bảng Check Đơn không?\n\n- Hệ thống chỉ xét các đơn hàng có trạng thái = HỦY.\n- Thực hiện đối soát theo Pipeline gom đơn 4 vòng tuần tự (V1: cùng Cont; V2: đơn OUT chưa có Cont cùng xe tìm cont mới; V3: đổi Booking cùng xe; V4: đơn OUT cùng xe trong 24h) để cập nhật mới nhất.",
+        "Cập nhật thành công dữ liệu đơn hủy theo Pipeline 4 vòng."
+      );
+    };
+  }
+
+  // Fallback nếu còn phần tử btnUpdateData cũ
+  if (btnUpdateData) {
+    btnUpdateData.onclick = () => {
+      executeUpdateOrders(
+        btnUpdateData,
+        "all",
+        "Bạn có chắc chắn muốn thực hiện Cập Nhật Dữ Liệu đối soát từ Bảng Check Đơn không?",
+        "Cập nhật dữ liệu đối soát thành công."
+      );
     };
   }
 
@@ -2121,7 +2158,10 @@ function switchTab(tabName, updateUrl = true) {
         updateStatusButtonLabel();
       }
       stopVietnamClock();
-      if (btnUpdateData) btnUpdateData.style.display = "inline-block";
+      // Yêu cầu 2: Nút Cập nhật dữ liệu đơn hủy chỉ hiển thị ở màn hình tab đơn hủy
+      if (btnUpdateCancelledData) btnUpdateCancelledData.style.display = "inline-block";
+      if (btnUpdateUnpaidData) btnUpdateUnpaidData.style.display = "none";
+      if (btnUpdateData) btnUpdateData.style.display = "none";
       if (btnDeduplicateData) btnDeduplicateData.style.display = "inline-block";
 
     } else if (currentTab === "pending") {
@@ -2135,7 +2175,9 @@ function switchTab(tabName, updateUrl = true) {
         updateStatusButtonLabel();
       }
       stopVietnamClock();
-      if (btnUpdateData) btnUpdateData.style.display = "inline-block";
+      if (btnUpdateCancelledData) btnUpdateCancelledData.style.display = "none";
+      if (btnUpdateUnpaidData) btnUpdateUnpaidData.style.display = "none";
+      if (btnUpdateData) btnUpdateData.style.display = "none";
       if (btnDeduplicateData) btnDeduplicateData.style.display = "inline-block";
 
     } else if (currentTab === "unpaid") {
@@ -2155,8 +2197,10 @@ function switchTab(tabName, updateUrl = true) {
       // Bật đồng hồ thời gian thực giờ Việt Nam (hh:mm:ss)
       startVietnamClock();
 
-      // Giữ nút Cập Nhật Dữ Liệu hiển thị trên tab Chưa thanh toán để tiện đối soát
-      if (btnUpdateData) btnUpdateData.style.display = "inline-block";
+      // Yêu cầu 1: Nút Cập nhật dữ liệu đơn chưa thanh toán chỉ hiển thị ở màn hình tab chưa thanh toán
+      if (btnUpdateUnpaidData) btnUpdateUnpaidData.style.display = "inline-block";
+      if (btnUpdateCancelledData) btnUpdateCancelledData.style.display = "none";
+      if (btnUpdateData) btnUpdateData.style.display = "none";
       if (btnDeduplicateData) btnDeduplicateData.style.display = "none";
     } else {
       tabAllOrders.classList.add("active");
@@ -2174,8 +2218,10 @@ function switchTab(tabName, updateUrl = true) {
       // Tắt đồng hồ khi rời tab Chưa thanh toán
       stopVietnamClock();
 
-      // Hiện nút Cập Nhật Dữ Liệu & Lọc Đơn Trùng khi ở tab Tất Cả Đơn Hàng
-      if (btnUpdateData) btnUpdateData.style.display = "inline-block";
+      // Yêu cầu 3: Không hiển thị nút cập nhật dữ liệu ở tab tất cả các đơn hàng
+      if (btnUpdateUnpaidData) btnUpdateUnpaidData.style.display = "none";
+      if (btnUpdateCancelledData) btnUpdateCancelledData.style.display = "none";
+      if (btnUpdateData) btnUpdateData.style.display = "none";
       if (btnDeduplicateData) btnDeduplicateData.style.display = "inline-block";
     }
   }

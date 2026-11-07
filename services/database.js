@@ -1510,7 +1510,11 @@ function purgeOldVerificationRecords(daysToKeep = 5) {
  *
  * Thuật toán: Dòng check đơn sau khi thay thế sẽ bị XÓA khỏi bảng check đơn (eir_cancellation_orders)
  */
-function updateOrdersFromCheckData() {
+function updateOrdersFromCheckData(options = {}) {
+  const mode = (typeof options === "string" ? options : (options && options.mode) || "all").toLowerCase();
+  const shouldProcessUnpaid = mode === "all" || mode === "unpaid";
+  const shouldProcessCancelled = mode === "all" || mode === "cancelled";
+
   if (memoryOrders.length === 0) {
     loadAllFromStore();
   }
@@ -1807,59 +1811,47 @@ function updateOrdersFromCheckData() {
   });
 
   // -------------------------------------------------------------------------
-  // PHASE 1 (ƯU TIÊN 1): XỬ LÝ CÁC ĐƠN CHƯA THANH TOÁN
+  // PHASE 1: XỬ LÝ CÁC ĐƠN CHƯA THANH TOÁN (SO SÁNH MÃ EIR VỚI DỮ LIỆU CHECK ĐƠN)
   // -------------------------------------------------------------------------
-  const availableChecksForUnpaid = memoryVerificationOrders.filter(check => {
-    if (usedCheckKeys.has(check.rowKey)) return false;
-    if (!isWithinUpdateWindow(check)) return false;
-    return true;
-  });
+  if (shouldProcessUnpaid) {
+    const availableChecksForUnpaid = memoryVerificationOrders.filter(check => {
+      if (usedCheckKeys.has(check.rowKey)) return false;
+      if (!isWithinUpdateWindow(check)) return false;
+      return true;
+    });
 
-  const checkByEirForUnpaid = new Map();
-  const checkByBkContForUnpaid = new Map();
+    const checkByEirForUnpaid = new Map();
+    const checkByBkContForUnpaid = new Map();
 
-  availableChecksForUnpaid.forEach(check => {
-    const info = parseCheckEirAndCont(check);
-    if (info.eir && !checkByEirForUnpaid.has(info.eir)) {
-      checkByEirForUnpaid.set(info.eir, check);
-    }
-    const bkNorm = cleanBk(check.soBooking);
-    if (bkNorm && info.cont) {
-      const key = `${bkNorm}#${info.cont}`;
-      if (!checkByBkContForUnpaid.has(key)) {
-        checkByBkContForUnpaid.set(key, check);
+    availableChecksForUnpaid.forEach(check => {
+      const info = parseCheckEirAndCont(check);
+      if (info.eir && !checkByEirForUnpaid.has(info.eir)) {
+        checkByEirForUnpaid.set(info.eir, check);
       }
-    }
-  });
-
-  memoryOrders.forEach(order => {
-    if (!isWithinUpdateWindow(order)) return;
-    const isUnpaidOrder = isUnpaid(order.trangThaiDonHang);
-    if (!isUnpaidOrder) return;
-
-    const orderGate = cleanGate(order.loaiDonHang);
-    const orderInfo = parseOrderEirAndCont(order);
-    const orderStatusNorm = clean(order.trangThaiDonHang);
-    const orderBkNorm = cleanBk(order.soBooking);
-
-    let check = null;
-
-    // Ưu tiên 1: Khớp trực tiếp theo Số EIR
-    if (orderInfo.eir && checkByEirForUnpaid.has(orderInfo.eir)) {
-      const candidate = checkByEirForUnpaid.get(orderInfo.eir);
-      if (!usedCheckKeys.has(candidate.rowKey)) {
-        const checkGate = cleanGate(candidate.loaiDonHang);
-        if (!orderGate || !checkGate || orderGate === checkGate) {
-          check = candidate;
+      const bkNorm = cleanBk(check.soBooking);
+      if (bkNorm && info.cont) {
+        const key = `${bkNorm}#${info.cont}`;
+        if (!checkByBkContForUnpaid.has(key)) {
+          checkByBkContForUnpaid.set(key, check);
         }
       }
-    }
+    });
 
-    // Ưu tiên 2: Khớp theo Booking chuẩn hóa (bỏ 0 đầu) + Container
-    if (!check && orderBkNorm && orderInfo.cont) {
-      const key = `${orderBkNorm}#${orderInfo.cont}`;
-      if (checkByBkContForUnpaid.has(key)) {
-        const candidate = checkByBkContForUnpaid.get(key);
+    memoryOrders.forEach(order => {
+      if (!isWithinUpdateWindow(order)) return;
+      const isUnpaidOrder = isUnpaid(order.trangThaiDonHang);
+      if (!isUnpaidOrder) return;
+
+      const orderGate = cleanGate(order.loaiDonHang);
+      const orderInfo = parseOrderEirAndCont(order);
+      const orderStatusNorm = clean(order.trangThaiDonHang);
+      const orderBkNorm = cleanBk(order.soBooking);
+
+      let check = null;
+
+      // Ưu tiên 1: Khớp trực tiếp theo Số EIR
+      if (orderInfo.eir && checkByEirForUnpaid.has(orderInfo.eir)) {
+        const candidate = checkByEirForUnpaid.get(orderInfo.eir);
         if (!usedCheckKeys.has(candidate.rowKey)) {
           const checkGate = cleanGate(candidate.loaiDonHang);
           if (!orderGate || !checkGate || orderGate === checkGate) {
@@ -1867,21 +1859,35 @@ function updateOrdersFromCheckData() {
           }
         }
       }
-    }
 
-    // Ưu tiên 3: Fallback quét theo booking + cont hoặc cùng booking
-    if (!check && orderBkNorm) {
-      const fallbackCheck = availableChecksForUnpaid.find(c => {
-        if (usedCheckKeys.has(c.rowKey)) return false;
-        if (cleanBk(c.soBooking) !== orderBkNorm) return false;
-        const cGate = cleanGate(c.loaiDonHang);
-        if (orderGate && cGate && orderGate !== cGate) return false;
-        const cInfo = parseCheckEirAndCont(c);
-        if (isSameCont(orderInfo, cInfo) || isSameEir(orderInfo, cInfo)) return true;
-        return false;
-      });
-      if (fallbackCheck) check = fallbackCheck;
-    }
+      // Ưu tiên 2 & 3: Chỉ áp dụng khi mode === "all"
+      if (!check && mode === "all") {
+        if (orderBkNorm && orderInfo.cont) {
+          const key = `${orderBkNorm}#${orderInfo.cont}`;
+          if (checkByBkContForUnpaid.has(key)) {
+            const candidate = checkByBkContForUnpaid.get(key);
+            if (!usedCheckKeys.has(candidate.rowKey)) {
+              const checkGate = cleanGate(candidate.loaiDonHang);
+              if (!orderGate || !checkGate || orderGate === checkGate) {
+                check = candidate;
+              }
+            }
+          }
+        }
+
+        if (!check && orderBkNorm) {
+          const fallbackCheck = availableChecksForUnpaid.find(c => {
+            if (usedCheckKeys.has(c.rowKey)) return false;
+            if (cleanBk(c.soBooking) !== orderBkNorm) return false;
+            const cGate = cleanGate(c.loaiDonHang);
+            if (orderGate && cGate && orderGate !== cGate) return false;
+            const cInfo = parseCheckEirAndCont(c);
+            if (isSameCont(orderInfo, cInfo) || isSameEir(orderInfo, cInfo)) return true;
+            return false;
+          });
+          if (fallbackCheck) check = fallbackCheck;
+        }
+      }
 
     if (check) {
       const checkStatusNorm = clean(check.trangThaiDonHang);
@@ -1956,11 +1962,13 @@ function updateOrdersFromCheckData() {
       }
     }
   });
+}
 
   // -------------------------------------------------------------------------
   // PHASE 2 (ƯU TIÊN 2): PIPELINE 4 VÒNG CHO ĐƠN ĐÃ HỦY & MULTI-ATTEMPT PROPAGATION
   // -------------------------------------------------------------------------
-  const availableChecks = memoryVerificationOrders.filter(c => {
+  if (shouldProcessCancelled) {
+    const availableChecks = memoryVerificationOrders.filter(c => {
     if (usedCheckKeys.has(c.rowKey)) return false;
     if (!isWithinUpdateWindow(c)) return false;
     return !isCancelled(c.trangThaiDonHang);
@@ -2202,6 +2210,7 @@ function updateOrdersFromCheckData() {
       });
     }
   });
+  }
 
   // -------------------------------------------------------------------------
   // BƯỚC 3: GIỮ NGUYÊN TOÀN BỘ DÒNG CHECK ĐƠN TRONG BẢNG eir_cancellation_orders
@@ -2213,10 +2222,15 @@ function updateOrdersFromCheckData() {
   // BƯỚC 3.5: TỰ ĐỘNG GHI ĐÈ & XÓA BẢN GHI CŨ TRÙNG LẶP (DEDUPLICATE & PURGE)
   // Quét toàn bộ để tự động giữ lại bản ghi mới nhất/đã hoàn thành,
   // xóa vĩnh viễn các dòng cũ trùng lặp (ví dụ dòng Đã hủy cũ cùng số EIR).
+  // Chỉ áp dụng khi xử lý đơn hủy hoặc mode 'all'.
   // -------------------------------------------------------------------------
-  const dedupRes = deduplicateOrdersByEir();
-  const deletedDuplicates = dedupRes.deletedCount || 0;
-  const deletedOrderKeys = dedupRes.deletedKeys || [];
+  let deletedDuplicates = 0;
+  let deletedOrderKeys = [];
+  if (shouldProcessCancelled) {
+    const dedupRes = deduplicateOrdersByEir();
+    deletedDuplicates = dedupRes.deletedCount || 0;
+    deletedOrderKeys = dedupRes.deletedKeys || [];
+  }
 
   // -------------------------------------------------------------------------
   // BƯỚC 4: LƯU TRỮ VÀ ĐỒNG BỘ CHO BẢNG cancellation_orders
@@ -2257,8 +2271,18 @@ function updateOrdersFromCheckData() {
     // Việc đồng bộ lên Supabase được thực hiện chuẩn xác cho modifiedOrders trong updateOrdersFromCheckDataAsync().
   }
 
+  let message = "";
+  if (mode === "unpaid") {
+    message = `Đã cập nhật thành công ${updatedUnpaid} đơn Chưa thanh toán từ dữ liệu check đơn theo mã EIR.`;
+  } else if (mode === "cancelled") {
+    message = `Đã cập nhật thành công ${updatedCancelled} đơn Đã hủy theo Pipeline gom đơn 4 vòng.${deletedDuplicates > 0 ? ` Đã xóa ${deletedDuplicates} dòng dữ liệu cũ trùng lặp.` : ''}`;
+  } else {
+    message = `Đã cập nhật thành công ${updatedUnpaid} đơn Chưa thanh toán và ${updatedCancelled} đơn Đã hủy.${deletedDuplicates > 0 ? ` Đã ghi đè và xóa ${deletedDuplicates} dòng dữ liệu cũ trùng lặp.` : ''} Đã xóa ${deletedCount} dòng khỏi bảng check đơn.`;
+  }
+
   return {
     success: true,
+    mode,
     updatedUnpaid,
     updatedCancelled,
     deletedCheckRows: deletedCount,
@@ -2268,7 +2292,7 @@ function updateOrdersFromCheckData() {
     updatedRecords,
     usedCheckKeys: Array.from(usedCheckKeys),
     modifiedOrders: Array.from(modifiedOrdersMap.values()),
-    message: `Đã cập nhật thành công ${updatedUnpaid} đơn Chưa thanh toán và ${updatedCancelled} đơn Đã hủy.${deletedDuplicates > 0 ? ` Đã ghi đè và xóa ${deletedDuplicates} dòng dữ liệu cũ trùng lặp.` : ''} Đã xóa ${deletedCount} dòng khỏi bảng check đơn.`
+    message
   };
 }
 
@@ -2990,7 +3014,8 @@ async function purgeOldVerificationRecordsAsync(daysToKeep = 3) {
   return result;
 }
 
-async function updateOrdersFromCheckDataAsync() {
+async function updateOrdersFromCheckDataAsync(options = {}) {
+  const mode = (typeof options === "string" ? options : (options && options.mode) || "all").toLowerCase();
   if (supabaseClient && supabaseClient.isSupabaseAvailable()) {
     try {
       const [orders, verOrders] = await Promise.all([
@@ -3015,7 +3040,7 @@ async function updateOrdersFromCheckDataAsync() {
     }
   }
 
-  const res = updateOrdersFromCheckData();
+  const res = updateOrdersFromCheckData({ mode });
 
   if (res.deletedOrderKeys && res.deletedOrderKeys.length > 0) {
     const delSet = new Set(res.deletedOrderKeys);

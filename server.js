@@ -953,7 +953,8 @@ app.get("/api/orders/operational-updates", authRequired, async (req, res) => {
  */
 app.post("/api/orders/update-from-check", authRequired, async (req, res) => {
   try {
-    const result = await updateOrdersFromCheckDataAsync();
+    const mode = (req.body && req.body.mode) || (req.query && req.query.mode) || "all";
+    const result = await updateOrdersFromCheckDataAsync({ mode });
     try { if (rebookingAnalyzer && rebookingAnalyzer.invalidateRebookingCache) rebookingAnalyzer.invalidateRebookingCache(); } catch (e) {}
     return res.json({
       status: "success",

@@ -180,8 +180,11 @@
 
         <!-- Vùng điều khiển tác vụ bên phải tab -->
         <div class="data-tabs-actions" style="display: flex; align-items: center; gap: 10px;">
-          <!-- Nút Cập Nhật Dữ Liệu cho Tab Tất Cả Đơn Hàng -->
-          <button type="button" class="btn btn-primary btn-sm" id="btnUpdateData" title="Cập nhật dữ liệu">Cập Nhật Dữ Liệu</button>
+          <!-- Nút Cập Nhật Dữ Liệu Đơn Chưa Thanh Toán (Chỉ hiển thị ở Tab Chưa Thanh Toán) -->
+          <button type="button" class="btn btn-primary btn-sm" id="btnUpdateUnpaidData" style="display: none;" title="Cập nhật thông tin mới nhất cho đơn chưa thanh toán theo mã EIR">Cập Nhật Đơn Chưa Thanh Toán</button>
+
+          <!-- Nút Cập Nhật Dữ Liệu Đơn Hủy (Chỉ hiển thị ở Tab Đơn Hủy) -->
+          <button type="button" class="btn btn-primary btn-sm" id="btnUpdateCancelledData" style="display: none;" title="Cập nhật đối soát đơn hủy theo Pipeline 4 vòng">Cập Nhật Dữ Liệu Đơn Hủy</button>
 
           <!-- Nút Lọc Đơn Trùng theo số EIR -->
           <button type="button" class="btn btn-warning btn-sm" id="btnDeduplicateData" title="Lọc đơn trùng theo số EIR và giữ lại đơn có ngày duyệt mới nhất">Lọc Đơn Trùng</button>
