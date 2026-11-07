@@ -2211,7 +2211,7 @@ function updateOrdersFromCheckData(options = {}) {
         latestCancelled.trangThaiXuLy = "Đã liên hệ - Đã đặt lại";
       }
 
-      latestCancelled.giaiTrinh = `Lệnh mới hoàn tất theo ${cInfo.eir || check.sttFile || ""}`;
+      latestCancelled.giaiTrinh = `Lệnh mới theo ${cInfo.eir || check.sttFile || ""} (${check.trangThaiDonHang || "Đang xử lý"})`;
 
       modifiedOrdersMap.set(latestCancelled.rowKey, latestCancelled);
       updatedCancelled++;
@@ -2227,7 +2227,7 @@ function updateOrdersFromCheckData(options = {}) {
       priorCancelled.forEach(prior => {
         updatedOrderKeys.add(prior.rowKey);
         prior.trangThaiXuLy = "Đặt lại thành công";
-        prior.giaiTrinh = `Cont đã hoàn thành ở lệnh mới ${cInfo.eir || check.sttFile || ""}`;
+        prior.giaiTrinh = `Cont đã chuyển sang lệnh mới ${cInfo.eir || check.sttFile || ""} (${check.trangThaiDonHang || "Đang xử lý"})`;
         prior.updatedAt = nowStr;
         modifiedOrdersMap.set(prior.rowKey, prior);
         updatedCancelled++;
@@ -2310,7 +2310,11 @@ function updateOrdersFromCheckData(options = {}) {
       message = `Đã cập nhật thành công ${updatedUnpaid} đơn Chưa thanh toán theo mã EIR.`;
     }
   } else if (mode === "cancelled") {
-    message = `Đã cập nhật thành công ${updatedCancelled} đơn Đã hủy theo Pipeline gom đơn 4 vòng.${deletedDuplicates > 0 ? ` Đã xóa ${deletedDuplicates} dòng dữ liệu cũ trùng lặp.` : ''}`;
+    if (options && options.edepotCount > 0) {
+      message = `Đã đồng bộ trực tiếp ${options.edepotCount} đơn từ eDepot trong 36h qua và cập nhật thành công ${updatedCancelled} đơn Đã hủy theo Pipeline gom đơn 4 vòng.${deletedDuplicates > 0 ? ` Đã xóa ${deletedDuplicates} dòng dữ liệu cũ trùng lặp.` : ''}`;
+    } else {
+      message = `Đã cập nhật thành công ${updatedCancelled} đơn Đã hủy theo Pipeline gom đơn 4 vòng.${deletedDuplicates > 0 ? ` Đã xóa ${deletedDuplicates} dòng dữ liệu cũ trùng lặp.` : ''}`;
+    }
   } else {
     message = `Đã cập nhật thành công ${updatedUnpaid} đơn Chưa thanh toán và ${updatedCancelled} đơn Đã hủy.${deletedDuplicates > 0 ? ` Đã ghi đè và xóa ${deletedDuplicates} dòng dữ liệu cũ trùng lặp.` : ''} Đã xóa ${deletedCount} dòng khỏi bảng check đơn.`;
   }
@@ -3138,6 +3142,55 @@ async function updateOrdersFromCheckDataAsync(options = {}) {
       }
     } catch (edepotErr) {
       console.warn("[eDepot Live Sync] Không thể kết nối eDepot (tự động chuyển sang dùng dữ liệu cục bộ):", edepotErr.message);
+    }
+  }
+
+  // TỰ ĐỘNG ĐỒNG BỘ DỮ LIỆU TƯƠI MỚI NHẤT TỪ EDEPOT CHO ĐƠN HỦY (KHUNG 36 GIỜ GẦN NHẤT)
+  if (mode === "cancelled" && edepotClient && typeof edepotClient.fetchAllOrders === "function") {
+    try {
+      const now = new Date();
+      const past36h = new Date(now.getTime() - 36 * 3600 * 1000);
+      const pad = (n) => String(n).padStart(2, '0');
+      const toDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+      const fromDate = `${past36h.getFullYear()}-${pad(past36h.getMonth() + 1)}-${pad(past36h.getDate())} ${pad(past36h.getHours())}:${pad(past36h.getMinutes())}:${pad(past36h.getSeconds())}`;
+
+      console.log(`[eDepot Live Sync Cancelled] Đang tự động kết nối API eDepot lấy đơn hàng 36h qua từ [${fromDate}] đến [${toDate}]...`);
+      const { orders } = await edepotClient.fetchAllOrders({ fromDate, toDate, pageSize: 1000 });
+      if (Array.isArray(orders) && orders.length > 0) {
+        edepotFetchedOrders = orders;
+        console.log(`[eDepot Live Sync Cancelled] eDepot trả về ${orders.length} đơn hàng trong 36h qua.`);
+
+        // Hợp nhất vào memoryVerificationOrders theo số EIR
+        const verOrderMap = new Map();
+        memoryVerificationOrders.forEach(v => {
+          const e = (v.sttFile || "").trim().toUpperCase();
+          if (e) verOrderMap.set(e, v);
+        });
+
+        const newToSync = [];
+        orders.forEach(o => {
+          const e = (o.sttFile || "").trim().toUpperCase();
+          if (e && verOrderMap.has(e)) {
+            const existing = verOrderMap.get(e);
+            Object.assign(existing, o);
+            newToSync.push(existing);
+          } else {
+            o.rowKey = o.rowKey || `VER_${Date.now()}_${e || Math.random().toString(36).substring(2, 7)}`;
+            memoryVerificationOrders.unshift(o);
+            if (e) verOrderMap.set(e, o);
+            newToSync.push(o);
+          }
+        });
+
+        // Đồng bộ ngầm bản ghi check đơn mới lên Supabase để lưu vết
+        if (supabaseClient && supabaseClient.isSupabaseAvailable() && newToSync.length > 0) {
+          supabaseClient.syncVerificationOrdersToSupabase(newToSync).catch(err => {
+            console.warn("[eDepot Live Sync Cancelled] Lỗi lưu vết Supabase eir_cancellation_orders:", err.message);
+          });
+        }
+      }
+    } catch (edepotErr) {
+      console.warn("[eDepot Live Sync Cancelled] Không thể kết nối eDepot (tự động chuyển sang dùng dữ liệu cục bộ):", edepotErr.message);
     }
   }
 

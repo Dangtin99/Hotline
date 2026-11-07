@@ -1428,8 +1428,8 @@ document.addEventListener("DOMContentLoaded", () => {
       executeUpdateOrders(
         btnUpdateCancelledData,
         "cancelled",
-        "Bạn có chắc chắn muốn thực hiện Cập Nhật Dữ Liệu Đơn Hủy từ Bảng Check Đơn không?\n\n- Hệ thống chỉ xét các đơn hàng có trạng thái = HỦY.\n- Thực hiện đối soát theo Pipeline gom đơn 4 vòng tuần tự (V1: cùng Cont; V2: đơn OUT chưa có Cont cùng xe tìm cont mới; V3: đổi Booking cùng xe; V4: đơn OUT cùng xe trong 24h) để cập nhật mới nhất.",
-        "Cập nhật thành công dữ liệu đơn hủy theo Pipeline 4 vòng."
+        "Bạn có chắc chắn muốn thực hiện Cập Nhật Dữ Liệu Đơn Hủy trực tiếp từ eDepot không?\n\n- Hệ thống sẽ tự động kết nối API eDepot lấy toàn bộ đơn hàng trong 36 giờ gần nhất.\n- Đối soát theo Pipeline gom đơn 4 vòng tuần tự (V1: cùng Cont; V2: đơn OUT chưa có Cont cùng xe; V3: đổi Booking cùng xe; V4: đơn OUT cùng xe trong 24h).\n- Tự động cập nhật trạng thái mới nhất của đơn hàng và CSKH trên hệ thống.",
+        "Cập nhật thành công dữ liệu đơn hủy theo Pipeline 4 vòng từ eDepot."
       );
     };
   }
