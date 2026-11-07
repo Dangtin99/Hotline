@@ -1416,8 +1416,8 @@ document.addEventListener("DOMContentLoaded", () => {
       executeUpdateOrders(
         btnUpdateUnpaidData,
         "unpaid",
-        "Bạn có chắc chắn muốn thực hiện Cập Nhật Dữ Liệu Đơn Chưa Thanh Toán từ Bảng Check Đơn không?\n\n- Hệ thống sẽ chỉ xét các đơn hàng có trạng thái Chưa thanh toán.\n- So sánh số EIR của đơn hàng với số EIR trong bảng Check Đơn để cập nhật thông tin mới nhất (Số xe, Người tạo, Tài xế, Nhà xe, Trạng thái kích hoạt, Trạng thái thanh toán, v.v.).",
-        "Cập nhật thành công dữ liệu đơn chưa thanh toán."
+        "Bạn có chắc chắn muốn thực hiện Cập Nhật Dữ Liệu Đơn Chưa Thanh Toán trực tiếp từ eDepot không?\n\n- Hệ thống sẽ tự động kết nối API eDepot lấy dữ liệu tươi mới nhất của các đơn hàng trong 7 ngày gần nhất.\n- Tự động so khớp số EIR của từng đơn chưa thanh toán để cập nhật trạng thái mới nhất (Đã thanh toán, Đã kích hoạt, Ngày duyệt, Số xe, Tài xế, v.v.).",
+        "Cập nhật thành công dữ liệu đơn chưa thanh toán từ eDepot."
       );
     };
   }

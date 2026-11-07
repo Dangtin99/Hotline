@@ -99,6 +99,13 @@ try {
   console.log("Turso client chưa sẵn sàng:", e.message);
 }
 
+let edepotClient = null;
+try {
+  edepotClient = require("./edepotClient");
+} catch (e) {
+  console.log("eDepot client chưa sẵn sàng:", e.message);
+}
+
 // Thử nạp module SQLite tích hợp của Node.js (v22.5+)
 let sqliteEngine = null;
 try {
@@ -1727,7 +1734,7 @@ function updateOrdersFromCheckData(options = {}) {
   const isSuccessPayment = (val) => {
     if (!val) return false;
     const s = String(val).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").trim();
-    return s.includes("thanh toan thanh cong") || s.includes("thanh cong") || s.includes("da thanh toan") || s.includes("hoan thanh") || s.includes("da hoan thanh");
+    return s.includes("thanh toan thanh cong") || s.includes("thanh cong") || s.includes("da thanh toan") || s.includes("hoan thanh") || s.includes("da hoan thanh") || s.includes("da duyet");
   };
 
   const usedCheckKeys = new Set();
@@ -1946,7 +1953,7 @@ function updateOrdersFromCheckData(options = {}) {
         if (check.nguoiTao) order.nguoiTao = check.nguoiTao;
         order.updatedAt = nowStr;
 
-        if (isSuccessPayment(order.trangThaiDonHang)) {
+        if (isSuccessPayment(order.trangThaiDonHang) || order.trangThaiKichHoat === "Đã kích hoạt") {
           order.trangThaiXuLy = "Thanh toán thành công";
         }
 
@@ -2273,7 +2280,11 @@ function updateOrdersFromCheckData(options = {}) {
 
   let message = "";
   if (mode === "unpaid") {
-    message = `Đã cập nhật thành công ${updatedUnpaid} đơn Chưa thanh toán từ dữ liệu check đơn theo mã EIR.`;
+    if (options && options.edepotCount > 0) {
+      message = `Đã đồng bộ trực tiếp ${options.edepotCount} đơn từ eDepot và cập nhật thành công ${updatedUnpaid} đơn Chưa thanh toán theo mã EIR.`;
+    } else {
+      message = `Đã cập nhật thành công ${updatedUnpaid} đơn Chưa thanh toán theo mã EIR.`;
+    }
   } else if (mode === "cancelled") {
     message = `Đã cập nhật thành công ${updatedCancelled} đơn Đã hủy theo Pipeline gom đơn 4 vòng.${deletedDuplicates > 0 ? ` Đã xóa ${deletedDuplicates} dòng dữ liệu cũ trùng lặp.` : ''}`;
   } else {
@@ -3040,7 +3051,58 @@ async function updateOrdersFromCheckDataAsync(options = {}) {
     }
   }
 
-  const res = updateOrdersFromCheckData({ mode });
+  // TỰ ĐỘNG ĐỒNG BỘ DỮ LIỆU TƯƠI MỚI NHẤT TỪ EDEPOT CHO ĐƠN CHƯA THANH TOÁN
+  let edepotFetchedOrders = [];
+  if ((mode === "unpaid" || mode === "all") && edepotClient && typeof edepotClient.fetchAllOrders === "function") {
+    try {
+      const todayYmd = getVietnamTodayYmd();
+      const todayDt = new Date(todayYmd + "T00:00:00Z");
+      // Quét trong 6 ngày gần nhất để bao quát toàn bộ đơn chưa thanh toán
+      const minDateLimitDt = new Date(todayDt.getTime() - (6 * 24 * 3600 * 1000));
+      const fromDate = `${minDateLimitDt.toISOString().substring(0, 10)} 00:00:00`;
+      const toDate = `${todayYmd} 23:59:59`;
+
+      console.log(`[eDepot Live Sync] Đang tự động kết nối API eDepot từ [${fromDate}] đến [${toDate}]...`);
+      const { orders } = await edepotClient.fetchAllOrders({ fromDate, toDate, pageSize: 1000 });
+      if (Array.isArray(orders) && orders.length > 0) {
+        edepotFetchedOrders = orders;
+        console.log(`[eDepot Live Sync] Lấy thành công ${orders.length} đơn từ eDepot.`);
+
+        // Hợp nhất vào memoryVerificationOrders theo số EIR
+        const verOrderMap = new Map();
+        memoryVerificationOrders.forEach(v => {
+          const e = (v.sttFile || "").trim().toUpperCase();
+          if (e) verOrderMap.set(e, v);
+        });
+
+        const newToSync = [];
+        orders.forEach(o => {
+          const e = (o.sttFile || "").trim().toUpperCase();
+          if (e && verOrderMap.has(e)) {
+            const existing = verOrderMap.get(e);
+            Object.assign(existing, o);
+            newToSync.push(existing);
+          } else {
+            o.rowKey = o.rowKey || `VER_${Date.now()}_${e || Math.random().toString(36).substring(2, 7)}`;
+            memoryVerificationOrders.unshift(o);
+            if (e) verOrderMap.set(e, o);
+            newToSync.push(o);
+          }
+        });
+
+        // Đồng bộ ngầm bản ghi check đơn mới lên Supabase để lưu vết
+        if (supabaseClient && supabaseClient.isSupabaseAvailable() && newToSync.length > 0) {
+          supabaseClient.syncVerificationOrdersToSupabase(newToSync).catch(err => {
+            console.warn("[eDepot Live Sync] Lỗi lưu vết Supabase eir_cancellation_orders:", err.message);
+          });
+        }
+      }
+    } catch (edepotErr) {
+      console.warn("[eDepot Live Sync] Không thể kết nối eDepot (tự động chuyển sang dùng dữ liệu cục bộ):", edepotErr.message);
+    }
+  }
+
+  const res = updateOrdersFromCheckData({ mode, edepotCount: edepotFetchedOrders.length });
 
   if (res.deletedOrderKeys && res.deletedOrderKeys.length > 0) {
     const delSet = new Set(res.deletedOrderKeys);
