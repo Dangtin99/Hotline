@@ -1517,6 +1517,30 @@ function purgeOldVerificationRecords(daysToKeep = 5) {
  *
  * Thuật toán: Dòng check đơn sau khi thay thế sẽ bị XÓA khỏi bảng check đơn (eir_cancellation_orders)
  */
+const parseOrderEirAndCont = (order) => {
+  let eir = "";
+  let cont = "";
+  const raw = (order.soContainer || order.so_container || "").trim();
+  if (raw.includes("-")) {
+    const parts = raw.split("-");
+    eir = parts[0].trim().toUpperCase();
+    cont = parts.slice(1).join("-").trim().toUpperCase();
+  } else if (raw.toUpperCase().startsWith("EIR")) {
+    eir = raw.toUpperCase();
+    cont = "";
+  } else {
+    cont = raw.toUpperCase();
+  }
+  if (!eir && order.sttFile && String(order.sttFile).toUpperCase().startsWith("EIR")) {
+    eir = String(order.sttFile).trim().toUpperCase();
+  }
+  if (!eir && order.rowKey) {
+    const match = String(order.rowKey).match(/EIR\d+/i);
+    if (match) eir = match[0].toUpperCase();
+  }
+  return { eir, cont, rawCont: raw.toUpperCase() };
+};
+
 function updateOrdersFromCheckData(options = {}) {
   const mode = (typeof options === "string" ? options : (options && options.mode) || "all").toLowerCase();
   const shouldProcessUnpaid = mode === "all" || mode === "unpaid";
@@ -1823,7 +1847,7 @@ function updateOrdersFromCheckData(options = {}) {
   if (shouldProcessUnpaid) {
     const availableChecksForUnpaid = memoryVerificationOrders.filter(check => {
       if (usedCheckKeys.has(check.rowKey)) return false;
-      if (!isWithinUpdateWindow(check)) return false;
+      if (mode !== "unpaid" && !isWithinUpdateWindow(check)) return false;
       return true;
     });
 
@@ -1845,7 +1869,7 @@ function updateOrdersFromCheckData(options = {}) {
     });
 
     memoryOrders.forEach(order => {
-      if (!isWithinUpdateWindow(order)) return;
+      if (mode !== "unpaid" && !isWithinUpdateWindow(order)) return;
       const isUnpaidOrder = isUnpaid(order.trangThaiDonHang);
       if (!isUnpaidOrder) return;
 
@@ -3051,50 +3075,65 @@ async function updateOrdersFromCheckDataAsync(options = {}) {
     }
   }
 
-  // TỰ ĐỘNG ĐỒNG BỘ DỮ LIỆU TƯƠI MỚI NHẤT TỪ EDEPOT CHO ĐƠN CHƯA THANH TOÁN
+  // TỰ ĐỘNG ĐỒNG BỘ DỮ LIỆU TƯƠI MỚI NHẤT TỪ EDEPOT THEO DANH SÁCH MÃ EIR CỦA ĐƠN CHƯA THANH TOÁN
   let edepotFetchedOrders = [];
-  if ((mode === "unpaid" || mode === "all") && edepotClient && typeof edepotClient.fetchAllOrders === "function") {
+  if (mode === "unpaid" && edepotClient && typeof edepotClient.fetchOrdersByEirList === "function") {
     try {
-      const todayYmd = getVietnamTodayYmd();
-      const todayDt = new Date(todayYmd + "T00:00:00Z");
-      // Quét trong 6 ngày gần nhất để bao quát toàn bộ đơn chưa thanh toán
-      const minDateLimitDt = new Date(todayDt.getTime() - (6 * 24 * 3600 * 1000));
-      const fromDate = `${minDateLimitDt.toISOString().substring(0, 10)} 00:00:00`;
-      const toDate = `${todayYmd} 23:59:59`;
+      const isUnpaidCheck = (val) => {
+        if (!val) return false;
+        const s = String(val).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").trim();
+        return s.includes("chua thanh toan") || s.includes("cho thanh toan");
+      };
 
-      console.log(`[eDepot Live Sync] Đang tự động kết nối API eDepot từ [${fromDate}] đến [${toDate}]...`);
-      const { orders } = await edepotClient.fetchAllOrders({ fromDate, toDate, pageSize: 1000 });
-      if (Array.isArray(orders) && orders.length > 0) {
-        edepotFetchedOrders = orders;
-        console.log(`[eDepot Live Sync] Lấy thành công ${orders.length} đơn từ eDepot.`);
-
-        // Hợp nhất vào memoryVerificationOrders theo số EIR
-        const verOrderMap = new Map();
-        memoryVerificationOrders.forEach(v => {
-          const e = (v.sttFile || "").trim().toUpperCase();
-          if (e) verOrderMap.set(e, v);
-        });
-
-        const newToSync = [];
-        orders.forEach(o => {
-          const e = (o.sttFile || "").trim().toUpperCase();
-          if (e && verOrderMap.has(e)) {
-            const existing = verOrderMap.get(e);
-            Object.assign(existing, o);
-            newToSync.push(existing);
-          } else {
-            o.rowKey = o.rowKey || `VER_${Date.now()}_${e || Math.random().toString(36).substring(2, 7)}`;
-            memoryVerificationOrders.unshift(o);
-            if (e) verOrderMap.set(e, o);
-            newToSync.push(o);
+      // Trích xuất danh sách các mã EIR của đơn Chưa thanh toán
+      const targetEirSet = new Set();
+      memoryOrders.forEach(o => {
+        if (isUnpaidCheck(o.trangThaiDonHang)) {
+          const info = parseOrderEirAndCont(o);
+          if (info.eir && /^EIR\d+$/i.test(info.eir)) {
+            targetEirSet.add(info.eir.toUpperCase());
           }
-        });
+        }
+      });
 
-        // Đồng bộ ngầm bản ghi check đơn mới lên Supabase để lưu vết
-        if (supabaseClient && supabaseClient.isSupabaseAvailable() && newToSync.length > 0) {
-          supabaseClient.syncVerificationOrdersToSupabase(newToSync).catch(err => {
-            console.warn("[eDepot Live Sync] Lỗi lưu vết Supabase eir_cancellation_orders:", err.message);
+      const eirArray = Array.from(targetEirSet);
+      console.log(`[eDepot Live Sync] Tìm thấy ${eirArray.length} mã EIR đơn Chưa thanh toán cần kiểm tra trực tiếp trên eDepot...`);
+
+      if (eirArray.length > 0) {
+        // Lấy danh sách EIR gửi trực tiếp lên eDepot qua query EIRNo IN (...) theo batch 50 (siêu tốc ~2-3 giây)
+        const { orders } = await edepotClient.fetchOrdersByEirList(eirArray, 50);
+        if (Array.isArray(orders) && orders.length > 0) {
+          edepotFetchedOrders = orders;
+          console.log(`[eDepot Live Sync] eDepot trả về kết quả trạng thái mới nhất cho ${orders.length} đơn hàng.`);
+
+          // Hợp nhất vào memoryVerificationOrders theo số EIR
+          const verOrderMap = new Map();
+          memoryVerificationOrders.forEach(v => {
+            const e = (v.sttFile || "").trim().toUpperCase();
+            if (e) verOrderMap.set(e, v);
           });
+
+          const newToSync = [];
+          orders.forEach(o => {
+            const e = (o.sttFile || "").trim().toUpperCase();
+            if (e && verOrderMap.has(e)) {
+              const existing = verOrderMap.get(e);
+              Object.assign(existing, o);
+              newToSync.push(existing);
+            } else {
+              o.rowKey = o.rowKey || `VER_${Date.now()}_${e || Math.random().toString(36).substring(2, 7)}`;
+              memoryVerificationOrders.unshift(o);
+              if (e) verOrderMap.set(e, o);
+              newToSync.push(o);
+            }
+          });
+
+          // Đồng bộ ngầm bản ghi check đơn mới lên Supabase để lưu vết
+          if (supabaseClient && supabaseClient.isSupabaseAvailable() && newToSync.length > 0) {
+            supabaseClient.syncVerificationOrdersToSupabase(newToSync).catch(err => {
+              console.warn("[eDepot Live Sync] Lỗi lưu vết Supabase eir_cancellation_orders:", err.message);
+            });
+          }
         }
       }
     } catch (edepotErr) {

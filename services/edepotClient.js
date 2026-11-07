@@ -334,8 +334,148 @@ async function fetchAllOrders({ fromDate, toDate, pageSize = 1000 }) {
   };
 }
 
+/**
+ * Trích xuất danh sách đơn hàng theo danh sách số EIR cụ thể (batching + song song)
+ * Tốc độ siêu tốc: chỉ truy vấn đúng các mã EIR cần kiểm tra qua Promise.all, không quét toàn bộ DB
+ * @param {string[]} eirList - Mảng các mã EIR (ví dụ ['EIR34073400', 'EIR34073397'])
+ * @param {number} [batchSize=50] - Số lượng EIR mỗi lượt query (mặc định 50)
+ */
+async function fetchOrdersByEirList(eirList = [], batchSize = 50) {
+  if (!Array.isArray(eirList) || eirList.length === 0) {
+    return { orders: [], total: 0 };
+  }
+
+  // Loại bỏ trùng lặp và làm sạch
+  const cleanEirs = Array.from(new Set(eirList.map(e => String(e || '').trim().toUpperCase()).filter(e => /^EIR\d+$/i.test(e))));
+  if (cleanEirs.length === 0) return { orders: [], total: 0 };
+
+  let session = await authenticate();
+  const batches = [];
+  for (let i = 0; i < cleanEirs.length; i += batchSize) {
+    batches.push(cleanEirs.slice(i, i + batchSize));
+  }
+
+  const mapItem = (item) => {
+    const getVal = (field) => {
+      if (!item[field]) return '';
+      if (typeof item[field] === 'object') {
+        return item[field].r !== undefined && item[field].r !== null ? String(item[field].r) : (item[field].v || '');
+      }
+      return String(item[field]);
+    };
+    const getRaw = (field) => {
+      if (!item[field]) return '';
+      if (typeof item[field] === 'object') {
+        return item[field].v !== undefined && item[field].v !== null ? String(item[field].v) : '';
+      }
+      return String(item[field]);
+    };
+    const parseDateStr = (rawStr) => {
+      if (!rawStr) return null;
+      const d = new Date(rawStr);
+      if (isNaN(d.getTime())) return rawStr;
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    };
+
+    const rawNgayTao = getRaw('NgayTao');
+    const ngayTao = parseDateStr(rawNgayTao);
+    const rawNgayDuyet = getRaw('NgayDuocDuyet');
+    const ngayDuyet = parseDateStr(rawNgayDuyet);
+
+    const loaiDonText = getVal('LoaiDonHang');
+    const loaiDonHang = loaiDonText.toLowerCase().includes('out') ? 'OUT' : 'IN';
+
+    const rawSize = getVal('ContTypeSizeID_Check') || getVal('ContTypeSizeID') || '';
+    let sizeTeus = 0;
+    if (rawSize.includes('20') || rawSize === '2200') sizeTeus = 1;
+    else if (rawSize.includes('40') || rawSize.includes('45') || rawSize === '4500') sizeTeus = 2;
+
+    const soBooking = getVal('SoChungTuNhapBai_Check') || getVal('SoChungTuNhapBai') || '';
+    const hangTau = getVal('HangTauID_Check') || getVal('HangTauID') || '';
+
+    return {
+      sttFile: getVal('EIRNo'),
+      depot: getVal('DepotID'),
+      hangTau: hangTau,
+      ngayHuyDon: ngayTao,
+      ngayDuocDuyet: ngayDuyet,
+      soBooking: soBooking,
+      soContainer: getVal('ContID'),
+      loaiContainer: rawSize,
+      loaiDonHang: loaiDonHang,
+      sizeTeus: sizeTeus,
+      trangThaiDonHang: getVal('TrangThaiDonHang'),
+      trangThaiKichHoat: getVal('DaThanhToanNangHa').includes('check') ? 'Đã kích hoạt' : 'Chưa kích hoạt',
+      thoiGianKichHoat: ngayDuyet,
+      lyDoHuy: getVal('LyDoHuy') || null,
+      lyDoTuChoi: getVal('UserTuChoiDuyet') || null,
+      lyDoHuyCheck: null,
+      tenTaiXe: getVal('HoTen'),
+      sdtTaiXe: getVal('SoDienThoai'),
+      tenNhaXe: getVal('DonViVanTaiID'),
+      sdtNhaXe: '',
+      soXe: getVal('SoXe'),
+      nguoiTao: getVal('NguoiTao')
+    };
+  };
+
+  const fetchBatch = async (batch) => {
+    const filterExp = `EIRNo IN ('${batch.join("','")}')`;
+    const payloadData = {
+      tbname: encryptTable('vw_tb_eDepot_DonHang_ListView'),
+      current_index: 1,
+      next_index: batch.length + 10,
+      moreExp: filterExp,
+      sortExp: 'NgayTao desc',
+      isAction: '1',
+      appversion: '2023'
+    };
+
+    let hmac = encryptHMAC('GetDataPaging', payloadData, session.username);
+    let reqBody = { token: '' + hmac.token, reqtime: hmac.reqtime, data: payloadData };
+
+    let dataRes = await fetch('https://edepotapi.ltacv.com/api/data/process/GetDataPaging', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': 'Bearer ' + session.apiToken
+      },
+      body: JSON.stringify(reqBody)
+    });
+
+    if (dataRes.status === 401) {
+      session = await authenticate(true);
+      hmac = encryptHMAC('GetDataPaging', payloadData, session.username);
+      reqBody = { token: '' + hmac.token, reqtime: hmac.reqtime, data: payloadData };
+      dataRes = await fetch('https://edepotapi.ltacv.com/api/data/process/GetDataPaging', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': 'Bearer ' + session.apiToken
+        },
+        body: JSON.stringify(reqBody)
+      });
+    }
+
+    if (!dataRes.ok) return [];
+    const result = await dataRes.json();
+    const rawList = result.data || result;
+    return Array.isArray(rawList) ? rawList.map(mapItem) : [];
+  };
+
+  // Chạy song song (Parallel execution) để hoàn thành trong tích tắc
+  const batchResults = await Promise.all(batches.map(b => fetchBatch(b)));
+  const allOrders = batchResults.flat();
+
+  return { orders: allOrders, total: allOrders.length };
+}
+
 module.exports = {
   authenticate,
   fetchOrders,
-  fetchAllOrders
+  fetchAllOrders,
+  fetchOrdersByEirList
 };
