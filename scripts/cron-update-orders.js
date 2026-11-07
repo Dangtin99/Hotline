@@ -37,6 +37,13 @@ async function main() {
 
   const startTime = Date.now();
 
+  const isAutoUpdateEnabled = process.env.ENABLE_AUTO_UPDATE_ORDERS === 'true';
+  if (!isAutoUpdateEnabled) {
+    console.log('❄️ Tính năng tự động cập nhật đối soát mỗi giờ hiện đang được FREEZE (tạm dừng).');
+    console.log('👉 Chỉ thực hiện thủ công qua nút bấm "Cập Nhật Dữ Liệu" trên hệ thống.');
+    process.exit(0);
+  }
+
   try {
     const result = await db.updateOrdersFromCheckDataAsync();
 

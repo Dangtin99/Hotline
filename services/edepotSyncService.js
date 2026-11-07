@@ -152,10 +152,12 @@ async function syncOrdersWindow(options = {}) {
       }
     }
 
-    // 5. Làm mới cache & kích hoạt tự động Pipeline Gom Đơn 4 Vòng
+    // 5. Làm mới cache (Lưu ý: Đã FREEZE tự động cập nhật đối soát mỗi giờ)
     try {
       rebookingAnalyzer.invalidateRebookingCache();
-      if (typeof db.updateOrdersFromCheckDataAsync === 'function') {
+      // Đã freeze chức năng tự động cập nhật đối soát mỗi giờ theo yêu cầu người dùng.
+      // Việc cập nhật dữ liệu (updateOrdersFromCheckDataAsync) chỉ thực hiện khi người dùng chủ động nhấn nút trên giao diện.
+      if (process.env.ENABLE_AUTO_UPDATE_ORDERS === 'true' && typeof db.updateOrdersFromCheckDataAsync === 'function') {
         const updateRes = await db.updateOrdersFromCheckDataAsync();
         logEntry.reconciliationUpdated = updateRes && updateRes.updatedCount ? updateRes.updatedCount : 0;
         console.log(`[eDepot Sync] Rebooking reconciliation hoàn tất: Cập nhật ${logEntry.reconciliationUpdated} đơn.`);

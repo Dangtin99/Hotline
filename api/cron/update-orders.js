@@ -12,7 +12,19 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: 'Chỉ chấp nhận phương thức GET hoặc POST' });
   }
 
-  // 2. Bảo mật xác thực CRON_SECRET (nếu có cấu hình)
+  // 2. Chế độ Freeze: Tạm dừng tính năng tự động cập nhật mỗi giờ theo yêu cầu
+  const isAutoUpdateEnabled = process.env.ENABLE_AUTO_UPDATE_ORDERS === 'true';
+  if (!isAutoUpdateEnabled) {
+    console.log('[Auto Reconcile Cron] Tính năng tự động cập nhật đối soát mỗi giờ đang được FREEZE (tạm dừng). Bỏ qua.');
+    return res.status(200).json({
+      success: true,
+      status: 'frozen',
+      message: 'Tính năng tự động cập nhật đối soát mỗi giờ hiện đang được tạm dừng (freeze). Chỉ thực hiện thủ công qua nút bấm Cập Nhật Dữ Liệu trên giao diện.',
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  // 3. Bảo mật xác thực CRON_SECRET (nếu có cấu hình)
   const expectedSecret = process.env.CRON_SECRET;
   if (expectedSecret) {
     const authHeader = req.headers.authorization;
