@@ -1686,6 +1686,35 @@ body {
   box-shadow: 0 2px 4px rgba(29, 78, 216, 0.15);
 }
 
+.filter-actions-row .btn-apply-filter {
+  height: 32px;
+  padding: 0 16px;
+  border-radius: 6px;
+  background: var(--blue-primary);
+  color: #ffffff;
+  border: 1px solid var(--blue-primary);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 4px rgba(29, 78, 216, 0.2);
+}
+
+.filter-actions-row .btn-apply-filter:hover:not(:disabled) {
+  background: var(--blue-hover);
+  border-color: var(--blue-hover);
+  box-shadow: 0 4px 6px rgba(29, 78, 216, 0.25);
+}
+
+.filter-actions-row .btn-apply-filter:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .filter-action-buttons {
   display: flex;
   align-items: center;
@@ -1924,7 +1953,7 @@ body {
 }
 
 .btn-clear-date {
-  display: inline-flex;
+  display: none !important;
   align-items: center;
   justify-content: center;
   width: 18px;

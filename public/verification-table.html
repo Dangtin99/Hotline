@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bảng Dữ Liệu Kiểm Tra Đơn - GPG Logistics</title>
-  <link rel="stylesheet" href="style.css?v=20261016_1445">
+  <link rel="stylesheet" href="style.css?v=20261111_0925">
   <script src="auth.js"></script>
   <style>
     /* Lớp hiển thị dd/mm/yyyy chuẩn xác 100%, tích hợp mở lịch native Chrome không bao giờ bị đè chữ */
@@ -103,7 +103,7 @@
       color: #475569;
       cursor: pointer;
       z-index: 5;
-      display: none;
+      display: none !important;
       padding: 0;
       font-weight: bold;
       transition: background 0.15s, color 0.15s;
@@ -546,6 +546,7 @@
           </div>
           <div class="filter-action-buttons" style="display: flex; gap: 8px; align-items: center;">
             <button id="btnRefreshVerificationData" class="btn btn-primary btn-sm" type="button" title="Đồng bộ dữ liệu mới nhất từ máy chủ">Làm Mới</button>
+            <button id="btnApplyFilter" class="btn btn-primary btn-sm btn-apply-filter" type="button" title="Áp dụng các điều kiện bộ lọc đã chọn">Áp dụng bộ lọc</button>
             <button id="btnResetFilter" class="btn btn-outline btn-sm" type="button" title="Đặt lại bộ lọc về mặc định">Đặt Lại</button>
             <button id="btnExportCsv" class="btn btn-outline btn-sm" type="button" style="display: none !important;" title="Xuất dữ liệu đang lọc ra tệp CSV">Xuất CSV</button>
           </div>
@@ -638,6 +639,6 @@
     </div>
   </div>
 
-  <script src="verification-table.js?v=20261105_1045"></script>
+  <script src="verification-table.js?v=20261111_0925"></script>
 </body>
 </html>

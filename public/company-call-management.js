@@ -887,16 +887,15 @@
 
   // Đăng ký sự kiện DOMContentLoaded cho module Nhà Xe
   document.addEventListener("DOMContentLoaded", () => {
-    // Sự kiện bộ lọc Nhà Xe
-    document.getElementById("filterCompanyKeyword")?.addEventListener("input", applyCompanyFilters);
-    document.getElementById("filterCompanyCallStatus")?.addEventListener("change", applyCompanyFilters);
-    document.getElementById("filterCompanyCaller")?.addEventListener("change", applyCompanyFilters);
-    document.getElementById("filterCompanyType")?.addEventListener("change", applyCompanyFilters);
-    document.getElementById("filterCompanyCrVolume")?.addEventListener("change", applyCompanyFilters);
-    document.getElementById("sortCompanyBy")?.addEventListener("change", applyCompanyFilters);
-    document.getElementById("filterCompanyDateFrom")?.addEventListener("change", applyCompanyFilters);
-    document.getElementById("filterCompanyDateTo")?.addEventListener("change", applyCompanyFilters);
+    // Sự kiện bộ lọc Nhà Xe (chỉ lọc khi bấm Áp dụng bộ lọc hoặc Enter ở Tìm nhanh)
+    document.getElementById("filterCompanyKeyword")?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        applyCompanyFilters();
+      }
+    });
 
+    document.getElementById("btnCompanyApplyFilter")?.addEventListener("click", applyCompanyFilters);
     document.getElementById("btnCompanyResetFilter")?.addEventListener("click", resetCompanyFilters);
     document.getElementById("btnRefreshCompanyData")?.addEventListener("click", loadCompanyData);
     document.getElementById("btnCompanyQuickAdd")?.addEventListener("click", openAddCompanyModal);

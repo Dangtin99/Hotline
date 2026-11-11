@@ -41,6 +41,7 @@ const filterHourFrom = document.getElementById("filterHourFrom");
 const filterHourTo = document.getElementById("filterHourTo");
 const btnClearDateFilter = document.getElementById("btnClearDateFilter");
 const tableDateFilterGroup = document.getElementById("tableDateFilterGroup");
+const btnApplyFilter = document.getElementById("btnApplyFilter");
 const btnResetFilter = document.getElementById("btnResetFilter");
 const btnReloadData = document.getElementById("btnReloadData");
 const btnExportCsv = document.getElementById("btnExportCsv");
@@ -312,7 +313,6 @@ function initDepotMultiSelect(depots) {
         .filter(c => c.checked)
         .map(c => c.value);
       updateDepotButtonLabel();
-      applyFilters();
     };
   });
 
@@ -378,7 +378,6 @@ function initStatusMultiSelect(statuses) {
         .filter(c => c.checked)
         .map(c => c.value);
       updateStatusButtonLabel();
-      applyFilters();
     };
   });
 
@@ -1809,6 +1808,21 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  const updateTableDateUiState = () => {
+    const hasDateOrHour = !!(
+      (filterDateFrom && filterDateFrom.value) ||
+      (filterDateTo && filterDateTo.value) ||
+      (filterHourFrom && filterHourFrom.value) ||
+      (filterHourTo && filterHourTo.value)
+    );
+    if (btnClearDateFilter) {
+      btnClearDateFilter.style.display = "none";
+    }
+    if (tableDateFilterGroup) {
+      tableDateFilterGroup.classList.toggle("has-selection", hasDateOrHour);
+    }
+  };
+
   // Sự kiện chọn/bỏ chọn Tất Cả Depot
   if (depotSelectAll) {
     depotSelectAll.onchange = (e) => {
@@ -1817,7 +1831,6 @@ document.addEventListener("DOMContentLoaded", () => {
       checkboxes.forEach(cb => { cb.checked = isChecked; });
       selectedDepots = isChecked ? [...allDepotValues] : [];
       updateDepotButtonLabel();
-      applyFilters();
     };
   }
 
@@ -1829,13 +1842,19 @@ document.addEventListener("DOMContentLoaded", () => {
       checkboxes.forEach(cb => { cb.checked = isChecked; });
       selectedStatuses = isChecked ? [...allStatusValues] : [];
       updateStatusButtonLabel();
-      applyFilters();
     };
   }
 
-  // Event listeners
-  if (searchInput) searchInput.oninput = applyFilters;
-  if (filterDateType) filterDateType.onchange = applyFilters;
+  // Event listeners (chỉ cập nhật UI nhập liệu; bấm Áp dụng bộ lọc hoặc Enter ở Tìm nhanh mới lọc)
+  if (searchInput) {
+    searchInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        currentPage = 1;
+        applyFilters();
+      }
+    });
+  }
   if (filterDateFrom) {
     filterDateFrom.onchange = () => {
       if (filterDateFrom.value) {
@@ -1848,7 +1867,7 @@ document.addEventListener("DOMContentLoaded", () => {
       } else if (filterDateTo) {
         filterDateTo.removeAttribute("min");
       }
-      applyFilters();
+      updateTableDateUiState();
     };
   }
   if (filterDateTo) {
@@ -1863,7 +1882,7 @@ document.addEventListener("DOMContentLoaded", () => {
       } else if (filterDateFrom) {
         filterDateFrom.removeAttribute("max");
       }
-      applyFilters();
+      updateTableDateUiState();
     };
   }
   if (btnClearDateFilter) {
@@ -1880,23 +1899,23 @@ document.addEventListener("DOMContentLoaded", () => {
       if (filterHourTo) filterHourTo.value = "";
       btnClearDateFilter.style.display = "none";
       if (tableDateFilterGroup) tableDateFilterGroup.classList.remove("has-selection");
-      applyFilters();
     };
   }
 
   if (filterHourFrom) {
-    filterHourFrom.onchange = applyFilters;
-    filterHourFrom.oninput = applyFilters;
+    filterHourFrom.onchange = updateTableDateUiState;
+    filterHourFrom.oninput = updateTableDateUiState;
   }
   if (filterHourTo) {
-    filterHourTo.onchange = applyFilters;
-    filterHourTo.oninput = applyFilters;
+    filterHourTo.onchange = updateTableDateUiState;
+    filterHourTo.oninput = updateTableDateUiState;
   }
-  if (filterLine) filterLine.onchange = applyFilters;
-  if (filterDirection) filterDirection.onchange = applyFilters;
-  if (filterApprovedHour) filterApprovedHour.onchange = applyFilters;
-  if (filterWarning3h) filterWarning3h.onchange = applyFilters;
-  if (filterContactStatus) filterContactStatus.onchange = applyFilters;
+  if (btnApplyFilter) {
+    btnApplyFilter.onclick = () => {
+      currentPage = 1;
+      applyFilters();
+    };
+  }
   if (btnResetFilter) btnResetFilter.onclick = resetFilters;
   if (btnReloadData) btnReloadData.onclick = reloadTableDataPreservingFilters;
   if (btnExportCsv) btnExportCsv.onclick = exportFilteredToCsv;
@@ -2504,7 +2523,7 @@ function applyFilters() {
 
   // Cập nhật trạng thái hiển thị của nút xóa ngày và highlight viền
   if (btnClearDateFilter) {
-    btnClearDateFilter.style.display = (dateFromVal || dateToVal || hourFromVal || hourToVal) ? "inline-flex" : "none";
+    btnClearDateFilter.style.display = "none";
   }
   if (tableDateFilterGroup) {
     if (dateFromVal || dateToVal || hourFromVal || hourToVal) {

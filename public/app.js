@@ -64,7 +64,9 @@ const filterHourFrom = document.getElementById("filterHourFrom");
 const filterHourTo = document.getElementById("filterHourTo");
 const btnClearDateFilter = document.getElementById("btnClearDateFilter");
 const dashboardDateFilterGroup = document.getElementById("dashboardDateFilterGroup");
+const btnApplyFilter = document.getElementById("btnApplyFilter");
 const btnResetFilter = document.getElementById("btnResetFilter");
+let lastFetchedDashboardRange = null;
 const btnReloadData = document.getElementById("btnReloadData");
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -278,6 +280,14 @@ async function fetchDashboardDataByRange(dateFrom, dateTo, dateType = "ngayHuy",
     if (currentDatasetName) {
       currentDatasetName.innerHTML = `<strong>Dữ liệu ${dateLabel}</strong> <span style="font-size: 13px; font-weight: normal; color: var(--text-muted);">(${result.totalRecords} đơn, so sánh với ${result.totalPrevious} đơn kỳ trước)</span>`;
     }
+
+    lastFetchedDashboardRange = {
+      dateFrom,
+      dateTo,
+      dateType,
+      hourFrom: normHourFrom,
+      hourTo: normHourTo
+    };
 
     initDashboardFilterControls(masterDashboardRecords, result.allDepots);
     currentAnalyticsData = result.data;
@@ -895,7 +905,6 @@ function initDashboardFilterControls(records, serverAllDepots) {
       cb.onchange = () => {
         selectedDashboardDepots = Array.from(checkboxes).filter(c => c.checked).map(c => c.value);
         updateDashboardDepotLabel();
-        applyDashboardFilters();
       };
     });
     updateDashboardDepotLabel();
@@ -937,7 +946,6 @@ function initDashboardFilterControls(records, serverAllDepots) {
       cb.onchange = () => {
         selectedDashboardStatuses = Array.from(checkboxes).filter(c => c.checked).map(c => c.value);
         updateDashboardStatusLabel();
-        applyDashboardFilters();
       };
     });
     updateDashboardStatusLabel();
@@ -1012,6 +1020,21 @@ function initDashboardFilterControls(records, serverAllDepots) {
       }
     });
 
+    const updateDashboardDateUiState = () => {
+      const hasDateOrHour = !!(
+        (filterDateFrom && filterDateFrom.value) ||
+        (filterDateTo && filterDateTo.value) ||
+        (filterHourFrom && filterHourFrom.value) ||
+        (filterHourTo && filterHourTo.value)
+      );
+      if (btnClearDateFilter) {
+        btnClearDateFilter.style.display = "none";
+      }
+      if (dashboardDateFilterGroup) {
+        dashboardDateFilterGroup.classList.toggle("has-selection", hasDateOrHour);
+      }
+    };
+
     if (depotSelectAll) {
       depotSelectAll.onchange = (e) => {
         const isChecked = e.target.checked;
@@ -1019,7 +1042,6 @@ function initDashboardFilterControls(records, serverAllDepots) {
         checkboxes.forEach(cb => { cb.checked = isChecked; });
         selectedDashboardDepots = isChecked ? [...allDashboardDepots] : [];
         updateDashboardDepotLabel();
-        applyDashboardFilters();
       };
     }
 
@@ -1030,7 +1052,6 @@ function initDashboardFilterControls(records, serverAllDepots) {
         checkboxes.forEach(cb => { cb.checked = isChecked; });
         selectedDashboardStatuses = isChecked ? [...allDashboardStatuses] : [];
         updateDashboardStatusLabel();
-        applyDashboardFilters();
       };
     }
 
@@ -1038,17 +1059,6 @@ function initDashboardFilterControls(records, serverAllDepots) {
       selectFreezeCols.onchange = (e) => {
         const count = parseInt(e.target.value, 10) || 0;
         applyFrozenColumnsToDetailTable(count);
-      };
-    }
-
-    if (filterDateType) {
-      filterDateType.onchange = () => {
-        const fromVal = filterDateFrom ? filterDateFrom.value : getVietnamTodayYmd();
-        const toVal = filterDateTo ? filterDateTo.value : getVietnamTodayYmd();
-        const dtVal = filterDateType.value;
-        const hFrom = filterHourFrom ? filterHourFrom.value : "";
-        const hTo = filterHourTo ? filterHourTo.value : "";
-        fetchDashboardDataByRange(fromVal, toVal, dtVal, hFrom, hTo);
       };
     }
 
@@ -1066,14 +1076,7 @@ function initDashboardFilterControls(records, serverAllDepots) {
         }
 
         document.querySelectorAll(".btn-quick-range").forEach(b => b.classList.remove("active"));
-        if (filterDateFrom.value && filterDateTo && filterDateTo.value) {
-          const dtVal = filterDateType ? filterDateType.value : "ngayHuy";
-          const hFrom = filterHourFrom ? filterHourFrom.value : "";
-          const hTo = filterHourTo ? filterHourTo.value : "";
-          fetchDashboardDataByRange(filterDateFrom.value, filterDateTo.value, dtVal, hFrom, hTo);
-        } else {
-          applyDashboardFilters();
-        }
+        updateDashboardDateUiState();
       };
     }
 
@@ -1091,14 +1094,7 @@ function initDashboardFilterControls(records, serverAllDepots) {
         }
 
         document.querySelectorAll(".btn-quick-range").forEach(b => b.classList.remove("active"));
-        if (filterDateTo.value && filterDateFrom && filterDateFrom.value) {
-          const dtVal = filterDateType ? filterDateType.value : "ngayHuy";
-          const hFrom = filterHourFrom ? filterHourFrom.value : "";
-          const hTo = filterHourTo ? filterHourTo.value : "";
-          fetchDashboardDataByRange(filterDateFrom.value, filterDateTo.value, dtVal, hFrom, hTo);
-        } else {
-          applyDashboardFilters();
-        }
+        updateDashboardDateUiState();
       };
     }
 
@@ -1122,47 +1118,28 @@ function initDashboardFilterControls(records, serverAllDepots) {
           if (b.getAttribute("data-preset") === "today") b.classList.add("active");
           else b.classList.remove("active");
         });
-
-        const dtVal = filterDateType ? filterDateType.value : "ngayHuy";
-        fetchDashboardDataByRange(todayYmd, todayYmd, dtVal);
       };
     }
 
     if (filterHourFrom) {
-      filterHourFrom.onchange = () => {
-        if (filterDateFrom && filterDateFrom.value && filterDateTo && filterDateTo.value) {
-          const dtVal = filterDateType ? filterDateType.value : "ngayHuy";
-          const hFrom = filterHourFrom.value;
-          const hTo = filterHourTo ? filterHourTo.value : "";
-          fetchDashboardDataByRange(filterDateFrom.value, filterDateTo.value, dtVal, hFrom, hTo);
-        } else {
-          applyDashboardFilters();
-        }
-      };
+      filterHourFrom.onchange = updateDashboardDateUiState;
     }
     if (filterHourTo) {
-      filterHourTo.onchange = () => {
-        if (filterDateFrom && filterDateFrom.value && filterDateTo && filterDateTo.value) {
-          const dtVal = filterDateType ? filterDateType.value : "ngayHuy";
-          const hFrom = filterHourFrom ? filterHourFrom.value : "";
-          const hTo = filterHourTo.value;
-          fetchDashboardDataByRange(filterDateFrom.value, filterDateTo.value, dtVal, hFrom, hTo);
-        } else {
-          applyDashboardFilters();
-        }
-      };
+      filterHourTo.onchange = updateDashboardDateUiState;
     }
-    if (filterLine) filterLine.onchange = applyDashboardFilters;
-    if (filterDirection) filterDirection.onchange = applyDashboardFilters;
-    if (filterApprovedHour) filterApprovedHour.onchange = applyDashboardFilters;
-    if (filterWarning3h) filterWarning3h.onchange = applyDashboardFilters;
-    if (filterContactStatus) filterContactStatus.onchange = applyDashboardFilters;
+
+    if (btnApplyFilter) btnApplyFilter.onclick = submitDashboardFilters;
     if (btnResetFilter) btnResetFilter.onclick = resetDashboardFilters;
     if (btnReloadData) btnReloadData.onclick = reloadDashboardDataPreservingFilters;
 
     const searchInputEl = document.getElementById("dashboardSearchInput");
     if (searchInputEl) {
-      searchInputEl.oninput = () => applyDashboardFilters();
+      searchInputEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          submitDashboardFilters();
+        }
+      });
     }
 
     initQuickDateRangeControls();
@@ -1292,6 +1269,56 @@ function matchesCommonDashboardFilters(r, lineVal, dirVal, hourVal, warning3hVal
   return true;
 }
 
+// Thực thi áp dụng bộ lọc khi người dùng bấm nút Áp dụng bộ lọc (hoặc nhấn Enter ở Tìm nhanh)
+async function submitDashboardFilters() {
+  const dateTypeVal = filterDateType ? filterDateType.value : "ngayHuy";
+  const dateFromVal = filterDateFrom ? filterDateFrom.value : "";
+  const dateToVal = filterDateTo ? filterDateTo.value : "";
+  const hourFromVal = filterHourFrom ? filterHourFrom.value : "";
+  const hourToVal = filterHourTo ? filterHourTo.value : "";
+  const normHourFrom = normalizeHour(hourFromVal, "00:00");
+  const normHourTo = normalizeHour(hourToVal, "23:59");
+
+  const needsRangeFetch =
+    currentDatasetId === "sql_range" &&
+    dateFromVal &&
+    dateToVal &&
+    (
+      !lastFetchedDashboardRange ||
+      lastFetchedDashboardRange.dateFrom !== dateFromVal ||
+      lastFetchedDashboardRange.dateTo !== dateToVal ||
+      lastFetchedDashboardRange.dateType !== dateTypeVal ||
+      lastFetchedDashboardRange.hourFrom !== normHourFrom ||
+      lastFetchedDashboardRange.hourTo !== normHourTo
+    );
+
+  if (needsRangeFetch) {
+    const hadCustomStatuses =
+      allDashboardStatuses.length > 0 &&
+      selectedDashboardStatuses.length < allDashboardStatuses.length;
+    const prevStatuses = [...selectedDashboardStatuses];
+
+    if (btnApplyFilter) btnApplyFilter.disabled = true;
+    try {
+      await fetchDashboardDataByRange(dateFromVal, dateToVal, dateTypeVal, hourFromVal, hourToVal);
+      if (hadCustomStatuses && allDashboardStatuses.length > 0) {
+        selectedDashboardStatuses = allDashboardStatuses.filter(s => prevStatuses.includes(s));
+        if (statusOptionsList) {
+          statusOptionsList.querySelectorAll(".status-dashboard-cb").forEach(cb => {
+            cb.checked = selectedDashboardStatuses.includes(cb.value);
+          });
+        }
+        updateDashboardStatusLabel();
+      }
+      applyDashboardFilters();
+    } finally {
+      if (btnApplyFilter) btnApplyFilter.disabled = false;
+    }
+  } else {
+    applyDashboardFilters();
+  }
+}
+
 // Áp dụng các bộ lọc Dashboard
 function applyDashboardFilters() {
   if (!masterDashboardRecords || masterDashboardRecords.length === 0) return;
@@ -1311,7 +1338,7 @@ function applyDashboardFilters() {
 
   // Cập nhật trạng thái hiển thị của nút xóa ngày và highlight viền
   if (btnClearDateFilter) {
-    btnClearDateFilter.style.display = (dateFromVal || dateToVal || hourFromVal || hourToVal) ? "inline-flex" : "none";
+    btnClearDateFilter.style.display = "none";
   }
   if (dashboardDateFilterGroup) {
     if (dateFromVal || dateToVal || hourFromVal || hourToVal) {
@@ -3273,7 +3300,7 @@ function formatCountDiff(cur, prev, hasComp, isIncreaseNegative = false) {
   if (prev > 0) {
     pctStr = ((Math.abs(diff) / prev) * 100).toFixed(1) + "%";
   } else if (cur > 0) {
-    pctStr = "+100%";
+    pctStr = "100%";
   }
 
   const prevText = `Kỳ trước: ${prev.toLocaleString("vi-VN")}`;

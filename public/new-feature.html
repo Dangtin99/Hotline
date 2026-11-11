@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Phân Tích Đơn Đặt Lại Theo Booking - Logistics Cancellation Analytics</title>
-  <link rel="stylesheet" href="style.css?v=20261017_1154">
+  <link rel="stylesheet" href="style.css?v=20261111_0925">
   <script src="auth.js"></script>
   <style>
     .pagination-bar {
@@ -394,6 +394,7 @@
             Mỗi dòng đại diện duy nhất 1 đơn hàng (theo Số Booking, Container và Chiều) kèm lịch sử đặt lại
           </div>
           <div class="filter-action-buttons" style="display: flex; gap: 8px; align-items: center;">
+            <button id="btnApplyFilter" class="btn btn-primary btn-sm btn-apply-filter" type="button" title="Áp dụng các điều kiện bộ lọc đã chọn">Áp dụng bộ lọc</button>
             <button id="btnResetFilter" class="btn btn-outline btn-sm" type="button" title="Đặt lại bộ lọc về mặc định">Đặt Lại</button>
           </div>
         </div>
@@ -508,6 +509,6 @@
 
   <!-- Thư viện xuất Excel & Mã điều khiển nghiệp vụ -->
   <script src="/vendor/xlsx/xlsx.full.min.js"></script>
-  <script src="rebooking-analytics.js?v=20261028_2230"></script>
+  <script src="rebooking-analytics.js?v=20261111_0925"></script>
 </body>
 </html>

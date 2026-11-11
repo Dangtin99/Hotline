@@ -51,6 +51,7 @@
   const filterStatus = document.getElementById("filterStatus");
   const filterRebookCount = document.getElementById("filterRebookCount");
   const searchInput = document.getElementById("searchInput");
+  const btnApplyFilter = document.getElementById("btnApplyFilter");
   const btnResetFilter = document.getElementById("btnResetFilter");
   const btnExportExcel = document.getElementById("btnExportExcel");
   const btnRefreshData = document.getElementById("btnRefreshData");
@@ -91,20 +92,17 @@
       btnExportExcel.addEventListener("click", exportToExcel);
     }
 
-    // Filter change events
-    if (filterDateFrom) filterDateFrom.addEventListener("change", onFilterChanged);
-    if (filterDateTo) filterDateTo.addEventListener("change", onFilterChanged);
+    // Filter date UI events (chỉ cập nhật nút xóa ngày ở trạng thái ẩn, chưa lọc ngay)
+    if (filterDateFrom) filterDateFrom.addEventListener("change", onDateFilterInputUi);
+    if (filterDateTo) filterDateTo.addEventListener("change", onDateFilterInputUi);
     if (btnClearDateFilter) {
       btnClearDateFilter.addEventListener("click", () => {
         if (filterDateFrom) filterDateFrom.value = "";
         if (filterDateTo) filterDateTo.value = "";
         btnClearDateFilter.style.display = "none";
-        onFilterChanged();
+        onDateFilterInputUi();
       });
     }
-
-    if (filterDepot) filterDepot.addEventListener("change", onFilterChanged);
-    if (filterLine) filterLine.addEventListener("change", onFilterChanged);
 
     // Toggle dropdown đa chọn Depot
     if (depotDropdownBtn && depotDropdownPanel) {
@@ -179,22 +177,24 @@
         }
       }
     });
-    if (filterDirection) filterDirection.addEventListener("change", onFilterChanged);
-    if (filterStatus) filterStatus.addEventListener("change", onFilterChanged);
-    if (filterRebookCount) filterRebookCount.addEventListener("change", onFilterChanged);
-
-    // Search input debounce
+    // Search input Enter shortcut
     if (searchInput) {
-      let searchTimeout = null;
-      searchInput.addEventListener("input", () => {
-        clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(() => {
-          onFilterChanged();
-        }, 250);
+      searchInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          currentPage = 1;
+          applyFilters();
+        }
       });
     }
 
-    // Reset filter
+    // Apply & Reset filter
+    if (btnApplyFilter) {
+      btnApplyFilter.addEventListener("click", () => {
+        currentPage = 1;
+        applyFilters();
+      });
+    }
     if (btnResetFilter) {
       btnResetFilter.addEventListener("click", resetFilters);
     }
@@ -958,8 +958,6 @@
         const checkboxes = depotOptionsList.querySelectorAll(".depot-cb");
         checkboxes.forEach(cb => cb.checked = isChecked);
         updateDepotButtonLabel();
-        currentPage = 1;
-        applyFilters();
       };
     }
 
@@ -970,8 +968,6 @@
           .filter(c => c.checked)
           .map(c => c.value);
         updateDepotButtonLabel();
-        currentPage = 1;
-        applyFilters();
       };
     });
 
@@ -1037,8 +1033,6 @@
         const checkboxes = lineOptionsList.querySelectorAll(".line-cb");
         checkboxes.forEach(cb => cb.checked = isChecked);
         updateLineButtonLabel();
-        currentPage = 1;
-        applyFilters();
       };
     }
 
@@ -1049,8 +1043,6 @@
           .filter(c => c.checked)
           .map(c => c.value);
         updateLineButtonLabel();
-        currentPage = 1;
-        applyFilters();
       };
     });
 
@@ -1089,18 +1081,11 @@
     }
   }
 
-  // Xử lý sự kiện khi bộ lọc thay đổi
-  function onFilterChanged() {
-    // Toggle nút xóa lọc ngày
+  // Cập nhật giao diện ngày khi người dùng thay đổi (không lọc tự động)
+  function onDateFilterInputUi() {
     if (btnClearDateFilter) {
-      if ((filterDateFrom && filterDateFrom.value) || (filterDateTo && filterDateTo.value)) {
-        btnClearDateFilter.style.display = "block";
-      } else {
-        btnClearDateFilter.style.display = "none";
-      }
+      btnClearDateFilter.style.display = "none";
     }
-    currentPage = 1;
-    applyFilters();
   }
 
   // Áp dụng bộ lọc và cập nhật giao diện

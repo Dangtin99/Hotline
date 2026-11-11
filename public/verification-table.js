@@ -50,7 +50,7 @@ function updateDateOverlay(input, overlay, box, btnClear) {
     overlay.textContent = val;
   }
   if (box) box.classList.add("has-value");
-  if (btnClear) btnClear.style.display = "block";
+  if (btnClear) btnClear.style.display = "none";
 }
 
 function updateAllDateOverlays() {
@@ -58,6 +58,7 @@ function updateAllDateOverlays() {
   updateDateOverlay(filterDateTo, overlayDateTo, boxDateTo, btnClearDateTo);
 }
 const btnClearDateFilter = document.getElementById("btnClearDateFilter");
+const btnApplyFilter = document.getElementById("btnApplyFilter");
 const btnResetFilter = document.getElementById("btnResetFilter");
 const btnRefreshVerificationData = document.getElementById("btnRefreshVerificationData");
 const btnExportCsv = document.getElementById("btnExportCsv");
@@ -79,13 +80,16 @@ const modalDetailContent = document.getElementById("modalDetailContent");
 const btnModalClose = document.getElementById("btnModalClose");
 
 document.addEventListener("DOMContentLoaded", () => {
-  // Lắng nghe sự kiện tìm kiếm & lọc
-  if (searchInput) searchInput.addEventListener("input", () => { currentPage = 1; applyFilters(); });
-  if (filterDepot) filterDepot.addEventListener("change", () => { currentPage = 1; applyFilters(); });
-  if (filterLine) filterLine.addEventListener("change", () => { currentPage = 1; applyFilters(); });
-  if (filterDirection) filterDirection.addEventListener("change", () => { currentPage = 1; applyFilters(); });
-  if (filterStatus) filterStatus.addEventListener("change", () => { currentPage = 1; applyFilters(); });
-  if (filterActivation) filterActivation.addEventListener("change", () => { currentPage = 1; applyFilters(); });
+  // Chỉ áp dụng lọc khi nhấn Áp dụng bộ lọc hoặc Enter ở ô Tìm nhanh
+  if (searchInput) {
+    searchInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        currentPage = 1;
+        applyFilters();
+      }
+    });
+  }
 
   if (filterDateFrom) {
     filterDateFrom.addEventListener("change", onDateFilterChange);
@@ -124,8 +128,14 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
   updateAllDateOverlays();
-  if (btnClearDateFilter) btnClearDateFilter.addEventListener("click", clearDateFilter);
+  if (btnClearDateFilter) btnClearDateFilter.addEventListener("click", () => clearDateFilter(false));
 
+  if (btnApplyFilter) {
+    btnApplyFilter.addEventListener("click", () => {
+      currentPage = 1;
+      applyFilters();
+    });
+  }
   if (btnResetFilter) btnResetFilter.addEventListener("click", resetAllFilters);
   if (btnRefreshVerificationData) {
     btnRefreshVerificationData.addEventListener("click", () => {
@@ -297,17 +307,17 @@ function updateKpis(records) {
 
 function onDateFilterChange() {
   updateAllDateOverlays();
-  currentPage = 1;
-  applyFilters();
 }
 
-function clearDateFilter() {
+function clearDateFilter(shouldApply = true) {
   if (filterDateFrom) filterDateFrom.value = "";
   if (filterDateTo) filterDateTo.value = "";
   updateAllDateOverlays();
   if (btnClearDateFilter) btnClearDateFilter.style.display = "none";
-  currentPage = 1;
-  applyFilters();
+  if (shouldApply) {
+    currentPage = 1;
+    applyFilters();
+  }
 }
 
 function resetAllFilters() {
@@ -317,7 +327,7 @@ function resetAllFilters() {
   if (filterDirection) filterDirection.value = "";
   if (filterStatus) filterStatus.value = "";
   if (filterActivation) filterActivation.value = "";
-  clearDateFilter();
+  clearDateFilter(false);
   currentPage = 1;
   applyFilters();
 }

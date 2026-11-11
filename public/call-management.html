@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Quản Lý Gọi Điện Tài Xế - Logistics Cancellation Analytics</title>
-  <link rel="stylesheet" href="style.css?v=20261017_1154">
+  <link rel="stylesheet" href="style.css?v=20261111_0925">
   <script src="auth.js"></script>
   <style>
     /* Bảng điều khiển KPI Quản lý cuộc gọi */
@@ -748,6 +748,7 @@
           </div>
           <div class="filter-action-buttons" style="display: flex; gap: 8px; align-items: center;">
             <button id="btnQuickAddRow" class="btn btn-primary btn-sm" type="button" title="Thêm dòng tài xế mới">+ Thêm Dòng</button>
+            <button id="btnApplyFilter" class="btn btn-primary btn-sm btn-apply-filter" type="button" title="Áp dụng các điều kiện bộ lọc đã chọn">Áp dụng bộ lọc</button>
             <button id="btnResetFilter" class="btn btn-outline btn-sm" type="button" title="Đặt lại bộ lọc về mặc định">Đặt Lại</button>
           </div>
         </div>
@@ -934,6 +935,7 @@
             </div>
             <div class="filter-action-buttons" style="display: flex; gap: 8px; align-items: center;">
               <button id="btnCompanyQuickAdd" class="btn btn-primary btn-sm" type="button" title="Thêm nhà xe mới">+ Thêm Nhà Xe</button>
+              <button id="btnCompanyApplyFilter" class="btn btn-primary btn-sm btn-apply-filter" type="button" title="Áp dụng các điều kiện bộ lọc đã chọn">Áp dụng bộ lọc</button>
               <button id="btnCompanyResetFilter" class="btn btn-outline btn-sm" type="button" title="Đặt lại bộ lọc về mặc định">Đặt Lại</button>
             </div>
           </div>
@@ -1255,7 +1257,7 @@
   <script src="/vendor/xlsx/xlsx.full.min.js"></script>
   <script src="driver-data.js"></script>
   <script src="company-data.js"></script>
-  <script src="company-call-management.js"></script>
+  <script src="company-call-management.js?v=20261111_0925"></script>
   <script>
     // Trạng thái ứng dụng
     let allDrivers = [];
@@ -1938,12 +1940,21 @@
     document.addEventListener("DOMContentLoaded", () => {
       loadData();
 
-      // Filter events
-      document.getElementById("filterKeyword").addEventListener("input", applyFilters);
-      document.getElementById("filterCallStatus").addEventListener("change", applyFilters);
-      document.getElementById("filterCaller").addEventListener("change", applyFilters);
-      document.getElementById("filterDriverStatus").addEventListener("change", applyFilters);
-      document.getElementById("filterRank").addEventListener("change", applyFilters);
+      // Filter events (chỉ lọc khi bấm Áp dụng bộ lọc hoặc Enter ở Tìm nhanh)
+      const driverKeywordEl = document.getElementById("filterKeyword");
+      if (driverKeywordEl) {
+        driverKeywordEl.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            applyFilters();
+          }
+        });
+      }
+
+      const btnApply = document.getElementById("btnApplyFilter");
+      if (btnApply) {
+        btnApply.addEventListener("click", applyFilters);
+      }
 
       const btnReset = document.getElementById("btnResetFilter") || document.getElementById("btnFilterReset");
       if (btnReset) {
@@ -1961,12 +1972,6 @@
           applyFilters();
         });
       }
-
-      if (document.getElementById("filterDateFrom")) document.getElementById("filterDateFrom").addEventListener("change", applyFilters);
-      if (document.getElementById("filterDateTo")) document.getElementById("filterDateTo").addEventListener("change", applyFilters);
-      if (document.getElementById("filterHourFrom")) document.getElementById("filterHourFrom").addEventListener("change", applyFilters);
-      if (document.getElementById("filterHourTo")) document.getElementById("filterHourTo").addEventListener("change", applyFilters);
-      if (document.getElementById("filterCompany")) document.getElementById("filterCompany").addEventListener("change", applyFilters);
 
       document.getElementById("btnRefreshData").addEventListener("click", loadData);
 
